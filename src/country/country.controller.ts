@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import {
   Body,
   Controller,
@@ -61,22 +62,31 @@ export class CountryController {
   }
 
   @Post('import')
-  async import(@Body() body: any): Promise<any> {
+  async import(): Promise<any> {
     const countries = [
       {
         name: 'Cameroon',
+        code: '237',
       },
       {
         name: 'Gabon',
+        code: '241',
       },
       {
         name: 'Congo',
+        code: '242',
       },
       {
         name: 'Guinee_equatoriale',
+        code: '240',
       },
       {
-        name: 'Online',
+        name: 'Nigeria',
+        code: '234',
+      },
+      {
+        name: 'Kenya',
+        code: '254',
       },
     ];
     return this.countryService.import(countries);

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
@@ -19,7 +20,7 @@ export class CountryService {
   ) {}
 
   async findAll(query: Query): Promise<Country[]> {
-    const resPerPage = 5;
+    const resPerPage = 100;
     const currentPage = Number(query.page) || 1;
     const skip = resPerPage * (currentPage - 1);
 
@@ -38,17 +39,17 @@ export class CountryService {
     return countries;
   }
 
-  async creatCountry(country: CreateCountryDto): Promise<Country> {
+  async creatCountry(country: CreateCountryDto): Promise<any> {
     try {
-      // console.log('Creating country with data:', country); // Log les données reçues
+      console.log('Creating country with data:', country); // Log les données reçues
       const res = await this.countryModel.create(country);
-      // console.log('Country created successfully:', res); // Log le résultat de la création
-      return res;
+      console.log('Country created successfully:', res); // Log le résultat de la création
+      return false;
     } catch (error) {
       if (error.code === 11000) {
-        throw new ConflictException('This name country already exists');
+        console.log('This name country already exists');
       }
-      throw error; // Propager les autres erreurs
+      return true; // Propager les autres erreurs
     }
   }
 
@@ -89,11 +90,11 @@ export class CountryService {
   }
 
   async import(countries: any): Promise<any> {
+    console.log('Importing countries:', countries);
     for (const country of countries) {
-      const existingCountry = await this.creatCountry(country);
-      if (!existingCountry) {
-        await this.countryModel.create(country);
-      }
+      console.log('current country: ' + country.name);
+      const res = await this.countryModel.create(country);
+      console.log('Existing country: ' + country, res);
     }
     return 'Countries imported successfully';
   }

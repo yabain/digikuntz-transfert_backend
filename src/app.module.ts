@@ -33,9 +33,33 @@ import { AlertModule } from './alert/alert.module';
     }),
     MongooseModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: async (configService: ConfigService) => ({
-        uri: configService.get<string>('DB_URL'),
-      }),
+      useFactory: async (configService: ConfigService) => {
+        const dbUrl = configService.get<string>('DB_URL');
+        if (!dbUrl) {
+          throw new Error('DB_URL not found in environment variables');
+        }
+
+        const credentialsRegex = /^(mongodb\+srv:\/\/)([^:]+):([^@]+)@(.*)$/;
+        const match = dbUrl.match(credentialsRegex);
+
+        if (match) {
+          const prefix = match[1];
+          const username = match[2];
+          const password = match[3];
+          const suffix = match[4];
+          const encodedPassword = encodeURIComponent(password);
+          const newUrl = `${prefix}${encodeURIComponent(
+            username,
+          )}:${encodedPassword}@${suffix}`;
+          return {
+            uri: newUrl,
+          };
+        }
+
+        return {
+          uri: dbUrl,
+        };
+      },
     }),
     UserModule,
     AuthModule,

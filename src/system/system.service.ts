@@ -21,9 +21,9 @@ export class SystemService {
 
   async import(): Promise<any> {
     const systemData = {
-      defaultLang: 'fr',
+      defaultLang: 'en',
       appVersion: '1.2.0',
-      invoiceTaxes: 2,
+      invoiceTaxes: 5,
       paymentGatwayAPIKey: '',
       racineLink: 'https://yabi.cm',
     };
@@ -31,10 +31,7 @@ export class SystemService {
       const res = await this.systemModel.create(systemData);
       return res;
     } catch (error: any) {
-      if (error.code === 11000) {
-        throw new ConflictException('This city name already exists');
-      }
-      throw error; // Propagate other errors
+      throw new ConflictException(error);
     }
   }
 }

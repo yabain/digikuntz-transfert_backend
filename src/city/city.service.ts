@@ -120,9 +120,15 @@ export class CityService {
    */
   async importCities(): Promise<any> {
     const citiesInstance = new Cities(); // Instanciez la classe Cities
-    const cities = citiesInstance.cities; // Accédez à la propriété cities
-    console.log(cities);
+    await this.importing(citiesInstance.cameroonCities);
+    await this.importing(citiesInstance.kenyaCities);
+    await this.importing(citiesInstance.nigeriaCities);
+    await this.importing(citiesInstance.congoCities);
+    await this.importing(citiesInstance.gabonCities);
+    await this.importing(citiesInstance.equatorialGuineeCities);
+  }
 
+  async importing(cities) {
     if (!Array.isArray(cities)) {
       throw new Error('Cities must be an array of city data');
     }
