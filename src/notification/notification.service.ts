@@ -9,15 +9,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import * as mongoose from 'mongoose';
 import { Notification } from './notification.schema';
 import { Query } from 'express-serve-static-core';
-import { Follow } from 'src/follow/follow.schema';
 
 @Injectable()
 export class NotificationService {
   constructor(
     @InjectModel(Notification.name)
     private notificationModel: mongoose.Model<Notification>,
-    @InjectModel(Follow.name)
-    private followModel: mongoose.Model<Follow>,
   ) {}
 
   async createEventNotification(
@@ -75,22 +72,6 @@ export class NotificationService {
       .skip(skip);
 
     return notificationsList;
-  }
-
-  async createNotificationToFollowers(
-    userId: any,
-    eventData: any,
-  ): Promise<any> {
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      userId = new mongoose.Types.ObjectId(userId);
-    }
-
-    const followersList: any = await this.followModel.find({
-      followId: userId,
-    });
-    for (const follower of followersList) {
-      this.createEventNotification(userId, eventData, follower);
-    }
   }
 
   async makeAsReaded(userId: any, notifId: any) {

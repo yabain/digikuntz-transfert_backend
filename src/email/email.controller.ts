@@ -28,4 +28,12 @@ export class EmailController {
     const token = body.token;
     return this.emailService.sendResetPwd(toEmail, language, userName, token);
   }
+
+  @Post('send-test')
+  async sendEmail(@Body() body: any): Promise<any> {
+    const toEmail = body.to;
+    const subject = body.subject; // 'fr' || 'en'
+    const message = body.message;
+    return this.emailService.sendEmail(toEmail, subject, message);
+  }
 }

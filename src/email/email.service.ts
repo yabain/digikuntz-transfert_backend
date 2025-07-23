@@ -5,17 +5,12 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
-import { google } from 'googleapis';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as handlebars from 'handlebars';
 import { DateService } from './date.service';
 import { createEvent } from 'ics';
-// import { Mail } from './mail.schema';
-// import { Model } from 'mongoose';
-// import { InjectModel } from '@nestjs/mongoose';
 
-const OAuth2 = google.auth.OAuth2;
 @Injectable()
 export class EmailService {
   private transporter: nodemailer.Transporter;
@@ -28,52 +23,20 @@ export class EmailService {
   );
 
   constructor(
-    // @InjectModel(Mail.name)
-    // private readonly mailModel: Model<Mail>,
     private readonly configService: ConfigService,
     private dateService: DateService,
   ) {
     this.initializeTransporter();
-    // this.transporter = nodemailer.createTransport({
-    //   service: this.configService.get<string>('EMAIL_SERVICE'),
-    //   auth: {
-    //     user: this.configService.get<string>('EMAIL_TEAM'),
-    //     pass: this.configService.get<string>('PASSWORD_TEAM'),
-    //   },
-    // });
   }
 
-  private async initializeTransporter() {
-    const oauth2Client = new OAuth2(
-      this.configService.get<string>('OAUTH_CLIENT_ID'),
-      this.configService.get<string>('OAUTH_CLIENT_SECRET'),
-      this.configService.get<string>('OAUTH_REDIRECT_URL') ||
-        'https://developers.google.com/oauthplayground',
-    );
-
-    oauth2Client.setCredentials({
-      refresh_token: this.configService.get<string>('OAUTH_REFRESH_TOKEN'),
-    });
-
-    const accessToken = await new Promise<string>((resolve, reject) => {
-      oauth2Client.getAccessToken((err, token) => {
-        if (err || !token) {
-          reject(new Error('Failed to create access token'));
-          return;
-        }
-        resolve(token.toString());
-      });
-    });
-
+  private initializeTransporter() {
     this.transporter = nodemailer.createTransport({
-      service: 'gmail',
+      host: this.configService.get<string>('SMTP_HOST'),
+      port: this.configService.get<number>('SMTP_PORT'),
+      secure: this.configService.get<boolean>('SMTP_SECURE'), // true for 465, false for other ports
       auth: {
-        type: 'OAuth2',
-        user: this.configService.get<string>('EMAIL_TEAM'),
-        clientId: this.configService.get<string>('OAUTH_CLIENT_ID'),
-        clientSecret: this.configService.get<string>('OAUTH_CLIENT_SECRET'),
-        refreshToken: this.configService.get<string>('OAUTH_REFRESH_TOKEN'),
-        accessToken: accessToken,
+        user: this.configService.get<string>('SMTP_USER'),
+        pass: this.configService.get<string>('SMTP_PASSWORD'),
       },
     });
   }
@@ -83,12 +46,20 @@ export class EmailService {
     subject: string,
     message: string,
   ): Promise<void> {
-    await this.transporter.sendMail({
-      from: this.configService.get<string>('EMAIL_TEAM'),
-      to: toEmail,
-      subject,
-      html: message,
-    });
+    try {
+      console.log('Sending email');
+      message = '<p>' + message + '</p>';
+      const from = this.configService.get<string>('EMAIL_TEAM');
+      await this.transporter.sendMail({
+        from,
+        to: toEmail,
+        subject,
+        html: message,
+      });
+    } catch (error) {
+      console.error("Erreur lors de l'envoi du mail :", error);
+      throw error;
+    }
   }
 
   async sendWelcomeEmailAccountCreation(
@@ -99,8 +70,8 @@ export class EmailService {
     const templateName = 'welcome-email';
     const subject =
       language === 'fr'
-        ? 'Bienvenue sur Yabi Events'
-        : 'Welcome to Yabi Events';
+        ? 'Bienvenue sur Digikuntz Payments'
+        : 'Welcome to Digikuntz Payments';
 
     const templatePath = path.join(
       this.templateFolder,

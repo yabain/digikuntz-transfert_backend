@@ -13,4 +13,8 @@ export class CreateCountryDto {
   @IsString()
   @IsNotEmpty()
   readonly code: string;
+
+  @IsString()
+  @IsNotEmpty()
+  readonly flagUrl: string;
 }

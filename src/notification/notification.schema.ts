@@ -2,7 +2,8 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { User } from '../user/user.schema';
 import mongoose from 'mongoose';
 import { Document } from 'mongoose';
-import { Event } from '../event/event.schema';
+import { Transaction } from 'src/transaction/transaction.schema';
+import { Alert } from 'src/alert/alert.schema';
 
 export enum NotifType {
   EVENT_CREATION = 'eventCreation',
@@ -19,17 +20,11 @@ export class Notification extends Document {
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
   userToId: User;
 
-  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Event' })
-  eventId: Event;
-
-  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Ticket' })
-  ticketId: Event;
-
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Transaction' })
-  transactionId: Event;
+  transactionId: Transaction;
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Alert' })
-  alertId: Event;
+  alertId: Alert;
 
   @Prop()
   type: NotifType;

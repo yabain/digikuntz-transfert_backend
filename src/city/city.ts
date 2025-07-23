@@ -327,4 +327,27 @@ export class Cities {
     { countryId: '687e4bff30550a0b4917bc7d', name: 'San Antonio de Palé' },
     { countryId: '687e4bff30550a0b4917bc7d', name: 'SAP' },
   ];
+
+  IvoryCoastCities = [
+    { countryId: '687f983be0c862de6baef034', name: 'Abidjan' },
+    { countryId: '687f983be0c862de6baef034', name: 'Yamoussoukro' },
+    { countryId: '687f983be0c862de6baef034', name: 'Bouaké' },
+    { countryId: '687f983be0c862de6baef034', name: 'Daloa' },
+    { countryId: '687f983be0c862de6baef034', name: 'San Pedro' },
+    { countryId: '687f983be0c862de6baef034', name: 'Abengourou' },
+    { countryId: '687f983be0c862de6baef034', name: 'Korhogo' },
+    { countryId: '687f983be0c862de6baef034', name: 'Man' },
+    { countryId: '687f983be0c862de6baef034', name: 'Gagnoa' },
+    { countryId: '687f983be0c862de6baef034', name: 'Divo' },
+    { countryId: '687f983be0c862de6baef034', name: 'Bondoukou' },
+    { countryId: '687f983be0c862de6baef034', name: 'Séguéla' },
+    { countryId: '687f983be0c862de6baef034', name: 'Odienné' },
+    { countryId: '687f983be0c862de6baef034', name: 'Toumodi' },
+    { countryId: '687f983be0c862de6baef034', name: 'Soubré' },
+    { countryId: '687f983be0c862de6baef034', name: 'Daoukro' },
+    { countryId: '687f983be0c862de6baef034', name: 'Tingréla' },
+    { countryId: '687f983be0c862de6baef034', name: 'Agnibilékrou' },
+    { countryId: '687f983be0c862de6baef034', name: 'Bingerville' },
+    { countryId: '687f983be0c862de6baef034', name: 'Grand-Bassam' },
+  ];
 }

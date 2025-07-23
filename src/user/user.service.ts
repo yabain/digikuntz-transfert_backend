@@ -16,7 +16,6 @@ import { Query } from 'express-serve-static-core';
 import { CreateUserDto } from './create-user.dto';
 import { UpdateUserDto } from './update-user.dto';
 import * as bcrypt from 'bcryptjs';
-import { FollowService } from 'src/follow/follow.service';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
@@ -24,7 +23,6 @@ export class UserService {
   constructor(
     @InjectModel(User.name)
     private userModel: mongoose.Model<User>,
-    private followService: FollowService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -90,15 +88,10 @@ export class UserService {
       user.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
       }
 
-    // Get the number of followers and followings
-    const followers = await this.followService.getFollowersNumber(userId);
-    const followings = await this.followService.getFollowingsNumber(userId);
 
     // Enrich user data with follower and following counts
     let userData: any = { ...user };
     userData = userData._doc;
-    userData.followers = followers.length;
-    userData.followings = followings.length;
 
     return userData;
   }
@@ -223,10 +216,8 @@ export class UserService {
     for (const user of users) {
       user.password = '';
       user.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
-      const followers = await this.followService.getFollowersNumber(user._id);
       let userData: any = { ...user };
       userData = userData._doc;
-      userData.followers = followers.length;
       userArray = [...userArray, userData];
     }
 

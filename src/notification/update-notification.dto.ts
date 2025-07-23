@@ -1,6 +1,5 @@
 import { IsOptional } from 'class-validator';
 import { User } from '../user/user.schema';
-import { Event } from '../event/event.schema';
 import { NotifType } from './notification.schema';
 
 export class UpdateNotificationDto {
@@ -9,9 +8,6 @@ export class UpdateNotificationDto {
 
   @IsOptional()
   readonly userToId: User;
-
-  @IsOptional()
-  readonly eventId: Event;
 
   @IsOptional()
   readonly type: NotifType;

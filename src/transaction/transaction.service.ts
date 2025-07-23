@@ -20,7 +20,6 @@ import { User } from 'src/user/user.schema';
 import { Query } from 'express-serve-static-core';
 import { CreateTransactionDto } from './create-transaction.dto';
 import { firstValueFrom } from 'rxjs';
-import { TicketService } from 'src/ticket/ticket.service';
 import { Cron } from '@nestjs/schedule';
 
 @Injectable()
@@ -31,7 +30,6 @@ export class TransactionService {
     private transactionModel: mongoose.Model<Transaction>,
     private httpService: HttpService,
     private configService: ConfigService,
-    private ticketService: TicketService,
   ) {}
 
   async findAll(query: Query): Promise<Transaction[]> {
@@ -177,10 +175,7 @@ export class TransactionService {
         );
         if (response.data.statusCode === 200) {
           if (newTransactionData.reqStatus === ReqStatus.SUCCESS) {
-            await this.handleTransactionStateSuccess(
-              newTransactionData,
-              userData,
-            );
+            await this.handleTransactionStateSuccess(newTransactionData);
             return; // On arrête la boucle
           } else if (newTransactionData.reqStatus === ReqStatus.ERROR) {
             await this.handleTransactionStateError(newTransactionData);
@@ -226,10 +221,7 @@ export class TransactionService {
       };
   }
 
-  private async handleTransactionStateSuccess(
-    transactionData,
-    userData,
-  ): Promise<any> {
+  private async handleTransactionStateSuccess(transactionData): Promise<any> {
     const transaction: any = await this.transactionModel.findById(
       transactionData._id,
     );
@@ -239,7 +231,6 @@ export class TransactionService {
         message: transactionData.message ? transactionData.message : '',
         reqErrorCode: '',
       });
-      this.ticketService.createMultipleTicket(transactionData, userData);
       return {
         success: true,
         status: transactionData.reqStatus,
@@ -519,7 +510,7 @@ export class TransactionService {
       .exec();
 
     this.logger.log(
-      `Nombre de transactions en attente : ${pendingTransactions.length}`
+      `Nombre de transactions en attente : ${pendingTransactions.length}`,
     );
     await Promise.all(
       pendingTransactions.map(async (transaction: any) => {

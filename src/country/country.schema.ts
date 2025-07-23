@@ -10,6 +10,9 @@ export class Country extends Document {
 
   @Prop({ unique: true })
   code: string;
+
+  @Prop({ unique: true })
+  flagUrl: string;
 }
 
 export const CountrySchema = SchemaFactory.createForClass(Country);

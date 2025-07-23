@@ -6,7 +6,6 @@ import {
   IsString,
 } from 'class-validator';
 import { User } from '../user/user.schema';
-import { Event } from '../event/event.schema';
 import { NotifType } from './notification.schema';
 
 export class CreateNotificationDto {

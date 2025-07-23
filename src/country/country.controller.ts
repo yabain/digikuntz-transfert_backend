@@ -88,6 +88,11 @@ export class CountryController {
         name: 'Kenya',
         code: '254',
       },
+      {
+        name: 'Ivory_Coast',
+        code: '225',
+        flagUrl: 'assets/ressorces/ci.png',
+      },
     ];
     return this.countryService.import(countries);
   }
