@@ -39,6 +39,30 @@ export class CountryService {
     return countries;
   }
 
+  async findAllActive(query: Query): Promise<Country[]> {
+    const resPerPage = 100;
+    const currentPage = Number(query.page) || 1;
+    const skip = resPerPage * (currentPage - 1);
+
+    const keyword = query.keyword
+      ? {
+          name: {
+            $regex: query.keyword,
+            $options: 'i',
+          },
+        }
+      : {};
+
+    const filter = { ...keyword, status: true };
+
+    const countries = await this.countryModel
+      .find(filter)
+      .limit(resPerPage)
+      .skip(skip);
+
+    return countries;
+  }
+
   async creatCountry(country: CreateCountryDto): Promise<any> {
     try {
       console.log('Creating country with data:', country); // Log les données reçues

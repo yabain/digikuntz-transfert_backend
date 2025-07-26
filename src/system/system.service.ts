@@ -25,7 +25,7 @@ export class SystemService {
       appVersion: '1.2.0',
       invoiceTaxes: 5,
       paymentGatwayAPIKey: '',
-      racineLink: 'https://yabi.cm',
+      racineLink: 'https://payments.digikuntz.com',
     };
     try {
       const res = await this.systemModel.create(systemData);

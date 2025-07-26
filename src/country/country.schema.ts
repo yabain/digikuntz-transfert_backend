@@ -13,6 +13,12 @@ export class Country extends Document {
 
   @Prop({ unique: true })
   flagUrl: string;
+
+  @Prop()
+  currency: string;
+
+  @Prop()
+  status: boolean; // true for actived
 }
 
 export const CountrySchema = SchemaFactory.createForClass(Country);
