@@ -49,7 +49,7 @@ export class EmailService {
     try {
       console.log('Sending email');
       message = '<p>' + message + '</p>';
-      const from = this.configService.get<string>('EMAIL_TEAM');
+      const from = this.configService.get<string>('SMTP_USER');
       await this.transporter.sendMail({
         from,
         to: toEmail,
@@ -88,46 +88,90 @@ export class EmailService {
     const html = template(context);
 
     await this.transporter.sendMail({
-      from: this.configService.get<string>('EMAIL_TEAM'),
+      from: this.configService.get<string>('SMTP_USER'),
       to: toEmail,
       subject,
       html,
     });
   }
 
+  // async sendResetPwd(
+  //   toEmail: string,
+  //   language: string,
+  //   userName: string,
+  //   token: string,
+  // ): Promise<boolean> {
+  //   const templateName = 'reset-pwd';
+  //   const subject =
+  //     language === 'fr' ? 'Réinitialisation de Mot de Passe' : 'Password Reset';
+
+  //   const templatePath = path.join(
+  //     this.templateFolder,
+  //     `${templateName}_${language}.hbs`,
+  //   );
+
+  //   const templateSource = fs.readFileSync(templatePath, 'utf8');
+  //   const template = handlebars.compile(templateSource);
+
+  //   const context = {
+  //     userName,
+  //     resetPwdUrl: `${this.configService.get<string>('FRONT_URL')}/auth-screen/new-password${token}`,
+  //   };
+
+  //   const html = template(context);
+
+  //   await this.transporter.sendMail({
+  //     from: this.configService.get<string>('SMTP_USER'),
+  //     to: toEmail,
+  //     subject,
+  //     html,
+  //   });
+
+  //   return true;
+  // }
   async sendResetPwd(
     toEmail: string,
     language: string,
     userName: string,
     token: string,
   ): Promise<boolean> {
-    const templateName = 'reset-pwd';
-    const subject =
-      language === 'fr' ? 'Réinitialisation de Mot de Passe' : 'Password Reset';
+    try {
+      const templateName = 'reset-pwd';
+      const subject =
+        language === 'fr'
+          ? 'Réinitialisation de Mot de Passe'
+          : 'Password Reset';
 
-    const templatePath = path.join(
-      this.templateFolder,
-      `${templateName}_${language}.hbs`,
-    );
+      const templatePath = path.join(
+        this.templateFolder,
+        `${templateName}_${language}.hbs`,
+      );
 
-    const templateSource = fs.readFileSync(templatePath, 'utf8');
-    const template = handlebars.compile(templateSource);
+      const templateSource = fs.readFileSync(templatePath, 'utf8');
+      const template = handlebars.compile(templateSource);
 
-    const context = {
-      userName,
-      resetPwdUrl: `${this.configService.get<string>('FRONT_URL')}/auth-screen/new-password${token}`,
-    };
+      const context = {
+        userName,
+        resetPwdUrl: `${this.configService.get<string>('FRONT_URL')}/auth-screen/new-password${token}`,
+      };
 
-    const html = template(context);
+      const html = template(context);
 
-    await this.transporter.sendMail({
-      from: this.configService.get<string>('EMAIL_TEAM'),
-      to: toEmail,
-      subject,
-      html,
-    });
+      await this.transporter.sendMail({
+        from: this.configService.get<string>('SMTP_USER'),
+        to: toEmail,
+        subject,
+        html,
+      });
 
-    return true;
+      return true;
+    } catch (error) {
+      console.error(
+        "Erreur lors de l'envoi du mail de réinitialisation :",
+        error,
+      );
+      return false;
+    }
   }
 
   async sendEventParticipationEmail(user: any, event: any): Promise<boolean> {
@@ -179,7 +223,7 @@ export class EmailService {
     const icsAttachment = await this.generateIcsFile(event);
 
     await this.transporter.sendMail({
-      from: this.configService.get<string>('EMAIL_TEAM'),
+      from: this.configService.get<string>('SMTP_USER'),
       to: user.email,
       subject,
       html,
@@ -208,7 +252,7 @@ export class EmailService {
         url: `${this.configService.get<string>('FRONT_URL')}/tabs/events/${event.eventData._id}_shared`,
         organizer: {
           name: 'Yabi Events',
-          email: this.configService.get<string>('EMAIL_TEAM'),
+          email: this.configService.get<string>('SMTP_USER'),
         },
       };
 

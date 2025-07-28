@@ -118,8 +118,8 @@ async function bootstrap() {
 
   // Configuration Swagger
   const config = new DocumentBuilder()
-    .setTitle('Yabi API')
-    .setDescription('Yabi API Documentation')
+    .setTitle('Digikuntz Payments API')
+    .setDescription('Digikuntz Payments API Documentation')
     .setVersion('1.0')
     .addBearerAuth()
     .build();
@@ -127,7 +127,9 @@ async function bootstrap() {
   SwaggerModule.setup('api/docs', app, document);
 
   await app.listen(process.env.PORT ?? 3000);
-  console.log(`Yabi backend Application is running on: ${await app.getUrl()}`);
+  console.log(
+    `Digikuntz Payments backend Application is running on: ${await app.getUrl()}`,
+  );
 }
 
 bootstrap();

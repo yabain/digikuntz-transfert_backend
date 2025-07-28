@@ -59,7 +59,7 @@ export class ExchangeService {
     if (!existing)
       throw new NotFoundException('No exchange rate found to update');
 
-    console.log('updateExchangeRate: ', exchangeRateData);
+    console.log('updateExchangeRate: ');
     exchangeRateData.rates = JSON.stringify(exchangeRateData.rates);
     const exchange = await this.exchangeModel.findByIdAndUpdate(
       existing._id,
@@ -70,7 +70,6 @@ export class ExchangeService {
       },
     );
 
-    console.log('exchange', exchange);
     if (!exchange) throw new NotFoundException('Invalid exchange rate ID');
     return exchange;
   }

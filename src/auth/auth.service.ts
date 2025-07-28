@@ -164,6 +164,8 @@ export class AuthService {
    * @returns a success message.
    */
   async requestPasswordReset(email: string): Promise<boolean> {
+    console.log('Requesting password reset for:', email);
+    // Check if the user exists
     const user = await this.userModel.findOne({ email });
     if (!user) {
       throw new NotFoundException('User not found');

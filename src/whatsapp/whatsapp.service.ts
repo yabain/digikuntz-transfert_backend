@@ -121,7 +121,7 @@ export class WhatsappService implements OnModuleInit {
     this.reconnectAttempts = 0;
     this.frontUrl = this.configService.get<string>('FRONT_URL')
       ? this.configService.get<string>('FRONT_URL')
-      : 'https://yabi.cm';
+      : 'https://payments.digikuntz.com';
   }
 
   /**
