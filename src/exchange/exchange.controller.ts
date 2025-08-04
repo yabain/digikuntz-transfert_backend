@@ -35,8 +35,8 @@ export class ExchangeController {
   }
 
   @Put('setExchangeRate')
-  @UseGuards(AuthGuard('jwt')) // Protect the route with authentication
-  @UsePipes(ValidationPipe) // Validate the incoming data
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
   async updateExchangeRate(
     @Req() req,
     @Body() Body,
@@ -61,6 +61,24 @@ export class ExchangeController {
       body.toCurrency,
       body.amount,
     );
+  }
+
+  @Post('convertCurrency')
+  async convertCurrency2(@Body() body: any): Promise<any> {
+    console.log('get Exchange Rate 2 000');
+    return this.exchangeService.convertCurrency(
+      body.fromCurrency,
+      body.toCurrency,
+      body.amount,
+    );
+  }
+
+  @Get('other-rates')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async getOtherRates(@Req() req: any): Promise<any> {
+    console.log('get other rates');
+    return this.exchangeService.getOtherRates(req.user._id);
   }
 
   //////////////////////////////////////////

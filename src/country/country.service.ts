@@ -1,11 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import {
-  Injectable,
-  NotFoundException,
-  ConflictException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Country } from './country.schema';
 import * as mongoose from 'mongoose';
@@ -39,7 +35,7 @@ export class CountryService {
     return countries;
   }
 
-  async findAllActive(query: Query): Promise<Country[]> {
+  async findInAllActive(query: Query): Promise<Country[]> {
     const resPerPage = 100;
     const currentPage = Number(query.page) || 1;
     const skip = resPerPage * (currentPage - 1);
@@ -60,6 +56,13 @@ export class CountryService {
       .limit(resPerPage)
       .skip(skip);
 
+    return countries;
+  }
+
+  async getAllActive(): Promise<Country[]> {
+    const keyword = {};
+    const filter = { ...keyword, status: true };
+    const countries = await this.countryModel.find(filter);
     return countries;
   }
 

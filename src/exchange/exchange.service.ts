@@ -17,6 +17,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import * as mongoose from 'mongoose';
 import { firstValueFrom } from 'rxjs';
 import { Exchange } from './exchange.schema';
+import { UserService } from 'src/user/user.service';
+import { CountryService } from 'src/country/country.service';
 
 @Injectable()
 export class ExchangeService {
@@ -26,6 +28,8 @@ export class ExchangeService {
     private exchangeModel: mongoose.Model<Exchange>,
     private httpService: HttpService,
     private configService: ConfigService,
+    private userService: UserService,
+    private countryService: CountryService,
   ) {}
 
   async getExchangeRate(): Promise<any> {
@@ -58,8 +62,6 @@ export class ExchangeService {
     const existing = await this.exchangeModel.findOne({});
     if (!existing)
       throw new NotFoundException('No exchange rate found to update');
-
-    console.log('updateExchangeRate: ');
     exchangeRateData.rates = JSON.stringify(exchangeRateData.rates);
     const exchange = await this.exchangeModel.findByIdAndUpdate(
       existing._id,
@@ -75,7 +77,7 @@ export class ExchangeService {
   }
 
   async getExchangeRateOnLine(): Promise<any> {
-    console.log('get Exchange Rate OnLine');
+    // console.log('get Exchange Rate OnLine');
     const getRate = async () => {
       try {
         const apiKey = `${this.configService.get<string>('OPEN_EXCHANGE_RATE_APIKEY')}`;
@@ -98,22 +100,42 @@ export class ExchangeService {
     console.log('Convert currency');
     let rates = await this.getExchangeRate();
     rates = rates.rates;
-    console.log('rates', rates);
-
     const rateFromUSDToFrom = rates[fromCurrency];
     const rateFromUSDToTo = rates[toCurrency];
-
     const amountInUSD = amount / rateFromUSDToFrom;
     const convertedAmount = amountInUSD * rateFromUSDToTo;
+    return Number(convertedAmount.toFixed(2));
+  }
 
-    return convertedAmount;
+  async getOtherRates(userId: string): Promise<any[]> {
+    const userData = await this.userService.getUserById(userId);
+    console.log('userData: ', userData);
+    const allCountries: any[] = await this.countryService.getAllActive();
+    console.log('countries: ', allCountries);
+    const resp: any[] = [];
+    for (const country of allCountries) {
+      const data = {
+        fromCountry: userData.countryId.name,
+        toCountry: country.name,
+        fromCurrency: userData.countryId.currency,
+        toCurrency: country.currency,
+        value: await this.convertCurrency(
+          userData.countryId.currency,
+          country.currency,
+          1,
+        ),
+      };
+      resp.push(data);
+    }
+    console.log('resp: ', resp);
+    return resp;
   }
 
   isMoreThan60MinutesPast(timestamp) {
     const now = Date.now();
     const inputTime = timestamp * 1000;
     const differenceInMinutes = (now - inputTime) / (1000 * 60);
-    console.log('differenceInMinutes', differenceInMinutes);
+    // console.log('differenceInMinutes', differenceInMinutes);
     return differenceInMinutes > 60;
   }
 }

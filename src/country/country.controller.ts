@@ -28,6 +28,11 @@ export class CountryController {
     return this.countryService.findAll(query);
   }
 
+  @Get('available-countries')
+  async getAllActive(): Promise<Country[]> {
+    return this.countryService.getAllActive();
+  }
+
   @Post('new')
   @UseGuards(AuthGuard('jwt')) // Applique un garde (guard) pour protéger la route. Ici, `AuthGuard` est utilisé pour vérifier l'authentification.
   @UsePipes(ValidationPipe) // Valide les données entrantes (body) en utilisant le DTO `CreateUserDto`

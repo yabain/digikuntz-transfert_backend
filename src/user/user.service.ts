@@ -74,18 +74,20 @@ export class UserService {
    * @returns The user data with follower and following counts.
    * @throws NotFoundException if the user ID is invalid or the user is not found.
    */
-  async findById(userId: any): Promise<any> {
+  async getUserById(userId: any): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new NotFoundException('Invalid user ID');
     }
 
     // Find the user by ID
-    const user = await this.userModel.findById(userId);
+    const user = await this.userModel.findById(userId)
+    .populate('countryId')
+    .populate('cityId');
     if (!user) {
       throw new NotFoundException('User not found');
     } else {
       user.password = '';
-      user.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
+      user.resetPasswordToken = '';
       }
 
 
