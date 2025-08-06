@@ -97,7 +97,6 @@ export class ExchangeService {
   }
 
   async convertCurrency(fromCurrency, toCurrency, amount = 1) {
-    console.log('Convert currency');
     let rates = await this.getExchangeRate();
     rates = rates.rates;
     const rateFromUSDToFrom = rates[fromCurrency];
@@ -109,7 +108,6 @@ export class ExchangeService {
 
   async getOtherRates(userId: string): Promise<any[]> {
     const userData = await this.userService.getUserById(userId);
-    console.log('userData: ', userData);
     const allCountries: any[] = await this.countryService.getAllActive();
     console.log('countries: ', allCountries);
     const resp: any[] = [];
