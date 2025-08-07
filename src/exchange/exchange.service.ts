@@ -109,7 +109,6 @@ export class ExchangeService {
   async getOtherRates(userId: string): Promise<any[]> {
     const userData = await this.userService.getUserById(userId);
     const allCountries: any[] = await this.countryService.getAllActive();
-    console.log('countries: ', allCountries);
     const resp: any[] = [];
     for (const country of allCountries) {
       const data = {
@@ -125,7 +124,6 @@ export class ExchangeService {
       };
       resp.push(data);
     }
-    console.log('resp: ', resp);
     return resp;
   }
 

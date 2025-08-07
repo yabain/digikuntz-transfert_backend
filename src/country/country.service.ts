@@ -117,7 +117,6 @@ export class CountryService {
   }
 
   async import(countries: any): Promise<any> {
-    console.log('Importing countries:', countries);
     for (const country of countries) {
       console.log('current country: ' + country.name);
       const res = await this.countryModel.create(country);
