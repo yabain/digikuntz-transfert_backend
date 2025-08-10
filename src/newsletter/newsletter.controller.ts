@@ -5,7 +5,6 @@ import {
   Get,
   Param,
   Post,
-  Put,
   Query,
   UseGuards,
   UsePipes,
@@ -22,14 +21,17 @@ export class NewsletterController {
   constructor(private newsletterService: NewsletterService) {}
 
   @Get()
-  async findAllSubscribers(@Query() query: ExpressQuery): Promise<Newsletter[]> {
+  async findAllSubscribers(
+    @Query() query: ExpressQuery,
+  ): Promise<Newsletter[]> {
     return this.newsletterService.findAllSubscribers(query);
   }
 
   @Post('new')
-  @UseGuards(AuthGuard('jwt'))
-  @UsePipes(ValidationPipe)
-  async createSubscriber(@Body() Subscriber: CreateSubscriberDto): Promise<Newsletter> {
+  async createSubscriber(
+    @Body() Subscriber: CreateSubscriberDto,
+  ): Promise<boolean> {
+    console.log('Creating new subscriber:', Subscriber);
     return this.newsletterService.creatSubscriber(Subscriber);
   }
 

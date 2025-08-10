@@ -16,7 +16,7 @@ export class NewsletterService {
   constructor(
     @InjectModel(Newsletter.name)
     private newsletterModel: mongoose.Model<Newsletter>,
-  ) { }
+  ) {}
 
   async findAllSubscribers(query: Query): Promise<Newsletter[]> {
     const resPerPage = 10000;
@@ -24,11 +24,11 @@ export class NewsletterService {
     const skip = resPerPage * (currentPage - 1);
     const keyword = query.keyword
       ? {
-        name: {
-          $regex: query.keyword,
-          $options: 'i',
-        },
-      }
+          name: {
+            $regex: query.keyword,
+            $options: 'i',
+          },
+        }
       : {};
     const Subscribers = await this.newsletterModel
       .find({ ...keyword })
@@ -38,15 +38,16 @@ export class NewsletterService {
     return Subscribers;
   }
 
-  async creatSubscriber(subscriber: CreateSubscriberDto): Promise<Newsletter> {
+  async creatSubscriber(subscriber: CreateSubscriberDto): Promise<any> {
     try {
       const res = await this.newsletterModel.create(subscriber);
-      return res;
+      return { status: true, message: 'Subscription created' };
     } catch (error) {
       if (error.code === 11000) {
+        return { status: false, message: 'This city name already exists' };
         throw new ConflictException('This city name already exists');
       }
-      throw error; // Propagate other errors
+      return { status: false, message: 'Error to create Subscription' };
     }
   }
 

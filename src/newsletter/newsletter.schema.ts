@@ -6,10 +6,10 @@ import { Document } from 'mongoose';
 })
 export class Newsletter extends Document {
   @Prop({ unique: true })
-  name: string;
+  email: string;
 
   @Prop()
-  countryId: string;
+  name: string;
 }
 
 export const NewsletterSchema = SchemaFactory.createForClass(Newsletter);
