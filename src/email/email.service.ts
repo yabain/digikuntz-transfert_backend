@@ -18,6 +18,7 @@ export class EmailService {
     __dirname,
     '..',
     '..',
+    'src',
     'email',
     'templates',
   );
@@ -87,14 +88,54 @@ export class EmailService {
     const template = handlebars.compile(templateSource);
     const html = template(context);
 
+    await this.proceedToSendEmail(toEmail, subject, html);
+  }
+
+  async sendSubscriptionNewsletterEmail(
+    toEmail: string,
+    language: string,
+    userName: string,
+  ): Promise<void> {
+    console.log('Sending subscription newsletter email');
+    const templateName = 'newsletter-subscription';
+    const subject =
+      language === 'fr'
+        ? 'Digikuntz Payments: Souscription à la boite aux lettres'
+        : 'Digikuntz Payments: Mailbox Subscription';
+
+    const templatePath = path.join(
+      this.templateFolder,
+      `${templateName}_${language}.hbs`,
+    );
+
+    const context = {
+      frontUrl: this.configService.get<string>('FRONT_URL'),
+      userName,
+    };
+
+    console.log('Sending 00', templatePath, context);
+    const templateSource = fs.readFileSync(templatePath, 'utf8');
+    const template = handlebars.compile(templateSource);
+    const html = template(context);
+
+    console.log('Sending 11');
+    await this.proceedToSendEmail(toEmail, subject, html);
+  }
+
+  async proceedToSendEmail(to, subject, html): Promise<any> {
+    console.log(
+      'Proceeding to send email',
+      this.configService.get<string>('SMTP_USER'),
+      to,
+      subject,
+    );
     await this.transporter.sendMail({
       from: this.configService.get<string>('SMTP_USER'),
-      to: toEmail,
+      to,
       subject,
       html,
     });
   }
-
   // async sendResetPwd(
   //   toEmail: string,
   //   language: string,

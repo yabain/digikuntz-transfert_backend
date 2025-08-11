@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-floating-promises */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
@@ -10,12 +11,14 @@ import { Newsletter } from './newsletter.schema';
 import * as mongoose from 'mongoose';
 import { Query } from 'express-serve-static-core';
 import { CreateSubscriberDto } from './create-subscriber.dto';
+import { EmailService } from 'src/email/email.service';
 
 @Injectable()
 export class NewsletterService {
   constructor(
     @InjectModel(Newsletter.name)
     private newsletterModel: mongoose.Model<Newsletter>,
+    private emailService: EmailService,
   ) {}
 
   async findAllSubscribers(query: Query): Promise<Newsletter[]> {
@@ -41,11 +44,16 @@ export class NewsletterService {
   async creatSubscriber(subscriber: CreateSubscriberDto): Promise<any> {
     try {
       const res = await this.newsletterModel.create(subscriber);
+      this.emailService.sendSubscriptionNewsletterEmail(
+        subscriber.email,
+        'en',
+        subscriber.name,
+      );
       return { status: true, message: 'Subscription created' };
     } catch (error) {
       if (error.code === 11000) {
-        return { status: false, message: 'This city name already exists' };
-        throw new ConflictException('This city name already exists');
+        return { status: false, message: 'This email name already exists' };
+        throw new ConflictException('This email name already exists');
       }
       return { status: false, message: 'Error to create Subscription' };
     }
@@ -57,7 +65,7 @@ export class NewsletterService {
     }
     const subscribers = await this.newsletterModel.findById(subscribersId);
     if (!subscribers) {
-      throw new NotFoundException('City not found');
+      throw new NotFoundException('email not found');
     }
     return subscribers;
   }

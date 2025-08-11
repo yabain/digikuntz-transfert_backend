@@ -4,6 +4,8 @@ import { NewsletterController } from './newsletter.controller';
 import { AuthModule } from 'src/auth/auth.module';
 import { MongooseModule } from '@nestjs/mongoose';
 import { NewsletterSchema } from './newsletter.schema';
+import { EmailService } from 'src/email/email.service';
+import { DateService } from 'src/email/date.service';
 
 @Module({
   imports: [
@@ -12,7 +14,7 @@ import { NewsletterSchema } from './newsletter.schema';
       { name: 'Newsletter', schema: NewsletterSchema },
     ]),
   ],
-  providers: [NewsletterService],
+  providers: [NewsletterService, EmailService, DateService],
   controllers: [NewsletterController],
 })
 export class NewsletterModule {}

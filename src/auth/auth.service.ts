@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-floating-promises */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
@@ -82,7 +83,7 @@ export class AuthService {
       if (user.firstName && user.firstName != '' && user.firstName != null) {
         userName = user.firstName + ' ' + user.lastName;
       } else userName = user.name;
-      await this.emailService.sendWelcomeEmailAccountCreation(
+      this.emailService.sendWelcomeEmailAccountCreation(
         user.email,
         user.language,
         userName,
