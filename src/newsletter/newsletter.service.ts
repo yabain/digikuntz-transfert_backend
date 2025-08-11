@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-floating-promises */
 /* eslint-disable @typescript-eslint/no-unused-vars */
@@ -42,7 +43,15 @@ export class NewsletterService {
     return Subscribers;
   }
 
+  isEmailValide(email) {
+    const regexEmail = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    return regexEmail.test(email);
+  }
+
   async creatSubscriber(subscriber: CreateSubscriberDto): Promise<any> {
+    if (!this.isEmailValide(subscriber.email)) {
+      return { status: false, message: 'Incorrect Email' };
+    }
     try {
       const res = await this.newsletterModel.create(subscriber);
       this.emailService.sendSubscriptionNewsletterEmail(

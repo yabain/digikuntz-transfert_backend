@@ -18,7 +18,6 @@ export class EmailService {
     __dirname,
     '..',
     '..',
-    'src',
     'email',
     'templates',
   );
@@ -42,11 +41,17 @@ export class EmailService {
     });
   }
 
+  isEmailValide(email) {
+    const regexEmail = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    return regexEmail.test(email);
+  }
+
   async sendEmail(
     toEmail: string,
     subject: string,
     message: string,
   ): Promise<void> {
+    if (!this.isEmailValide(toEmail)) return;
     try {
       console.log('Sending email');
       message = '<p>' + message + '</p>';
@@ -68,6 +73,7 @@ export class EmailService {
     language: string,
     userName: string,
   ): Promise<void> {
+    if (!this.isEmailValide(toEmail)) return;
     const templateName = 'welcome-email';
     const subject =
       language === 'fr'
@@ -96,6 +102,7 @@ export class EmailService {
     language: string,
     userName: string,
   ): Promise<void> {
+    if (!this.isEmailValide(toEmail)) return;
     console.log('Sending subscription newsletter email');
     const templateName = 'newsletter-subscription';
     const subject =
@@ -123,6 +130,7 @@ export class EmailService {
   }
 
   async proceedToSendEmail(to, subject, html): Promise<any> {
+    if (!this.isEmailValide(to)) return;
     console.log(
       'Proceeding to send email',
       this.configService.get<string>('SMTP_USER'),
@@ -176,6 +184,7 @@ export class EmailService {
     userName: string,
     token: string,
   ): Promise<boolean> {
+    if (!this.isEmailValide(toEmail)) return false;
     try {
       const templateName = 'reset-pwd';
       const subject =
