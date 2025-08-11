@@ -23,14 +23,33 @@ import { AuthGuard } from '@nestjs/passport';
 import { Response } from 'express';
 import { TransactionService } from './transaction.service';
 import { Transaction } from './transaction.schema';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 
+@ApiTags('transaction')
 @Controller('transaction')
 export class TransactionController {
   constructor(private transactionService: TransactionService) {}
 
   @Get()
-  @UseGuards(AuthGuard('jwt')) // Protect the route with authentication
-  @UsePipes(ValidationPipe) // Validate the incoming data
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all transactions (admin only)' })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search filter',
+  })
+  @ApiResponse({ status: 200, description: 'List of transactions returned.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
   async getAllTransactoins(
     @Query() query: ExpressQuery,
     @Req() req,
@@ -42,8 +61,12 @@ export class TransactionController {
   }
 
   @Get(':id')
-  @UseGuards(AuthGuard('jwt')) // Protect the route with authentication
-  @UsePipes(ValidationPipe) // Validate the incoming data
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get transaction data by ID' })
+  @ApiParam({ name: 'id', description: 'Transaction ID', type: String })
+  @ApiResponse({ status: 200, description: 'Transaction data returned.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
   async getTransactionData(
     @Param('id') transactionId: string,
     @Req() req,
@@ -52,20 +75,39 @@ export class TransactionController {
   }
 
   @Post('new')
-  @UseGuards(AuthGuard('jwt')) // Protect the route with authentication
-  @UsePipes(ValidationPipe) // Validate the incoming data
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Process a new payment transaction' })
+  @ApiBody({
+    schema: {
+      example: {
+        amount: 100,
+        fromCurrency: 'USD',
+        toCurrency: 'XAF',
+        sender: 'userId',
+        receiver: 'userId',
+        // ...autres champs nécessaires
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Transaction processed.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
   async processPayment(@Body() transactionData: any, @Req() req): Promise<any> {
     return this.transactionService.processPayment(transactionData, req.user);
   }
 
   @Delete(':id')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete a transaction by ID (admin only)' })
+  @ApiParam({ name: 'id', description: 'Transaction ID', type: String })
+  @ApiResponse({ status: 200, description: 'Transaction deleted.' })
   @UseGuards(AuthGuard('jwt'))
   async delete(@Param('id') transactionId: string, @Req() req): Promise<any> {
     if (!req.user.isAdmin) throw new BadRequestException('Unauthorised !');
     return this.transactionService.deleteTransaction(transactionId);
   }
 
-  //////////////////////////////////////////
+  // Redirections (not documented in Swagger)
   @Get('*path')
   getRedirect(@Res() res: Response) {
     return res.redirect('https://yabi.cm');

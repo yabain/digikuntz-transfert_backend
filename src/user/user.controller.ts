@@ -28,19 +28,38 @@ import { AuthGuard } from '@nestjs/passport';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { multerConfigForUser } from '..//multer.config';
 import { Response } from 'express';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 
+@ApiTags('user')
 @Controller('user')
 export class UserController {
   constructor(private userService: UserService) {}
 
   /**
    * Get all users with optional query parameters for filtering and pagination.
-   * @param query - Query parameters for filtering and pagination.
-   * @returns A list of users.
+   * Only accessible by admin users.
    */
   @Get()
-  @UseGuards(AuthGuard('jwt')) // Protect the route with authentication
-  @UsePipes(ValidationPipe) // Validate the incoming data using the UpdateUserDto
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all users (admin only)' })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search filter',
+  })
+  @ApiResponse({ status: 200, description: 'List of users returned.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
   async getAllUser(@Query() query: ExpressQuery, @Req() req): Promise<User[]> {
     if (!req.user.isAdmin) {
       throw new NotFoundException('Unautorised');
@@ -50,49 +69,66 @@ export class UserController {
 
   /**
    * Get user data by ID.
-   * @param userId - The ID of the user to retrieve.
-   * @returns The user data.
    */
   @Get('user-data/:id')
+  @ApiOperation({ summary: 'Get user data by ID' })
+  @ApiParam({ name: 'id', description: 'User ID', type: String })
+  @ApiResponse({ status: 200, description: 'User data returned.' })
   async getUser(@Param('id') userId: string): Promise<any> {
     return this.userService.getUserById(userId);
   }
 
   /**
    * Create a new user.
-   * @param user - The user data to create.
-   * @returns The created user.
    */
   @Post('new')
-  @UsePipes(ValidationPipe) // Validate the incoming data using the CreateUserDto
+  @ApiOperation({ summary: 'Create a new user' })
+  @ApiBody({ type: CreateUserDto })
+  @ApiResponse({ status: 201, description: 'User created.' })
+  @UsePipes(ValidationPipe)
   async createUser(@Body() user: CreateUserDto): Promise<User> {
     return this.userService.creatUser(user);
   }
 
   /**
    * Update the profile of the authenticated user.
-   * @param userData - The updated user data.
-   * @param req - The request object containing the authenticated user.
-   * @returns The updated user data.
    */
   @Put('update-profile')
-  @UseGuards(AuthGuard('jwt')) // Protect the route with authentication
-  @UsePipes(ValidationPipe) // Validate the incoming data using the UpdateUserDto
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update the profile of the authenticated user' })
+  @ApiBody({ type: UpdateUserDto })
+  @ApiResponse({ status: 200, description: 'User profile updated.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
   async update(@Body() userData: UpdateUserDto, @Req() req): Promise<any> {
     return this.userService.updateUser(req.user._id, userData);
   }
 
   /**
    * Update the profile picture of the authenticated user.
-   * @param req - The request object containing the authenticated user.
-   * @param picture - The uploaded picture file.
-   * @returns The updated user data.
-   * @throws BadRequestException if no file is uploaded.
    */
   @Put('picture')
-  @UseInterceptors(FilesInterceptor('pictureFile', 1, multerConfigForUser)) // Handle file uploads
-  @UseGuards(AuthGuard('jwt')) // Protect the route with authentication
-  @UsePipes(ValidationPipe) // Validate the incoming data
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Update the profile picture of the authenticated user',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        pictureFile: {
+          type: 'string',
+          format: 'binary',
+          description: 'Profile picture file',
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'User profile picture updated.' })
+  @UseInterceptors(FilesInterceptor('pictureFile', 1, multerConfigForUser))
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
   async updatePicture(
     @Req() req,
     @UploadedFiles() picture: Array<Express.Multer.File>,
@@ -104,12 +140,14 @@ export class UserController {
   }
 
   /**
-   * Delete a user by ID.
-   * @param userId - The ID of the user to delete.
-   * @returns The result of the deletion operation.
+   * Delete a user by ID. Only accessible by admin users.
    */
   @Delete(':id')
-  @UseGuards(AuthGuard('jwt')) // Protect the route with authentication
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete a user by ID (admin only)' })
+  @ApiParam({ name: 'id', description: 'User ID', type: String })
+  @ApiResponse({ status: 200, description: 'User deleted.' })
+  @UseGuards(AuthGuard('jwt'))
   async delete(@Param('id') userId: string, @Req() req): Promise<any> {
     if (!req.user.isAdmin) {
       throw new NotFoundException('Unautorised');
@@ -119,15 +157,24 @@ export class UserController {
 
   /**
    * Search for users by name with optional query parameters for filtering and pagination.
-   * @param query - Query parameters for filtering and pagination.
-   * @returns A list of users matching the search criteria.
    */
   @Get('research')
+  @ApiOperation({ summary: 'Search for users by name' })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search filter',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of users matching the search criteria.',
+  })
   async userResearch(@Query() query: ExpressQuery): Promise<any> {
     return this.userService.searchByName(query);
   }
 
-  //////////////////////////////////////////////
+  // Redirections (not documented in Swagger)
   @Get('*path')
   getRedirect(@Res() res: Response) {
     return res.redirect('https://yabi.cm');

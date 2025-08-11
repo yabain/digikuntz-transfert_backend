@@ -14,18 +14,34 @@ import {
 import { NotificationService } from './notification.service';
 import { Query as ExpressQuery } from 'express-serve-static-core';
 import { AuthGuard } from '@nestjs/passport';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 
+@ApiTags('notification')
 @Controller('notification')
 export class NotificationController {
   constructor(private notificationService: NotificationService) {}
 
   /**
-   * Get all users with optional query parameters for filtering and pagination.
-   * @param query - Query parameters for filtering and pagination.
-   * @returns A list of users.
+   * Get the list of notifications for the authenticated user.
    */
   @Get('my-notifications')
-  @UseGuards(AuthGuard('jwt')) // Protect the route with authentication
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all notifications for the authenticated user' })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search filter',
+  })
+  @ApiResponse({ status: 200, description: 'List of notifications returned.' })
+  @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getNotificationsListOfUser(
     @Query() query: ExpressQuery,
@@ -38,12 +54,14 @@ export class NotificationController {
   }
 
   /**
-   * Get all users with optional query parameters for filtering and pagination.
-   * @param query - Query parameters for filtering and pagination.
-   * @returns A list of users.
+   * Mark a notification as read for the authenticated user.
    */
   @Put(':id')
-  @UseGuards(AuthGuard('jwt')) // Protect the route with authentication
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Mark a notification as read' })
+  @ApiParam({ name: 'id', description: 'Notification ID', type: String })
+  @ApiResponse({ status: 200, description: 'Notification marked as read.' })
+  @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async makeAsReaded(
     @Param('id') notifId: string,
@@ -52,7 +70,18 @@ export class NotificationController {
     return this.notificationService.makeAsReaded(req.user._id, notifId);
   }
 
+  /**
+   * Get all unread notifications for the authenticated user.
+   */
   @Get('unreaded-notifications')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get all unread notifications for the authenticated user',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of unread notifications returned.',
+  })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getUnreadNotifications(@Req() req): Promise<Notification[]> {

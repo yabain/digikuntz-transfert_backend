@@ -16,12 +16,30 @@ import { Newsletter } from './newsletter.schema';
 import { Query as ExpressQuery } from 'express-serve-static-core';
 import { AuthGuard } from '@nestjs/passport';
 import { CreateSubscriberDto } from './create-subscriber.dto';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 
+@ApiTags('newsletter')
 @Controller('newsletter')
 export class NewsletterController {
   constructor(private newsletterService: NewsletterService) {}
 
   @Get()
+  @ApiOperation({ summary: 'Get all newsletter subscribers' })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search filter',
+  })
+  @ApiResponse({ status: 200, description: 'List of subscribers returned.' })
   async findAllSubscribers(
     @Query() query: ExpressQuery,
   ): Promise<Newsletter[]> {
@@ -29,6 +47,9 @@ export class NewsletterController {
   }
 
   @Post('new')
+  @ApiOperation({ summary: 'Create a new newsletter subscriber' })
+  @ApiBody({ type: CreateSubscriberDto })
+  @ApiResponse({ status: 201, description: 'Subscriber created.' })
   async createSubscriber(
     @Body() Subscriber: CreateSubscriberDto,
   ): Promise<boolean> {
@@ -37,6 +58,10 @@ export class NewsletterController {
   }
 
   @Delete(':id')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete a subscriber by ID' })
+  @ApiParam({ name: 'id', description: 'Subscriber ID', type: String })
+  @ApiResponse({ status: 200, description: 'Subscriber deleted.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async deleteSubscriber(@Param('id') SubscriberId: string): Promise<any> {
