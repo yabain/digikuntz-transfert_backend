@@ -17,6 +17,7 @@ import { TransactionModule } from './transaction/transaction.module';
 import { AlertModule } from './alert/alert.module';
 import { ExchangeModule } from './exchange/exchange.module';
 import { NewsletterModule } from './newsletter/newsletter.module';
+import { TransactionsModule } from './transactions/transactions.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { NewsletterModule } from './newsletter/newsletter.module';
     AlertModule,
     ExchangeModule,
     NewsletterModule,
+    TransactionsModule,
     // WhatsappModule,
   ],
   controllers: [AppController],
