@@ -165,25 +165,21 @@ export class AuthService {
    * @returns a success message.
    */
   async requestPasswordReset(email: string): Promise<boolean> {
-    console.log('Requesting password reset for:', email);
-    // Check if the user exists
     const user = await this.userModel.findOne({ email });
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    // Generates a password reset token (valid for 1 hour)
     const resetToken = this.jwtService.sign(
       { id: user._id },
       { expiresIn: '1h' },
     );
 
-    // Save the token to the database (optional)
     user.resetPasswordToken = resetToken;
     await user.save();
 
-    // Reset link
-    const resetPwdUrl = `;token=${resetToken}`;
+    // const resetPwdUrl = `;token=${resetToken}`;
+    const resetPwdUrl = `${resetToken}`;
 
     await this.emailService.sendResetPwd(
       email,

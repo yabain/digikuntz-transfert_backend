@@ -202,7 +202,7 @@ export class EmailService {
 
       const context = {
         userName,
-        resetPwdUrl: `${this.configService.get<string>('FRONT_URL')}/auth-screen/new-password${token}`,
+        resetPwdUrl: `${this.configService.get<string>('FRONT_URL')}/auth/new-password/${token}`,
       };
 
       const html = template(context);
