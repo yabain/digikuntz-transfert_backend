@@ -191,6 +191,48 @@ export class UserController {
     return this.userService.searchByName(query);
   }
 
+  @Put('update-status')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update user status' })
+  @ApiBody({ type: UpdateUserDto })
+  @ApiResponse({ status: 200, description: 'User profile updated.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async updateStatus(@Body() userId: string, @Req() req): Promise<any> {
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unautorised');
+    }
+    return this.userService.updateStatus(userId);
+  }
+
+  @Put('update-adminStatus')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update admin profile status' })
+  @ApiBody({ type: UpdateUserDto })
+  @ApiResponse({ status: 200, description: 'User profile updated.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async updateAdminStatus(@Body() userId: string, @Req() req): Promise<any> {
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unautorised');
+    }
+    return this.userService.updateAdminStatus(userId);
+  }
+
+  @Put('update-verifiedStatus')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update verified profile status' })
+  @ApiBody({ type: UpdateUserDto })
+  @ApiResponse({ status: 200, description: 'User profile updated.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async updateVerifiedStatus(@Body() userId: string, @Req() req): Promise<any> {
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unautorised');
+    }
+    return this.userService.updateVerifiedStatus(userId);
+  }
+
   // Redirections (not documented in Swagger)
   @Get('*path')
   getRedirect(@Res() res: Response) {

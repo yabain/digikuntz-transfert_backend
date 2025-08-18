@@ -80,16 +80,16 @@ export class UserService {
     }
 
     // Find the user by ID
-    const user = await this.userModel.findById(userId)
-    .populate('countryId')
-    .populate('cityId');
+    const user = await this.userModel
+      .findById(userId)
+      .populate('countryId')
+      .populate('cityId');
     if (!user) {
       throw new NotFoundException('User not found');
     } else {
       user.password = '';
       user.resetPasswordToken = '';
-      }
-
+    }
 
     // Enrich user data with follower and following counts
     let userData: any = { ...user };
@@ -111,19 +111,20 @@ export class UserService {
     }
 
     // Update the user in the database
-    const user = await this.userModel.findByIdAndUpdate(userId, userData, {
-      new: true,
-      runValidators: true,
-    })
-    .populate('countryId')
-    .populate('cityId');
+    const user = await this.userModel
+      .findByIdAndUpdate(userId, userData, {
+        new: true,
+        runValidators: true,
+      })
+      .populate('countryId')
+      .populate('cityId');
 
     if (!user) {
       throw new NotFoundException('User not found');
     } else {
       user.password = '';
       user.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
-      }
+    }
 
     return user;
   }
@@ -151,7 +152,7 @@ export class UserService {
     } else {
       user.password = '';
       user.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
-      }
+    }
 
     // Generate URLs for the uploaded files
     const fileUrls = files.map((file) => {
@@ -159,20 +160,21 @@ export class UserService {
     });
 
     // Update the user's profile picture in the database
-    const updatedUser = await this.userModel.findByIdAndUpdate(
-      req.user._id,
-      { pictureUrl: fileUrls[0] },
-      { new: true, runValidators: true },
-    )
-    .populate('cityId')
-    .populate('countryId');
+    const updatedUser = await this.userModel
+      .findByIdAndUpdate(
+        req.user._id,
+        { pictureUrl: fileUrls[0] },
+        { new: true, runValidators: true },
+      )
+      .populate('cityId')
+      .populate('countryId');
 
     if (!updatedUser) {
       throw new NotFoundException('User not found');
     } else {
       updatedUser.password = '';
       updatedUser.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
-      }
+    }
 
     return updatedUser;
   }
@@ -255,25 +257,130 @@ export class UserService {
     return users;
   }
 
-/**
- * Get total number of users and the percentage of users registered in the last 7 days.
- * @returns An object with usersNumber and pourcentage.
- */
-async getUsersStats(): Promise<{ usersNumber: number; pourcentage: number }> {
-  const usersNumber = await this.userModel.countDocuments();
+  /**
+   * Get total number of users and the percentage of users registered in the last 7 days.
+   * @returns An object with usersNumber and pourcentage.
+   */
+  async getUsersStats(): Promise<{ usersNumber: number; pourcentage: number }> {
+    const usersNumber = await this.userModel.countDocuments();
 
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-  const usersLast7Days = await this.userModel.countDocuments({
-    createdAt: { $gte: sevenDaysAgo },
-  });
+    const usersLast7Days = await this.userModel.countDocuments({
+      createdAt: { $gte: sevenDaysAgo },
+    });
 
-  const pourcentage =
-    usersNumber === 0
-      ? 0
-      : Number(((usersLast7Days / usersNumber) * 100).toFixed(2));
-    
-  return { usersNumber, pourcentage };
-}
+    const pourcentage =
+      usersNumber === 0
+        ? 0
+        : Number(((usersLast7Days / usersNumber) * 100).toFixed(2));
+
+    return { usersNumber, pourcentage };
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    const users = await this.userModel
+      .find()
+      .populate('countryId')
+      .populate('cityId');
+
+    // Remove sensitive information from each user
+    users.forEach((user) => {
+      user.password = '';
+      user.resetPasswordToken = '';
+    });
+
+    return users;
+  }
+
+  async getUserByEmail(email: string): Promise<User | null> {
+    return await this.userModel
+      .findOne({ email })
+      .populate('countryId')
+      .populate('cityId');
+  }
+
+  async updateStatus(userId: any): Promise<any> {
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new NotFoundException('Invalid user ID');
+    }
+
+    const user = await this.userModel.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    const updatedUser = await this.userModel
+      .findByIdAndUpdate(
+        userId,
+        { active: user.active ? false : true },
+        { new: true, runValidators: true },
+      )
+      .populate('cityId')
+      .populate('countryId');
+
+    if (!updatedUser) {
+      throw new NotFoundException('User not found');
+    } else {
+      updatedUser.password = '';
+      updatedUser.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
+    }
+  }
+
+  async updateAdminStatus(userId: any): Promise<any> {
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new NotFoundException('Invalid user ID');
+    }
+
+    const user = await this.userModel.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    } else {
+      user.password = '';
+      user.resetPasswordToken = '';
+    }
+    const updatedUser = await this.userModel
+      .findByIdAndUpdate(
+        userId,
+        { isAdmin: user.isAdmin ? false : true },
+        { new: true, runValidators: true },
+      )
+      .populate('cityId')
+      .populate('countryId');
+
+    if (!updatedUser) {
+      throw new NotFoundException('User not found');
+    } else {
+      updatedUser.password = '';
+      updatedUser.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
+    }
+  }
+
+  async updateVerifiedStatus(userId: any): Promise<any> {
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new NotFoundException('Invalid user ID');
+    }
+
+    const user = await this.userModel.findById(userId)
+    if (!user) {
+      throw new NotFoundException('User not found');
+    } else {
+      user.password = '';
+      user.resetPasswordToken = '';
+      }
+      const updatedUser = await this.userModel.findByIdAndUpdate(
+      userId,
+      { verified: user.verified ? false : true },
+      { new: true, runValidators: true },
+    )
+    .populate('cityId')
+    .populate('countryId');
+
+    if (!updatedUser) {
+      throw new NotFoundException('User not found');
+    } else {
+      updatedUser.password = '';
+      updatedUser.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
+      }
+  }
 }
