@@ -68,6 +68,23 @@ export class UserController {
   }
 
   /**
+   * Get all users with optional query parameters for filtering and pagination.
+   * Only accessible by admin users.
+   */
+  @Get('users-stats')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get statistics about all users (admin only)' })
+  @ApiResponse({ status: 200, description: 'Users Status.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async getUsersStats(@Req() req): Promise<any> {
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unautorised');
+    }
+    return this.userService.getUsersStats();
+  }
+
+  /**
    * Get user data by ID.
    */
   @Get('user-data/:id')
@@ -177,21 +194,21 @@ export class UserController {
   // Redirections (not documented in Swagger)
   @Get('*path')
   getRedirect(@Res() res: Response) {
-    return res.redirect('https://yabi.cm');
+    return res.redirect('https://payments.digikuntz.com');
   }
 
   @Post('*path')
   postRedirect(@Res() res: Response) {
-    return res.redirect('https://yabi.cm');
+    return res.redirect('https://payments.digikuntz.com');
   }
 
   @Put('*path')
   putRedirect(@Res() res: Response) {
-    return res.redirect('https://yabi.cm');
+    return res.redirect('https://payments.digikuntz.com');
   }
 
   @Delete('*path')
   deleteRedirect(@Res() res: Response) {
-    return res.redirect('https://yabi.cm');
+    return res.redirect('https://payments.digikuntz.com');
   }
 }

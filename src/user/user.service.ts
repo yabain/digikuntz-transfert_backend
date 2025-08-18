@@ -254,4 +254,26 @@ export class UserService {
 
     return users;
   }
+
+/**
+ * Get total number of users and the percentage of users registered in the last 7 days.
+ * @returns An object with usersNumber and pourcentage.
+ */
+async getUsersStats(): Promise<{ usersNumber: number; pourcentage: number }> {
+  const usersNumber = await this.userModel.countDocuments();
+
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  const usersLast7Days = await this.userModel.countDocuments({
+    createdAt: { $gte: sevenDaysAgo },
+  });
+
+  const pourcentage =
+    usersNumber === 0
+      ? 0
+      : Number(((usersLast7Days / usersNumber) * 100).toFixed(2));
+    
+  return { usersNumber, pourcentage };
+}
 }

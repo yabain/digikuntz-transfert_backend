@@ -110,21 +110,21 @@ export class TransactionController {
   // Redirections (not documented in Swagger)
   @Get('*path')
   getRedirect(@Res() res: Response) {
-    return res.redirect('https://yabi.cm');
+    return res.redirect('https://payments.digikuntz.com');
   }
 
   @Post('*path')
   postRedirect(@Res() res: Response) {
-    return res.redirect('https://yabi.cm');
+    return res.redirect('https://payments.digikuntz.com');
   }
 
   @Put('*path')
   putRedirect(@Res() res: Response) {
-    return res.redirect('https://yabi.cm');
+    return res.redirect('https://payments.digikuntz.com');
   }
 
   @Delete('*path')
   deleteRedirect(@Res() res: Response) {
-    return res.redirect('https://yabi.cm');
+    return res.redirect('https://payments.digikuntz.com');
   }
 }

@@ -6,7 +6,7 @@ import { Injectable } from '@nestjs/common';
 @Injectable()
 export class AppService {
   getHello(res: any): string {
-    return res.redirect('https://yabi.cm');
+    return res.redirect('https://payments.digikuntz.com');
     // return 'Hello Yabi Events!';
   }
 }
