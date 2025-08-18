@@ -18,6 +18,7 @@ import { AlertModule } from './alert/alert.module';
 import { ExchangeModule } from './exchange/exchange.module';
 import { NewsletterModule } from './newsletter/newsletter.module';
 import { TransactionsModule } from './transactions/transactions.module';
+import { SubscriptionModule } from './subscription/subscription.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { TransactionsModule } from './transactions/transactions.module';
     ExchangeModule,
     NewsletterModule,
     TransactionsModule,
+    SubscriptionModule,
     // WhatsappModule,
   ],
   controllers: [AppController],
