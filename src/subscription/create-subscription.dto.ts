@@ -48,6 +48,10 @@ export class CreateEventDto {
   @IsNotEmpty()
   readonly price: number;
 
+  @IsString()
+  @IsNotEmpty()
+  readonly currency: string;
+
   @IsNumber()
   @IsNotEmpty()
   readonly subscriberNumber: number;

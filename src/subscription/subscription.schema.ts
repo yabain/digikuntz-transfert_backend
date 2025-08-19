@@ -38,6 +38,9 @@ export class Subscription extends Document {
   price: number;
 
   @Prop()
+  currency: string;
+
+  @Prop()
   subscriberNumber: number;
 }
 
