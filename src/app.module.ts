@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/require-await */
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
@@ -19,6 +20,7 @@ import { ExchangeModule } from './exchange/exchange.module';
 import { NewsletterModule } from './newsletter/newsletter.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { SubscriptionModule } from './subscription/subscription.module';
+import { OptionsModule } from './subscription/options/options.module';
 
 @Module({
   imports: [
@@ -70,6 +72,7 @@ import { SubscriptionModule } from './subscription/subscription.module';
     NewsletterModule,
     TransactionsModule,
     SubscriptionModule,
+    OptionsModule,
     // WhatsappModule,
   ],
   controllers: [AppController],

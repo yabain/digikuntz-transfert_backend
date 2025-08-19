@@ -14,7 +14,7 @@ export enum SubscriptionCycle {
 })
 export class Subscription extends Document {
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
-  autor: User;
+  author: User;
 
   @Prop()
   title: string;
@@ -32,7 +32,7 @@ export class Subscription extends Document {
   description: string;
 
   @Prop()
-  status: boolean;
+  isActive: boolean;
 
   @Prop()
   price: number;

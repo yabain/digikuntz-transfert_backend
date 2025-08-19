@@ -5,7 +5,7 @@ import { Options } from './options/options.shema';
 import { SubscriptionCycle } from './subscription.schema';
 import {
   IsString,
-  IsNotEmpty,
+  IsOptional,
   MinLength,
   IsEnum,
   IsBoolean,
@@ -13,51 +13,51 @@ import {
   IsEmpty,
 } from 'class-validator';
 
-export class CreateSubscriptionDto {
+export class UpdateSubscriptionDto {
   @IsEmpty({ message: 'You cannot pass user id' })
   readonly author: User;
 
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   @MinLength(3)
   readonly title: string;
 
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   @MinLength(3)
   readonly subTitle: string;
 
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   readonly imageUrl: string;
 
   @IsEnum(SubscriptionCycle, {
     message: 'Enter corect SubscriptionCycle : Public or Private',
   })
-  @IsNotEmpty()
+  @IsOptional()
   readonly cycle: SubscriptionCycle;
 
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   readonly description: string;
 
-  @IsNotEmpty()
+  @IsOptional()
   readonly options: Options[];
 
   @IsBoolean()
-  @IsNotEmpty()
+  @IsOptional()
   readonly isActive: boolean;
 
   @IsNumber()
-  @IsNotEmpty()
+  @IsOptional()
   readonly price: number;
 
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   readonly currency: string;
 
   @IsNumber()
-  @IsNotEmpty()
+  @IsOptional()
   readonly subscriberNumber: number;
 
 }

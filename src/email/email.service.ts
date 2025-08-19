@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
@@ -144,40 +145,7 @@ export class EmailService {
       html,
     });
   }
-  // async sendResetPwd(
-  //   toEmail: string,
-  //   language: string,
-  //   userName: string,
-  //   token: string,
-  // ): Promise<boolean> {
-  //   const templateName = 'reset-pwd';
-  //   const subject =
-  //     language === 'fr' ? 'Réinitialisation de Mot de Passe' : 'Password Reset';
 
-  //   const templatePath = path.join(
-  //     this.templateFolder,
-  //     `${templateName}_${language}.hbs`,
-  //   );
-
-  //   const templateSource = fs.readFileSync(templatePath, 'utf8');
-  //   const template = handlebars.compile(templateSource);
-
-  //   const context = {
-  //     userName,
-  //     resetPwdUrl: `${this.configService.get<string>('FRONT_URL')}/auth-screen/new-password${token}`,
-  //   };
-
-  //   const html = template(context);
-
-  //   await this.transporter.sendMail({
-  //     from: this.configService.get<string>('SMTP_USER'),
-  //     to: toEmail,
-  //     subject,
-  //     html,
-  //   });
-
-  //   return true;
-  // }
   async sendResetPwd(
     toEmail: string,
     language: string,
@@ -224,13 +192,13 @@ export class EmailService {
     }
   }
 
-  async sendEventParticipationEmail(user: any, event: any): Promise<boolean> {
+  async sendSubscriptionEmail(user: any, subscriptionData: any): Promise<boolean> {
     const userName = user.name || `${user.firstName} ${user.lastName}`;
-    const templateName = 'participate-free-event';
+    const templateName = 'subscribe';
     const subject =
       user.language === 'fr'
-        ? 'Évènement: ' + event.eventData.title
-        : 'Event: ' + event.eventData.title;
+        ? 'Abonnement: ' + subscriptionData.title
+        : 'Subscription: ' + subscriptionData.title;
 
     const templatePath = path.join(
       this.templateFolder,
@@ -242,31 +210,12 @@ export class EmailService {
 
     const context = {
       userName,
-      cover_img: event.eventData.cover,
-      event_title: event.eventData.title,
-      event_category: event.categoryData.name,
-      event_price: event.eventData.paid === true ? event.price : 'FREE',
-      event_description: this.cleanString(event.eventData.description),
-      event_country: event.countryData.name,
-      event_city: event.cityData.name,
-      event_location: event.eventData.location,
-      event_start:
-        this.dateService.formatDate(
-          event.eventData.dateStart,
-          'long',
-          user.language,
-        ) +
-        ' - ' +
-        this.dateService.formatTime(event.eventData.dateStart, user.language),
-      event_end:
-        this.dateService.formatDate(
-          event.eventData.dateEnd,
-          'long',
-          user.language,
-        ) +
-        ' - ' +
-        this.dateService.formatTime(event.eventData.dateEnd, user.language),
-      event_url: `${this.configService.get<string>('FRONT_URL')}/tabs/events/${event.eventData._id}_shared`,
+      cover_img: subscriptionData.imageUrl,
+      subscription_title: subscriptionData.title,
+      subscription_subTitle: subscriptionData.subTitle,
+      subscription_cycle: subscriptionData.cycle,
+      subscription_description: this.cleanString(subscriptionData.description),
+      subscription_url: `${this.configService.get<string>('FRONT_URL')}/subscription/${subscriptionData._id}_shared`,
     };
 
     const html = template(context);
@@ -318,31 +267,6 @@ export class EmailService {
       });
     });
   }
-
-  // private async updateMail(
-  //   mail: string,
-  //   status: boolean = true,
-  // ): Promise<boolean> {
-  //   try {
-  //     await this.mailModel.findOneAndUpdate(
-  //       {},
-  //       { status, mail },
-  //       { upsert: true, new: true },
-  //     );
-  //     return true;
-  //   } catch (err) {
-  //     console.error(`QR status update failed: ${err.message}`);
-  //     return false;
-  //   }
-  // }
-
-  // public async getMail(): Promise<any> {
-  //   return this.mailModel.findOne({});
-  // }
-
-  // public getStatus() {
-  //   return true;
-  // }
 
   /**
    * Remove all HTML tags and occurrences of \r, \n, and \t from a string.
