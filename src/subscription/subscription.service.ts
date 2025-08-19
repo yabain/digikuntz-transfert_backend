@@ -67,20 +67,16 @@ export class SubscriptionService {
   ): Promise<Subscription> {
     const userId = req.user._id;
 
-    // Generate URLs for the uploaded files
     const fileUrls = files.map((file) => generateFileUrl(file.filename));
 
-    // Prepare subscription data with the user ID and cover image URL
     const subscriptionData = {
       ...subscription,
       author: userId,
       imageUrl: fileUrls[0],
     };
 
-    // Create the options in the database
     const res = await this.subscriptionModel.create(subscriptionData);
 
-    // Create ticket classes for the options
     await this.optionsService.creatOptions(
       subscription.options,
       res._id,
