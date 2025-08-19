@@ -26,7 +26,6 @@ export class SubscriptionService {
     const resPerPage = 10;
     const currentPage = Number(query.page) || 1;
     const skip = resPerPage * (currentPage - 1);
-
     const keyword = query.keyword
       ? {
           title: {
@@ -46,7 +45,6 @@ export class SubscriptionService {
     const resPerPage = 10;
     const currentPage = Number(query.page) || 1;
     const skip = resPerPage * (currentPage - 1);
-
     const keyword = query.keyword
       ? {
           title: {
