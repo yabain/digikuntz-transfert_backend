@@ -79,6 +79,7 @@ export class UserController {
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getUsersStats(@Req() req): Promise<any> {
+    console.log('user-Stats');
     if (!req.user.isAdmin) {
       throw new NotFoundException('Unautorised');
     }
