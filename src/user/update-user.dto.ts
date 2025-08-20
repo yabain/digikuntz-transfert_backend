@@ -1,41 +1,54 @@
+/* eslint-disable prettier/prettier */
 import { UserType } from './user.schema';
 import { IsString, IsOptional, IsEmpty } from 'class-validator';
 
 export class UpdateUserDto {
   @IsEmpty({ message: 'accountType must been empty' })
+  @IsOptional()
   accountType: UserType;
 
   @IsEmpty({ message: 'email must been empty' })
+  @IsOptional()
   readonly email: string;
 
   @IsEmpty({ message: 'password must been empty' })
+  @IsOptional()
   readonly password: string;
 
   @IsEmpty({ message: 'You cannot pass resetPasswordToken' })
+  @IsOptional()
   readonly resetPasswordToken: string;
 
   @IsEmpty({ message: 'agreeTerms must been empty' })
+  @IsOptional()
   readonly agreeTerms: boolean;
 
-  @IsEmpty({ message: 'active must been empty' })
-  readonly active: string;
+  @IsEmpty({ message: 'isActive must been empty' })
+  @IsOptional()
+  readonly isActive: string;
 
   @IsEmpty({ message: 'verified must been empty' })
+  @IsOptional()
   readonly verified: boolean;
 
   @IsEmpty({ message: 'vip must been empty' })
+  @IsOptional()
   readonly vip: boolean;
 
   @IsEmpty({ message: 'warning must been empty' })
+  @IsOptional()
   readonly warning: boolean;
 
   @IsEmpty({ message: 'isAdmin must been empty' })
+  @IsOptional()
   readonly isAdmin: boolean;
 
   @IsEmpty({ message: 'premium must been empty' })
+  @IsOptional()
   readonly premium: boolean;
 
   @IsEmpty({ message: 'status must been empty' })
+  @IsOptional()
   readonly status: boolean;
 
   @IsString()

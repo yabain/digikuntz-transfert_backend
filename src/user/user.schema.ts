@@ -40,7 +40,7 @@ export class User extends Document {
   isAdmin: boolean;
 
   @Prop()
-  active: boolean;
+  isActive: boolean;
 
   @Prop()
   status: boolean;

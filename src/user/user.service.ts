@@ -261,7 +261,7 @@ export class UserService {
    * Get total number of users and the percentage of users registered in the last 7 days.
    * @returns An object with usersNumber and pourcentage.
    */
-  async getUsersStats(): Promise<{ usersNumber: number; pourcentage: number }> {
+  async getUsersStatistic(): Promise<{ usersNumber: number; pourcentage: number }> {
     const usersNumber = await this.userModel.countDocuments();
 
     const sevenDaysAgo = new Date();
@@ -313,7 +313,7 @@ export class UserService {
     const updatedUser = await this.userModel
       .findByIdAndUpdate(
         userId,
-        { active: user.active ? false : true },
+        { active: user.isActive ? false : true },
         { new: true, runValidators: true },
       )
       .populate('cityId')

@@ -75,15 +75,14 @@ export class UserController {
   @Get('users-stats')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get statistics about all users (admin only)' })
-  @ApiResponse({ status: 200, description: 'Users Status.' })
+  @ApiResponse({ status: 200, description: 'Users Statistic.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async getUsersStats(@Req() req): Promise<any> {
-    console.log('user-Stats');
+  async getUsersStatistic(@Req() req): Promise<any> {
     if (!req.user.isAdmin) {
       throw new NotFoundException('Unautorised');
     }
-    return this.userService.getUsersStats();
+    return this.userService.getUsersStatistic();
   }
 
   /**

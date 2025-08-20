@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 import { UserType } from './user.schema';
 import {
@@ -64,7 +65,7 @@ export class CreateUserDto {
   @IsBoolean()
   @IsEmpty({ message: 'You cannot pass isAdmin' })
   @IsOptional()
-  readonly active: boolean;
+  readonly isActive: boolean;
 
   @ApiProperty({ example: false })
   @IsBoolean()
