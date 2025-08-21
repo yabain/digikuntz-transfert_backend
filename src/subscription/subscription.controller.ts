@@ -2,10 +2,10 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 import {
-//   BadRequestException,
+  BadRequestException,
   Body,
   Controller,
-//   Delete,
+  Delete,
   Get,
   NotFoundException,
   Param,
@@ -13,10 +13,10 @@ import {
   Put,
   Query,
   Req,
-//   Res,
-//   UploadedFiles,
+  // Res,
+  // UploadedFiles,
   UseGuards,
-//   UseInterceptors,
+  // UseInterceptors,
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
@@ -28,7 +28,7 @@ import { AuthGuard } from '@nestjs/passport';
 import {
   ApiBearerAuth,
   ApiBody,
-//   ApiConsumes,
+  // ApiConsumes,
   ApiOperation,
   ApiParam,
   ApiQuery,
@@ -112,80 +112,78 @@ export class SubscriptionController {
     return this.subscriptionService.updateSubscription(req.user._id, subscriptionData);
   }
 
-//   @Put('picture')
-//   @ApiBearerAuth()
-//   @ApiConsumes('multipart/form-data')
-//   @ApiOperation({
-//     summary: 'Update the picture',
-//   })
-//   @ApiBody({
-//     schema: {
-//       type: 'object',
-//       properties: {
-//         pictureFile: {
-//           type: 'string',
-//           format: 'binary',
-//           description: 'Profile picture file',
-//         },
-//       },
-//     },
-//   })
-//   @ApiResponse({ status: 200, description: 'Subscriptions profile picture updated.' })
-//   @UseInterceptors(FilesInterceptor('pictureFile', 1, multerConfigForSubscriptions))
-//   @UseGuards(AuthGuard('jwt'))
-//   @UsePipes(ValidationPipe)
-//   async updatePicture(
-//     @Req() req,
-//     @UploadedFiles() picture: Array<Express.Multer.File>,
-//   ): Promise<any> {
-//     if (!picture || picture.length === 0) {
-//       throw new BadRequestException('No file uploaded');
-//     }
-//     return this.subscriptionService.updateSubscriptionsPicture(req, picture);
-//   }
+  // @Put('picture')
+  // @ApiBearerAuth()
+  // @ApiConsumes('multipart/form-data')
+  // @ApiOperation({
+  //   summary: 'Update the picture',
+  // })
+  // @ApiBody({
+  //   schema: {
+  //     type: 'object',
+  //     properties: {
+  //       pictureFile: {
+  //         type: 'string',
+  //         format: 'binary',
+  //         description: 'Profile picture file',
+  //       },
+  //     },
+  //   },
+  // })
+  // @ApiResponse({ status: 200, description: 'Subscriptions profile picture updated.' })
+  // @UseInterceptors(FilesInterceptor('pictureFile', 1, multerConfigForSubscriptions))
+  // @UseGuards(AuthGuard('jwt'))
+  // @UsePipes(ValidationPipe)
+  // async updatePicture(
+  //   @Req() req,
+  //   @UploadedFiles() picture: Array<Express.Multer.File>,
+  // ): Promise<any> {
+  //   if (!picture || picture.length === 0) {
+  //     throw new BadRequestException('No file uploaded');
+  //   }
+  //   return this.subscriptionService.updateSubscriptionsPicture(req, picture);
+  // }
 
-//   @Delete(':id')
-//   @ApiBearerAuth()
-//   @ApiOperation({ summary: 'Delete a user by ID (admin only)' })
-//   @ApiParam({ name: 'id', description: 'Subscriptions ID', type: String })
-//   @ApiResponse({ status: 200, description: 'Subscriptions deleted.' })
-//   @UseGuards(AuthGuard('jwt'))
-//   async delete(@Param('id') userId: string, @Req() req): Promise<any> {
-//     if (!req.user.isAdmin) {
-//       throw new NotFoundException('Unautorised');
-//     }
-//     return this.subscriptionService.deleteSubscriptions(userId);
-//   }
+  @Delete(':id')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete a subscription by ID (admin only)' })
+  @ApiParam({ name: 'id', description: 'Subscriptions ID', type: String })
+  @ApiResponse({ status: 200, description: 'Subscriptions deleted.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async delete(@Param('id') subscriptionId: string, @Req() req): Promise<any> {
+    return this.subscriptionService.deleteSubscription(subscriptionId, req.user);
+  }
 
-//   @Get('research')
-//   @ApiOperation({ summary: 'Search for users by name' })
-//   @ApiQuery({
-//     name: 'search',
-//     required: false,
-//     type: String,
-//     description: 'Search filter',
-//   })
-//   @ApiResponse({
-//     status: 200,
-//     description: 'List of users matching the search criteria.',
-//   })
-//   async userResearch(@Query() query: ExpressQuery): Promise<any> {
-//     return this.subscriptionService.searchByName(query);
-//   }
+  @Get('research')
+  @ApiOperation({ summary: 'Search for subscriptions by name' })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search filter',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of subscriptions matching the search criteria.',
+  })
+  async subscriptionResearch(@Query() query: ExpressQuery): Promise<any> {
+    return this.subscriptionService.searchByTitle(query);
+  }
 
-//   @Put('update-status')
-//   @ApiBearerAuth()
-//   @ApiOperation({ summary: 'Update user status' })
-//   @ApiBody({ type: UpdateSubscriptionsDto })
-//   @ApiResponse({ status: 200, description: 'Subscriptions profile updated.' })
-//   @UseGuards(AuthGuard('jwt'))
-//   @UsePipes(ValidationPipe)
-//   async updateStatus(@Body() userId: string, @Req() req): Promise<any> {
-//     if (!req.user.isAdmin) {
-//       throw new NotFoundException('Unautorised');
-//     }
-//     return this.subscriptionService.updateStatus(userId);
-//   }
+  @Put('update-status')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update subscription status' })
+  @ApiBody({ type: UpdateSubscriptionDto })
+  @ApiResponse({ status: 200, description: 'Subscriptions profile updated.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async updateStatus(@Body() subscriptionId: string, @Req() req): Promise<any> {
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unautorised');
+    }
+    return this.subscriptionService.updateStatus(subscriptionId);
+  }
 
 //   @Put('update-adminStatus')
 //   @ApiBearerAuth()

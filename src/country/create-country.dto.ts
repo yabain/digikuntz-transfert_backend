@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 import {
   IsString,
@@ -42,6 +43,11 @@ export class CreateCountryDto {
   @IsString()
   @IsNotEmpty()
   readonly currency: string;
+
+  @ApiProperty({ example: '€ if EURO or XAF if XAF', description: 'Country currency symbol' })
+  @IsString()
+  @IsNotEmpty()
+  readonly currencySymbol: string;
 
   @ApiProperty({
     example: true,

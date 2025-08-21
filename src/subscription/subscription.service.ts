@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
@@ -15,7 +16,6 @@ import { ItemService } from './item/item.service';
 
 @Injectable()
 export class SubscriptionService {
-    
   constructor(
     @InjectModel(Subscription.name)
     private subscriptionModel: mongoose.Model<Subscription>,
@@ -23,7 +23,10 @@ export class SubscriptionService {
     private optionsService: OptionsService,
   ) {}
 
-  async getSubscriptionsStatistic(): Promise<{ subscribersNumber: number; pourcentage: number }> {
+  async getSubscriptionsStatistic(): Promise<{
+    subscribersNumber: number;
+    pourcentage: number;
+  }> {
     const subscribersNumber = await this.subscriptionModel.countDocuments();
 
     const sevenDaysAgo = new Date();
@@ -82,23 +85,23 @@ export class SubscriptionService {
   }
 
   async getSubscriptionById(subscriptionId: any): Promise<any> {
-      if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {
-        throw new NotFoundException('Invalid subscription ID');
-      }
-  
-      // Find the subscription by ID
-      const subscription = await this.subscriptionModel
-        .findById(subscriptionId)
-        .populate('author')
-      if (!subscription) {
-        throw new NotFoundException('User not found');
-      }
-  
-      // Enrich subscription data with follower and following counts
-      let subscriptionData: any = { ...subscription };
-      subscriptionData = subscriptionData._doc;
-  
-      return subscriptionData;
+    if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {
+      throw new NotFoundException('Invalid subscription ID');
+    }
+
+    // Find the subscription by ID
+    const subscription = await this.subscriptionModel
+      .findById(subscriptionId)
+      .populate('author');
+    if (!subscription) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Enrich subscription data with follower and following counts
+    let subscriptionData: any = { ...subscription };
+    subscriptionData = subscriptionData._doc;
+
+    return subscriptionData;
   }
 
   async creatSubscription(
@@ -109,7 +112,9 @@ export class SubscriptionService {
     const userId = req.user._id;
 
     // Generate URLs for the uploaded files
-    const fileUrls = files ? files.map((file) => generateFileUrl(file.filename)) : 'assets/img/ressorces/subscription_icon.png';
+    const fileUrls = files
+      ? files.map((file) => generateFileUrl(file.filename))
+      : 'assets/img/ressorces/subscription_icon.png';
 
     // Prepare subscription data with the user ID and cover image URL
     const subscriptionData = {
@@ -122,34 +127,48 @@ export class SubscriptionService {
     const res = await this.subscriptionModel.create(subscriptionData);
 
     // Create ticket classes for the options
-    await this.optionsService.creatOptions(
-      subscription.options,
-      res._id,
-    );
+    await this.optionsService.creatOptions(subscription.options, res._id);
 
     return res;
   }
 
-  async updateSubscription(subscriptionId: string, subscriptionData: UpdateSubscriptionDto): Promise<any> {
+  async updateSubscription(
+    subscriptionId: string,
+    subscriptionData: UpdateSubscriptionDto,
+  ): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {
       throw new NotFoundException('Invalid subscription ID');
     }
 
-    const subscription = await this.subscriptionModel.findByIdAndUpdate(subscriptionId, subscriptionData, {
-      new: true,
-      runValidators: true,
-    });
+    const subscription = await this.subscriptionModel.findByIdAndUpdate(
+      subscriptionId,
+      subscriptionData,
+      {
+        new: true,
+        runValidators: true,
+      },
+    );
 
     return subscription;
   }
-  
-  async deleteSubscription(subscriptionId: string): Promise<any> {
+
+  async deleteSubscription(
+    subscriptionId: string,
+    userData: any,
+  ): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {
       throw new NotFoundException('Invalid subscription ID');
     }
-    return await this.subscriptionModel.findByIdAndDelete(subscriptionId);
+
+    const subscription: any =
+      await this.subscriptionModel.findById(subscriptionId);
+    if (userData._id === subscription.author || userData.isAdmin === true) {
+      return await this.subscriptionModel.findByIdAndDelete(subscriptionId);
+    } else {
+      throw new NotFoundException('Unauthorized');
+    }
   }
-  
+
   async getSubscriberList(subscriptionId: string, userData: any): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {
       throw new NotFoundException('Invalid subscription ID');
@@ -159,8 +178,9 @@ export class SubscriptionService {
       throw new NotFoundException('Invalid subscription ID');
     }
 
-    const subscription: any = await this.subscriptionModel.findById(subscriptionId)
-    if (userData._id === subscription.author || userData.isAdmin === true ) {
+    const subscription: any =
+      await this.subscriptionModel.findById(subscriptionId);
+    if (userData._id === subscription.author || userData.isAdmin === true) {
       const subscriberList: any =
         await this.itemService.getAllItemOfSubscription(subscriptionId);
       if (!subscriberList) {
@@ -168,8 +188,63 @@ export class SubscriptionService {
       }
 
       return subscriberList;
-    }else {
+    } else {
       throw new NotFoundException('Unauthorized');
     }
   }
+  
+    async searchByTitle(query: Query): Promise<Subscription[]> {
+      const resPerPage = 20;
+      const currentPage = Number(query.page) || 1;
+      const skip = resPerPage * (currentPage - 1);
+  
+      // Define the keyword search criteria
+      const keyword = query.keyword
+        ? {
+            $or: [
+              { title: { $regex: query.keyword, $options: 'i' } },
+            ],
+          }
+        : {};
+  
+      // Find users matching the keyword with pagination
+      const subscriptions = await this.subscriptionModel
+        .find({ ...keyword })
+        .limit(resPerPage)
+        .skip(skip);
+  
+      // Enrich user data with follower counts
+      let subscriptionArray: any = [];
+      for (const subscription of subscriptions) {
+        let subscriptionData: any = { ...subscription };
+        subscriptionData = subscriptionData._doc;
+        subscriptionArray = [...subscriptionArray, subscriptionData];
+      }
+  
+      return subscriptionArray;
+    }
+    
+      async updateStatus(subscriptionId: any): Promise<any> {
+        if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {
+          throw new NotFoundException('Invalid subscription ID');
+        }
+    
+        const subscription = await this.subscriptionModel.findById(subscriptionId);
+        if (!subscription) {
+          throw new NotFoundException('User not found');
+        }
+        const updatedUser = await this.subscriptionModel
+          .findByIdAndUpdate(
+            subscriptionId,
+            { active: subscription.isActive ? false : true },
+            { new: true, runValidators: true },
+          )
+          .populate('cityId')
+          .populate('countryId');
+    
+        if (!updatedUser) {
+          throw new NotFoundException('User not found');
+        }
+        return true;
+      }
 }

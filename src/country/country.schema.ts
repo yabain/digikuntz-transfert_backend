@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
@@ -16,6 +17,9 @@ export class Country extends Document {
 
   @Prop()
   currency: string;
+
+  @Prop()
+  currencySymbol: string;
 
   @Prop()
   status: boolean; // true for actived
