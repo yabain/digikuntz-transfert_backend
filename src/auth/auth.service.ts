@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-floating-promises */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
@@ -59,7 +60,7 @@ export class AuthService {
         }); // Assign admin/VIP privileges
       }
 
-      datas = Object.assign(datas, { active: true }); // Set the user as active by default
+      datas = Object.assign(datas, { isActive: true }); // Set the user as active by default
       const hashedPwd = await bcrypt.hash(userData.password, 10); // Hash the password for security
       const create: any = await this.userModel.create({
         ...datas,
@@ -116,6 +117,10 @@ export class AuthService {
 
     if (!user) {
       throw new UnauthorizedException('Email or password invalid'); // Handle case where user is not found
+    }
+
+    if (user.isActive === false) {
+      throw new UnauthorizedException('Your account is disabled. Please contact technical support.'); // Handle case where user is not found
     }
 
     // Compare the provided password with the hashed password in the database
