@@ -2,19 +2,20 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import mongoose from 'mongoose';
+import { Plans } from '../plans.schema';
 
 @Schema({
   timestamps: true,
 })
-export class Item extends Document {
+export class Options extends Document {
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Subscription' })
-  subscriptionId: Event;
+  plansId: Plans;
 
-  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
-  userId: Event;
+  @Prop()
+  title: string;
 
   @Prop()
   isActive: boolean;
 }
 
-export const ItemSchema = SchemaFactory.createForClass(Item);
+export const OptionsSchema = SchemaFactory.createForClass(Options);

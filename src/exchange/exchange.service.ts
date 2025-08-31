@@ -114,8 +114,8 @@ export class ExchangeService {
         fromCurrency: userData.countryId.currency,
         toCurrency: country.currency,
         value: await this.convertCurrency(
-          userData.countryId.currency,
           country.currency,
+          userData.countryId.currency,
           1,
         ),
       };

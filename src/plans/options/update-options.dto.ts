@@ -6,17 +6,13 @@ export class UpdateOptionsDto {
   readonly id: string;
 
   @IsEmpty({ message: 'You cannot pass subscriptionId' })
-  readonly subscriptionId: string;
+  readonly plansId: string;
 
   @IsString()
   @IsOptional()
-  readonly name: string;
+  readonly title: string;
 
   @IsBoolean()
   @IsOptional()
   readonly isActive: boolean;
-
-  @IsString()
-  @IsOptional()
-  readonly description: string;
 }

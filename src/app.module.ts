@@ -19,8 +19,10 @@ import { AlertModule } from './alert/alert.module';
 import { ExchangeModule } from './exchange/exchange.module';
 import { NewsletterModule } from './newsletter/newsletter.module';
 import { TransactionsModule } from './transactions/transactions.module';
-import { SubscriptionModule } from './subscription/subscription.module';
-import { OptionsModule } from './subscription/options/options.module';
+import { SubscriptionModule } from './plans/subscription/subscription.module';
+import { OptionsModule } from './plans/options/options.module';
+import { SoldeModule } from './solde/solde.module';
+import { PlansModule } from './plans/plans.module';
 
 @Module({
   imports: [
@@ -73,6 +75,8 @@ import { OptionsModule } from './subscription/options/options.module';
     TransactionsModule,
     SubscriptionModule,
     OptionsModule,
+    SoldeModule,
+    PlansModule,
     // WhatsappModule,
   ],
   controllers: [AppController],

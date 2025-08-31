@@ -1,7 +1,7 @@
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
-import { User } from '../user/user.schema';
-import { Options } from './options/options.shema';
+import { User } from '../../user/user.schema';
+import { Options } from '../options/options.shema';
 import { SubscriptionCycle } from './subscription.schema';
 import {
   IsString,

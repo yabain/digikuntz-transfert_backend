@@ -25,6 +25,9 @@ export class User extends Document {
   password: string;
 
   @Prop()
+  solde: number;
+
+  @Prop()
   agreeTerms: boolean;
 
   @Prop()

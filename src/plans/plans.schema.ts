@@ -4,16 +4,16 @@ import { User } from '../user/user.schema';
 import mongoose from 'mongoose';
 import { Document } from 'mongoose';
 
-export enum SubscriptionCycle {
-  YEAR = 'year',
-  MONTH = 'month',
-  WEEK = 'week',
-  DAY = 'day'
+export enum PlansCycle {
+  YEAR = 'yearly',
+  MONTH = 'monthly',
+  WEEK = 'weekly',
+  DAY = 'dayly'
 }
 @Schema({
   timestamps: true,
 })
-export class Subscription extends Document {
+export class Plans extends Document {
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
   author: User;
 
@@ -27,7 +27,7 @@ export class Subscription extends Document {
   imageUrl: string;
 
   @Prop()
-  cycle: SubscriptionCycle;
+  cycle: PlansCycle;
 
   @Prop()
   description: string;
@@ -45,4 +45,4 @@ export class Subscription extends Document {
   subscriberNumber: number;
 }
 
-export const SubscriptionSchema = SchemaFactory.createForClass(Subscription);
+export const PlansSchema = SchemaFactory.createForClass(Plans);

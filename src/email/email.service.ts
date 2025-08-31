@@ -192,13 +192,13 @@ export class EmailService {
     }
   }
 
-  async sendSubscriptionEmail(user: any, subscriptionData: any): Promise<boolean> {
+  async sendPlansEmail(user: any, plansData: any): Promise<boolean> {
     const userName = user.name || `${user.firstName} ${user.lastName}`;
     const templateName = 'subscribe';
     const subject =
       user.language === 'fr'
-        ? 'Abonnement: ' + subscriptionData.title
-        : 'Subscription: ' + subscriptionData.title;
+        ? 'Abonnement: ' + plansData.title
+        : 'Subscription: ' + plansData.title;
 
     const templatePath = path.join(
       this.templateFolder,
@@ -210,12 +210,12 @@ export class EmailService {
 
     const context = {
       userName,
-      cover_img: subscriptionData.imageUrl,
-      subscription_title: subscriptionData.title,
-      subscription_subTitle: subscriptionData.subTitle,
-      subscription_cycle: subscriptionData.cycle,
-      subscription_description: this.cleanString(subscriptionData.description),
-      subscription_url: `${this.configService.get<string>('FRONT_URL')}/subscription/${subscriptionData._id}_shared`,
+      cover_img: plansData.imageUrl,
+      plans_title: plansData.title,
+      plans_subTitle: plansData.subTitle,
+      plans_cycle: plansData.cycle,
+      plans_description: this.cleanString(plansData.description),
+      plans_url: `${this.configService.get<string>('FRONT_URL')}/plans/${plansData._id}_shared`,
     };
 
     const html = template(context);

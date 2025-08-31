@@ -8,7 +8,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Item } from './item.shema';
 import { CreateItemDto } from './create-item.dto';
 import { User } from 'src/user/user.schema';
-import { Subscription } from '../subscription.schema';
+import { Plans } from '../plans.schema';
 import { EmailService } from 'src/email/email.service';
 
 @Injectable()
@@ -16,17 +16,17 @@ export class ItemService {
   constructor(
     @InjectModel(Item.name)
     private itemModel: mongoose.Model<Item>,
-    @InjectModel(Subscription.name)
-    private subscriptionModel: mongoose.Model<Subscription>,
+    @InjectModel(Plans.name)
+    private plansModel: mongoose.Model<Plans>,
     private emailService: EmailService,
   ) {}
 
-  async getAllItemOfSubscription(subscriptionId: any): Promise<Item[]> {
-    if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {
-      subscriptionId = new mongoose.Types.ObjectId(subscriptionId);
+  async getAllItemOfPlans(plansId: any): Promise<Item[]> {
+    if (!mongoose.Types.ObjectId.isValid(plansId)) {
+      plansId = new mongoose.Types.ObjectId(plansId);
     }
 
-    const items = await this.itemModel.find({ subscriptionId }).exec();
+    const items = await this.itemModel.find({ plansId }).exec();
     if (!items) {
       throw new NotFoundException('items not found');
     }
@@ -42,7 +42,7 @@ export class ItemService {
 
     const items = await this.itemModel
       .find({ userId: userId })
-      .populate('subscriptionId')
+      .populate('plansId')
       .exec();
     if (!items) {
       throw new NotFoundException('items not found');
@@ -55,13 +55,13 @@ export class ItemService {
     user: User,
     sendMail?: boolean,
   ): Promise<any> {
-    const subscriptionData: any = await this.subscriptionModel
-      .findById(item.subscriptionId)
-    if (!subscriptionData) {
+    const plansData: any = await this.plansModel
+      .findById(item.plansId)
+    if (!plansData) {
       throw new NotFoundException('Itemt class not found');
     }
 
-    if (!subscriptionData.isActive) {
+    if (!plansData.isActive) {
       throw new NotFoundException('Event ended');
     }
 
@@ -72,14 +72,14 @@ export class ItemService {
 
     const createdItemt = await this.itemModel.create(itemData);
 
-    await this.incrementSubscriberNumber(subscriptionData._id);
+    await this.incrementSubscriberNumber(plansData._id);
 
     // Envoi d'email non-bloquant et indépendant
     if (sendMail && user.email) {
-      this.sendEmailNonBlocking(subscriptionData._id, user).catch(
+      this.sendEmailNonBlocking(plansData._id, user).catch(
         (error) => {
           console.error(
-            'Failed to send subscription email (non-blocking):',
+            'Failed to send plans email (non-blocking):',
             error,
           );
         },
@@ -89,20 +89,20 @@ export class ItemService {
     return createdItemt;
   }
 
-  async incrementSubscriberNumber(subscriptionId: string): Promise<any> {
-    return this.subscriptionModel
+  async incrementSubscriberNumber(plansId: string): Promise<any> {
+    return this.plansModel
       .findByIdAndUpdate(
-        subscriptionId,
+        plansId,
         { $inc: { subscriberNumber: 1 } },
         { new: true },
       )
       .exec();
   }
 
-  async decrementSubscriberNumber(subscriptionId: string): Promise<any> {
-    return this.subscriptionModel
+  async decrementSubscriberNumber(plansId: string): Promise<any> {
+    return this.plansModel
       .findByIdAndUpdate(
-        subscriptionId,
+        plansId,
         { $inc: { subscriberNumber: -1 } },
         { new: true },
       )
@@ -110,27 +110,27 @@ export class ItemService {
   }
   
   private async sendEmailNonBlocking(
-    subscriptionData: string,
+    plansData: string,
     user: User,
   ): Promise<void> {
     try {
-      if (subscriptionData) {
-        await this.senMail(subscriptionData, user);
+      if (plansData) {
+        await this.senMail(plansData, user);
       }
     } catch (error) {
       console.error('Error in non-blocking email sending:', error);
     }
   }
   
-  async senMail(subscriptionData: any, user: any): Promise<any> {
-    return await this.emailService.sendSubscriptionEmail(user, {
-      subscriptionData: {
-        _id: subscriptionData._id,
-        title: subscriptionData.title,
-        subTitle: subscriptionData.subTitle,
-        cycle: subscriptionData.cycle,
-        description: subscriptionData.description,
-        cover: subscriptionData.imageUrl,
+  async senMail(plansData: any, user: any): Promise<any> {
+    return await this.emailService.sendPlansEmail(user, {
+      plansData: {
+        _id: plansData._id,
+        title: plansData.title,
+        subTitle: plansData.subTitle,
+        cycle: plansData.cycle,
+        description: plansData.description,
+        cover: plansData.imageUrl,
       },
     });
   }

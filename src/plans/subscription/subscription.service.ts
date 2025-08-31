@@ -8,11 +8,11 @@ import { Query } from 'express-serve-static-core';
 import { InjectModel } from '@nestjs/mongoose';
 import { Subscription } from './subscription.schema';
 import * as mongoose from 'mongoose';
-import { OptionsService } from './options/options.service';
-import { generateFileUrl } from '../multer.config';
+import { OptionsService } from '../options/options.service';
+import { generateFileUrl } from '../../multer.config';
 import { CreateSubscriptionDto } from './create-subscription.dto';
 import { UpdateSubscriptionDto } from './update-subscription.dto';
-import { ItemService } from './item/item.service';
+import { ItemService } from '../item/item.service';
 
 @Injectable()
 export class SubscriptionService {
@@ -182,7 +182,7 @@ export class SubscriptionService {
       await this.subscriptionModel.findById(subscriptionId);
     if (userData._id === subscription.author || userData.isAdmin === true) {
       const subscriberList: any =
-        await this.itemService.getAllItemOfSubscription(subscriptionId);
+        await this.itemService.getAllItemOfPlans(subscriptionId);
       if (!subscriberList) {
         throw new NotFoundException('Event not found');
       }

@@ -11,6 +11,10 @@ export class UpdateUserDto {
   @IsOptional()
   readonly email: string;
 
+  @IsEmpty()
+  @IsOptional()
+  readonly solde: number;
+
   @IsEmpty({ message: 'password must been empty' })
   @IsOptional()
   readonly password: string;

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-unused-expressions */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
@@ -26,13 +27,58 @@ export class UserService {
     private readonly configService: ConfigService,
   ) {}
 
+  private sanitizeUser(user: any): any {
+    if (!user) return user;
+    const obj = user.toObject ? user.toObject() : user; // convert mongoose doc en objet si besoin
+    delete obj.password;
+    delete obj.resetPasswordToken;
+    delete obj.solde;
+    return obj;
+  }
+  
+  async getAllUsers(): Promise<any[]> {
+
+    // Find users matching the keyword with pagination
+    const users = await this.userModel.find({})
+    .populate('countryId')
+    .populate('cityId')
+
+    // Sanitize user data
+    return users.map(this.sanitizeUser);
+  }
+
+  async searchToAllUsers(query: Query): Promise<any[]> {
+    const resPerPage = 20;
+    const currentPage = Number(query.page) || 1;
+    const skip = resPerPage * (currentPage - 1);
+
+    // Define the keyword search criteria
+    const keyword = query.keyword
+      ? {
+          $or: [
+            { name: { $regex: query.keyword, $options: 'i' } },
+            { firstName: { $regex: query.keyword, $options: 'i' } },
+            { lastName: { $regex: query.keyword, $options: 'i' } },
+          ],
+        }
+      : {};
+
+    // Find users matching the keyword with pagination
+    const users = await this.userModel
+      .find({ ...keyword })
+      .limit(resPerPage)
+      .skip(skip);
+
+    // Sanitize user data
+    return users.map(this.sanitizeUser);
+  }
   /**
    * Create a new user.
    * @param userData - The user data to create.
    * @returns The created user.
    * @throws ConflictException if the email already exists.
    */
-  async creatUser(userData: CreateUserDto): Promise<User> {
+  async creatUser(userData: CreateUserDto): Promise<any> {
     try {
       let datas: any = { ...userData };
       // Grant VIP and verified status to specific emails
@@ -44,6 +90,7 @@ export class UserService {
         datas = Object.assign(datas, { vip: true });
       }
       datas = Object.assign(datas, { active: true });
+      datas = Object.assign(datas, { sole: 0 });
 
       // Hash the user's password
       const hashedPwd = await bcrypt.hash(userData.password, 10);
@@ -54,11 +101,7 @@ export class UserService {
         password: hashedPwd,
       });
 
-      // Remove the password from the returned user object for security
-      user.password = '';
-      user.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
-
-      return user;
+    return this.sanitizeUser(user);
     } catch (error) {
       if (error.code === 11000) {
         throw new ConflictException('Email already exists');
@@ -95,7 +138,7 @@ export class UserService {
     let userData: any = { ...user };
     userData = userData._doc;
 
-    return userData;
+    return this.sanitizeUser(userData);
   }
 
   /**
@@ -126,7 +169,7 @@ export class UserService {
       user.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
     }
 
-    return user;
+    return this.sanitizeUser(user);
   }
 
   /**
@@ -171,12 +214,9 @@ export class UserService {
 
     if (!updatedUser) {
       throw new NotFoundException('User not found');
-    } else {
-      updatedUser.password = '';
-      updatedUser.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
     }
 
-    return updatedUser;
+    return this.sanitizeUser(updatedUser);
   }
 
   /**
@@ -193,7 +233,7 @@ export class UserService {
    * @param query - Query parameters for keyword search and pagination.
    * @returns A list of users matching the search criteria.
    */
-  async searchByName(query: Query): Promise<User[]> {
+  async searchByName(query: Query): Promise<any[]> {
     const resPerPage = 20;
     const currentPage = Number(query.page) || 1;
     const skip = resPerPage * (currentPage - 1);
@@ -225,7 +265,7 @@ export class UserService {
       userArray = [...userArray, userData];
     }
 
-    return users;
+    return users.map(this.sanitizeUser);
   }
 
   /**
@@ -233,7 +273,7 @@ export class UserService {
    * @param query - Query parameters for keyword search and pagination.
    * @returns A list of users matching the search criteria.
    */
-  async searchByEmail(query: Query): Promise<User[]> {
+  async searchByEmail(query: Query): Promise<any[]> {
     const resPerPage = 20;
     const currentPage = Number(query.page) || 1;
     const skip = resPerPage * (currentPage - 1);
@@ -251,17 +291,22 @@ export class UserService {
     // Find users matching the keyword with pagination
     const users = await this.userModel
       .find({ ...keyword })
+      .populate('countryId')
+      .populate('cityId')
       .limit(resPerPage)
       .skip(skip);
 
-    return users;
+    return users.map(this.sanitizeUser);
   }
 
   /**
    * Get total number of users and the percentage of users registered in the last 7 days.
    * @returns An object with usersNumber and pourcentage.
    */
-  async getUsersStatistic(): Promise<{ usersNumber: number; pourcentage: number }> {
+  async getUsersStatistic(): Promise<{
+    usersNumber: number;
+    pourcentage: number;
+  }> {
     const usersNumber = await this.userModel.countDocuments();
 
     const sevenDaysAgo = new Date();
@@ -277,21 +322,6 @@ export class UserService {
         : Number(((usersLast7Days / usersNumber) * 100).toFixed(2));
 
     return { usersNumber, pourcentage };
-  }
-
-  async getAllUsers(): Promise<User[]> {
-    const users = await this.userModel
-      .find()
-      .populate('countryId')
-      .populate('cityId');
-
-    // Remove sensitive information from each user
-    users.forEach((user) => {
-      user.password = '';
-      user.resetPasswordToken = '';
-    });
-
-    return users;
   }
 
   async getUserByEmail(email: string): Promise<User | null> {
@@ -310,21 +340,19 @@ export class UserService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
+    console.log('User: ', user);
+    const status = user.isActive === false ? false : true
     const updatedUser = await this.userModel
       .findByIdAndUpdate(
         userId,
-        { active: user.isActive ? false : true },
+        { isActive: !status},
         { new: true, runValidators: true },
       )
-      .populate('cityId')
-      .populate('countryId');
 
     if (!updatedUser) {
       throw new NotFoundException('User not found');
-    } else {
-      updatedUser.password = '';
-      updatedUser.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
     }
+    return this.getAllUsers();
   }
 
   async updateAdminStatus(userId: any): Promise<any> {
@@ -335,25 +363,20 @@ export class UserService {
     const user = await this.userModel.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
-    } else {
-      user.password = '';
-      user.resetPasswordToken = '';
     }
+    console.log('User: ', user);
+    const status = user.isAdmin === false ? false : true
     const updatedUser = await this.userModel
       .findByIdAndUpdate(
         userId,
-        { isAdmin: user.isAdmin ? false : true },
+        { isAdmin: !status},
         { new: true, runValidators: true },
       )
-      .populate('cityId')
-      .populate('countryId');
 
     if (!updatedUser) {
       throw new NotFoundException('User not found');
-    } else {
-      updatedUser.password = '';
-      updatedUser.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
     }
+    return this.getAllUsers();
   }
 
   async updateVerifiedStatus(userId: any): Promise<any> {
@@ -361,26 +384,23 @@ export class UserService {
       throw new NotFoundException('Invalid user ID');
     }
 
-    const user = await this.userModel.findById(userId)
+    const user = await this.userModel.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
-    } else {
-      user.password = '';
-      user.resetPasswordToken = '';
-      }
-      const updatedUser = await this.userModel.findByIdAndUpdate(
-      userId,
-      { verified: user.verified ? false : true },
-      { new: true, runValidators: true },
-    )
-    .populate('cityId')
-    .populate('countryId');
+    }
+    console.log('User: ', user);
+    const status = user.verified === false ? false : true
+    const updatedUser = await this.userModel
+      .findByIdAndUpdate(
+        userId,
+        { verified: !status},
+        { new: true, runValidators: true },
+      )
 
     if (!updatedUser) {
       throw new NotFoundException('User not found');
-    } else {
-      updatedUser.password = '';
-      updatedUser.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
-      }
+    }
+
+    return this.getAllUsers();
   }
 }

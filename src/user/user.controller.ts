@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
@@ -192,42 +193,42 @@ export class UserController {
     return this.userService.searchByName(query);
   }
 
-  @Put('update-status')
+  @Put('update-status/:id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update user status' })
   @ApiBody({ type: UpdateUserDto })
   @ApiResponse({ status: 200, description: 'User profile updated.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async updateStatus(@Body() userId: string, @Req() req): Promise<any> {
+  async updateStatus(@Param('id') userId: string, @Req() req): Promise<any> {
     if (!req.user.isAdmin) {
       throw new NotFoundException('Unautorised');
     }
     return this.userService.updateStatus(userId);
   }
 
-  @Put('update-adminStatus')
+  @Put('update-adminStatus/:id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update admin profile status' })
   @ApiBody({ type: UpdateUserDto })
   @ApiResponse({ status: 200, description: 'User profile updated.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async updateAdminStatus(@Body() userId: string, @Req() req): Promise<any> {
+  async updateAdminStatus(@Param('id') userId: string, @Req() req): Promise<any> {
     if (!req.user.isAdmin) {
       throw new NotFoundException('Unautorised');
     }
     return this.userService.updateAdminStatus(userId);
   }
 
-  @Put('update-verifiedStatus')
+  @Put('update-verifiedStatus/:id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update verified profile status' })
   @ApiBody({ type: UpdateUserDto })
   @ApiResponse({ status: 200, description: 'User profile updated.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async updateVerifiedStatus(@Body() userId: string, @Req() req): Promise<any> {
+  async updateVerifiedStatus(@Param('id') userId: string, @Req() req): Promise<any> {
     if (!req.user.isAdmin) {
       throw new NotFoundException('Unautorised');
     }
