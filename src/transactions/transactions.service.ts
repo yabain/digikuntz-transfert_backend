@@ -22,6 +22,7 @@ export class TransactionsService {
     amount: number;
     currency: string;
     customerEmail?: string;
+    transactionId: string;
     meta?: any;
   }) {
     const txRef = `tx-${Date.now()}-${randomBytes(4).toString('hex')}`;
@@ -30,6 +31,7 @@ export class TransactionsService {
       amount: payload.amount,
       currency: payload.currency || 'XAF',
       customerEmail: payload.customerEmail,
+      transactionId: payload.transactionId,
       status: 'pending',
       meta: payload.meta || {},
     });

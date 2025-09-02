@@ -23,6 +23,8 @@ import { SubscriptionModule } from './plans/subscription/subscription.module';
 import { OptionsModule } from './plans/options/options.module';
 import { SoldeModule } from './solde/solde.module';
 import { PlansModule } from './plans/plans.module';
+import { PayinModule } from './payin/payin.module';
+import { PayoutModule } from './payout/payout.module';
 
 @Module({
   imports: [
@@ -77,6 +79,8 @@ import { PlansModule } from './plans/plans.module';
     OptionsModule,
     SoldeModule,
     PlansModule,
+    PayinModule,
+    PayoutModule,
     // WhatsappModule,
   ],
   controllers: [AppController],

@@ -85,7 +85,7 @@ export class TransactionController {
         toCurrency: 'XAF',
         sender: 'userId',
         receiver: 'userId',
-        // ...autres champs nécessaires
+        // ...Other field
       },
     },
   })

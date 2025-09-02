@@ -11,7 +11,6 @@ import {
   Currency,
   PaymentMethode,
   ReqStatus,
-  TicketClassIdrate,
   TransactionType,
 } from './transaction.schema';
 
@@ -51,13 +50,9 @@ export class UpdateTransactionDto {
   readonly taxesAmount: number;
 
   @IsOptional()
-  readonly tickets: TicketClassIdrate[];
-
-  @IsOptional()
   readonly eventId: Event;
 
   @IsOptional()
-
   @IsEmpty({ message: 'You cannot pass user id' })
   readonly userId: User;
 

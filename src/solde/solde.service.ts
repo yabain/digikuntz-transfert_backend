@@ -19,8 +19,6 @@ export class SoldeService {
   ) {}
 
   async creatSolde(data: CreateSoldeDto): Promise<any> {
-
-    console.log('data', data);
     const solde = await this.soldeModel.create({ ...data });
     return solde;
   }

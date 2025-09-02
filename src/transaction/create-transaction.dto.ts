@@ -12,7 +12,6 @@ import {
   Currency,
   PaymentMethode,
   ReqStatus,
-  TicketClassIdrate,
   TransactionType,
 } from './transaction.schema';
 
@@ -50,9 +49,6 @@ export class CreateTransactionDto {
   @IsNumber()
   @IsNotEmpty()
   readonly taxesAmount: number;
-
-  @IsNotEmpty()
-  readonly tickets: TicketClassIdrate[];
 
   @IsEmpty({ message: 'You cannot pass user id' })
   readonly userId: User;

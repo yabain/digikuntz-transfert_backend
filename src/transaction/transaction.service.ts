@@ -25,6 +25,7 @@ import { Cron } from '@nestjs/schedule';
 @Injectable()
 export class TransactionService {
   private readonly logger = new Logger(TransactionService.name);
+
   constructor(
     @InjectModel(Transaction.name)
     private transactionModel: mongoose.Model<Transaction>,
@@ -503,7 +504,7 @@ export class TransactionService {
       typeof ReqStatus.PENDING === 'string' &&
       ReqStatus.PENDING.toLowerCase().includes('pending')
         ? ReqStatus.PENDING
-        : 'financial_transaction_pending';
+        : 'transaction_pending';
     const pendingTransactions = await this.transactionModel
       .find({ reqStatus: pendingStatus })
       .populate('userId')
