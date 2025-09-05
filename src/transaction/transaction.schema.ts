@@ -16,14 +16,19 @@ export enum Currency {
   USD = 'USD',
 }
 
-export enum ReqStatus {
-  PENDING = 'transaction_pending',
-  PAYIN = 'transaction_payin',
+export enum TStatus {
+  INITIALIZED = 'transaction_initialized',
+
+  PAYINPENDING = 'transaction_payin_pending',
   PAYINSUCCESS = 'transaction_payin_success',
   PAYINERROR = 'transaction_payin_error',
-  PAYOUT = 'transaction_payout',
+  PAYINCLOSED = 'transaction_payin_closed',
+
+  PAYOUTPENDING = 'transaction_payout_pending',
   PAYOUTSUCCESS = 'transaction_payout_success',
   PAYOUTERROR = 'transaction_payout_error',
+  PAYOUTCLOSED = 'transaction_payout_closed',
+
   ERROR = 'transaction_error',
   SUCCESS = 'transaction_success',
 }
@@ -93,7 +98,7 @@ export class Transaction {
   payment: number;
 
   @Prop()
-  reqStatus: ReqStatus; // as 'state' in payment API res
+  status: TStatus; // as 'state' in payment API res
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
   userId: User;

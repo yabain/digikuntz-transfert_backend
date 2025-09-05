@@ -25,7 +25,6 @@ import { TransactionService } from './transaction.service';
 import { Transaction } from './transaction.schema';
 import {
   ApiBearerAuth,
-  ApiBody,
   ApiOperation,
   ApiParam,
   ApiQuery,
@@ -65,36 +64,31 @@ export class TransactionController {
   @ApiOperation({ summary: 'Get transaction data by ID' })
   @ApiParam({ name: 'id', description: 'Transaction ID', type: String })
   @ApiResponse({ status: 200, description: 'Transaction data returned.' })
-  @UseGuards(AuthGuard('jwt'))
-  @UsePipes(ValidationPipe)
-  async getTransactionData(
-    @Param('id') transactionId: string,
-    @Req() req,
-  ): Promise<any> {
-    return this.transactionService.findById(transactionId, req.user);
+  async getTransactionData(@Param('id') transactionId: string): Promise<any> {
+    return this.transactionService.findById(transactionId);
   }
 
-  @Post('new')
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Process a new payment transaction' })
-  @ApiBody({
-    schema: {
-      example: {
-        amount: 100,
-        fromCurrency: 'USD',
-        toCurrency: 'XAF',
-        sender: 'userId',
-        receiver: 'userId',
-        // ...Other field
-      },
-    },
-  })
-  @ApiResponse({ status: 201, description: 'Transaction processed.' })
-  @UseGuards(AuthGuard('jwt'))
-  @UsePipes(ValidationPipe)
-  async processPayment(@Body() transactionData: any, @Req() req): Promise<any> {
-    return this.transactionService.processPayment(transactionData, req.user);
-  }
+  // @Post('new')
+  // @ApiBearerAuth()
+  // @ApiOperation({ summary: 'Process a new payment transaction' })
+  // @ApiBody({
+  //   schema: {
+  //     example: {
+  //       amount: 100,
+  //       fromCurrency: 'USD',
+  //       toCurrency: 'XAF',
+  //       sender: 'userId',
+  //       receiver: 'userId',
+  //       // ...Other field
+  //     },
+  //   },
+  // })
+  // @ApiResponse({ status: 201, description: 'Transaction processed.' })
+  // @UseGuards(AuthGuard('jwt'))
+  // @UsePipes(ValidationPipe)
+  // async processPayment(@Body() transactionData: any, @Req() req): Promise<any> {
+  //   return this.transactionService.processPayment(transactionData, req.user);
+  // }
 
   @Delete(':id')
   @ApiBearerAuth()

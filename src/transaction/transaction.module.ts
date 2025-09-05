@@ -8,6 +8,11 @@ import { EmailService } from 'src/email/email.service';
 import { Country, CountrySchema } from 'src/country/country.schema';
 import { City, CitySchema } from 'src/city/city.schema';
 import { DateService } from 'src/email/date.service';
+import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
+import { Payin, PayinSchema } from 'src/payin/payin.schema';
+import { Payout, PayoutSchema } from 'src/payout/payout.schema';
+import { PayinService } from 'src/payin/payin.service';
+import { PayoutService } from 'src/payout/payout.service';
 // import { WhatsappModule } from 'src/whatsapp/whatsapp.module';
 
 @Module({
@@ -17,10 +22,19 @@ import { DateService } from 'src/email/date.service';
       { name: 'Transaction', schema: TransactionSchema },
     ]),
     MongooseModule.forFeature([{ name: City.name, schema: CitySchema }]),
+    MongooseModule.forFeature([{ name: Payin.name, schema: PayinSchema }]),
+    MongooseModule.forFeature([{ name: Payout.name, schema: PayoutSchema }]),
     MongooseModule.forFeature([{ name: Country.name, schema: CountrySchema }]),
     // WhatsappModule,
   ],
-  providers: [TransactionService, EmailService, DateService],
+  providers: [
+    TransactionService,
+    EmailService,
+    DateService,
+    FlutterwaveService,
+    PayinService,
+    PayoutService,
+  ],
   controllers: [TransactionController],
 })
 export class TransactionModule {}

@@ -1,0 +1,85 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+  Req,
+  HttpCode,
+  UseGuards,
+  UsePipes,
+  ValidationPipe,
+  NotFoundException,
+  Param,
+} from '@nestjs/common';
+import { FlutterwaveService } from './flutterwave.service';
+import { VerifyPayinDto } from 'src/payin/payin.dto';
+import { CreatePayoutDto } from 'src/payout/payout.dto';
+import { AuthGuard } from '@nestjs/passport';
+
+@Controller('fw')
+export class FlutterwaveController {
+  constructor(private readonly fw: FlutterwaveService) {}
+
+  @Get('balance')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  getBalance(@Req() req) {
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unautorised');
+    }
+    return this.fw.getBalance();
+  }
+
+  @Get('transactions')
+  listTx(@Query('page') page?: number, @Query('status') status?: string) {
+    return this.fw.listTransactions({ page, status });
+  }
+
+  @Post('payin')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  createPayin(@Body() transactionData: any, @Req() req) {
+    return this.fw.createPayin(transactionData, req.user._id);
+  }
+
+  @Post('payin/verify')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  verify(@Body() dto: VerifyPayinDto) {
+    return this.fw.verifyPayin(dto.idOrTxRef);
+  }
+
+  @Post('payout')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  createPayout(@Body() dto: CreatePayoutDto) {
+    return this.fw.createPayout(dto);
+  }
+
+  // Webhook: this route must be PUBLIC (override guard upstream if needed)
+  @Post('webhook')
+  @HttpCode(200) // FW attend 200 sinon il retente
+  async handleWebhook(@Req() req: Request) {
+    return this.fw.verifyWebhookPayin(req);
+  }
+
+  @Get('verify-close-payin/:id')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  verifyAndClosePayin(@Param('id') txRef: string, @Req() req) {
+    console.log('verifyAndClosePayin tx: ', txRef, req.user._id);
+    return this.fw.verifyAndClosePayin(txRef, req.user._id);
+  }
+
+  @Get('open-payin/:id')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  openPayin(@Param('id') txRef: string, @Req() req) {
+    return this.fw.openPayin(txRef, req.user._id);
+  }
+}

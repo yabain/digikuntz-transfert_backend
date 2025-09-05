@@ -4,6 +4,7 @@ import { PayoutController } from './payout.controller';
 
 @Module({
   providers: [PayoutService],
-  controllers: [PayoutController]
+  controllers: [PayoutController],
+  exports: [PayoutService],
 })
 export class PayoutModule {}

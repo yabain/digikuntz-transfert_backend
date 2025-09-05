@@ -28,22 +28,12 @@ export class PayinController {
   @Post('initialize')
   async initialize(@Body() dto: any) {
     console.log('Payin initialize:');
-    const tx = await this.payinService.initPayin({
+    return this.payinService.initPayin({
       amount: dto.amount,
       currency: dto.currency || 'XAF',
       customerEmail: dto.customerEmail,
       transactionId: dto.transactionId
     });
-    console.log('Payin initialaze: ', tx);
-    // retourne infos nécessaires au frontend: txRef, publicKey, amount, currency, customerEmail
-    return {
-      txRef: tx.txRef,
-      amount: tx.amount,
-      currency: tx.currency,
-      customerEmail: tx.customerEmail,
-      publicKey: process.env.FLUTTERWAVE_PUBLIC_KEY,
-      // tu peux aussi retourner un redirect_url si tu veux
-    };
   }
 
   // 2) webhook endpoint pour être notifié par Flutterwave

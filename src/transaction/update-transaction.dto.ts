@@ -10,7 +10,7 @@ import { User } from 'src/user/user.schema';
 import {
   Currency,
   PaymentMethode,
-  ReqStatus,
+  TStatus,
   TransactionType,
 } from './transaction.schema';
 
@@ -35,11 +35,11 @@ export class UpdateTransactionDto {
   @IsOptional()
   readonly paymentWithTaxes: number; // as 'amount' in payment API req/re
 
-  @IsEnum(ReqStatus, {
-    message: 'Enter corect ReqStatus',
+  @IsEnum(TStatus, {
+    message: 'Enter corect status',
   })
   @IsOptional()
-  readonly reqStatus: ReqStatus; // as 'state' in payment API res
+  readonly status: TStatus; // as 'state' in payment API res
 
   @IsString()
   @IsOptional()

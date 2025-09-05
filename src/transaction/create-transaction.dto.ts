@@ -11,7 +11,7 @@ import { User } from 'src/user/user.schema';
 import {
   Currency,
   PaymentMethode,
-  ReqStatus,
+  TStatus,
   TransactionType,
 } from './transaction.schema';
 
@@ -36,11 +36,11 @@ export class CreateTransactionDto {
   @IsNotEmpty()
   readonly paymentWithTaxes: number; // as 'amount' in payment API req/re
 
-  @IsEnum(ReqStatus, {
-    message: 'Enter corect ReqStatus',
+  @IsEnum(TStatus, {
+    message: 'Enter corect status',
   })
   @IsNotEmpty()
-  readonly reqStatus: ReqStatus; // as 'state' in payment API res
+  readonly status: TStatus; // as 'state' in payment API res
 
   @IsString()
   @IsNotEmpty()
@@ -50,7 +50,7 @@ export class CreateTransactionDto {
   @IsNotEmpty()
   readonly taxesAmount: number;
 
-  @IsEmpty({ message: 'You cannot pass user id' })
+  @IsOptional()
   readonly userId: User;
 
   @IsEmail()

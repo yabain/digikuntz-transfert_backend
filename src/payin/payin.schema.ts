@@ -3,8 +3,17 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Transaction } from '../transaction/transaction.schema';
 import mongoose from 'mongoose';
 import { Document } from 'mongoose';
+import { HydratedDocument } from 'mongoose';
+import { User } from 'src/user/user.schema';
 
-export type PayinDocument = Payin & Document;
+export type PayinDocument = HydratedDocument<Payin>;
+
+export enum PayinStatus {
+  PENDING = 'pending',
+  SUCCESSFUL = 'successful',
+  FAILED = 'failed',
+  CANCELLED = 'cancelled',
+}
 
 @Schema({
   timestamps: true,
@@ -13,8 +22,14 @@ export class Payin extends Document {
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Transaction' })
   transactionId: Transaction;
 
-  @Prop({ required: true, unique: true })
-  txRef: string;
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
+  userId: User;
+
+  @Prop({ required: true })
+  txRef: string; // your reference
+
+  @Prop({ required: false })
+  flwTxId?: string; // Flutterwave tx id
 
   @Prop({ required: true })
   amount: number;
@@ -22,20 +37,23 @@ export class Payin extends Document {
   @Prop({ required: true })
   currency: string;
 
-  @Prop()
+  @Prop({ required: true })
   customerEmail: string;
 
-  @Prop({ default: 'transaction_pending' })
-  status: string;
+  @Prop()
+  customerName: string;
+
+  @Prop({ default: 'PENDING' })
+  status: PayinStatus;
 
   @Prop()
-  flwTxId?: number; // id from flutterwave
+  channel: string;
+
+  @Prop()
+  redirectUrl?: string; // frontend success URL
 
   @Prop({ type: Object })
-  meta?: any;
-
-  @Prop({ type: Object })
-  raw?: any;
+  raw?: any; // full payload for audit
 }
 
 export const PayinSchema = SchemaFactory.createForClass(Payin);
