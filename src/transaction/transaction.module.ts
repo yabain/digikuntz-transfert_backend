@@ -21,10 +21,12 @@ import { PayoutService } from 'src/payout/payout.service';
     MongooseModule.forFeature([
       { name: 'Transaction', schema: TransactionSchema },
     ]),
-    MongooseModule.forFeature([{ name: City.name, schema: CitySchema }]),
-    MongooseModule.forFeature([{ name: Payin.name, schema: PayinSchema }]),
-    MongooseModule.forFeature([{ name: Payout.name, schema: PayoutSchema }]),
-    MongooseModule.forFeature([{ name: Country.name, schema: CountrySchema }]),
+    MongooseModule.forFeature([
+      { name: City.name, schema: CitySchema },
+      { name: Payin.name, schema: PayinSchema },
+      { name: Payout.name, schema: PayoutSchema },
+      { name: Country.name, schema: CountrySchema },
+    ]),
     // WhatsappModule,
   ],
   providers: [

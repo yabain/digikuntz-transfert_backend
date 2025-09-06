@@ -48,7 +48,7 @@ export class Transaction {
   @Prop()
   bankAccountNumber: string;
   @Prop()
-  bic: string;
+  bankCode: string;
   @Prop()
   estimation: string;
   @Prop()

@@ -1,145 +1,259 @@
-/* eslint-disable @typescript-eslint/no-unsafe-enum-comparison */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable prettier/prettier */
-// src/transactions/transactions.service.ts
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import * as mongoose from 'mongoose';
-import axios from 'axios';
-import { randomBytes } from 'crypto';
-import { Payin, PayinDocument, PayinStatus } from './payin.schema';
-import { HttpException, HttpStatus } from '@nestjs/common';
-import { HttpService } from '@nestjs/axios';
-import { ConfigService } from '@nestjs/config';
-import { CreatePayinDto } from './payin.dto';
-import { firstValueFrom } from 'rxjs';
+/* eslint-disable @typescript-eslint/no-unnecessary-type-assertion */
+/* eslint-disable @typescript-eslint/no-unsafe-enum-comparison */ /* eslint-disable @typescript-eslint/no-unsafe-call */ /* eslint-disable @typescript-eslint/no-unsafe-return */ /* eslint-disable @typescript-eslint/no-unsafe-assignment */ /* eslint-disable @typescript-eslint/no-unsafe-member-access */ /* eslint-disable prettier/prettier */
 
+import {
+  Injectable,
+  Logger,
+  UnauthorizedException,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import type mongoose from 'mongoose';
+import { HttpService } from '@nestjs/axios';
+import { firstValueFrom } from 'rxjs';
+import { randomBytes } from 'crypto';
+import type { AxiosError } from 'axios';
+import type { Request } from 'express';
+
+import { Payin, PayinDocument, PayinStatus } from './payin.schema';
+import { CreatePayinDto } from './payin.dto';
+import { ConfigService } from '@nestjs/config';
+
+type InitPayinPayload = {
+  amount: number;
+  currency?: string;
+  customerEmail?: string;
+  transactionId: string;
+  meta?: Record<string, unknown>;
+};
+
+/* ===== Types minimalistes FW (ce qui nous intéresse) ===== */
+type FWBaseResp<T = any> = {
+  status?: string; // e.g. 'success'
+  message?: string;
+  data?: T;
+};
+
+type FWVerifyByRefData = {
+  id?: number | string;
+  status?: string;          // 'successful' | 'failed' | 'pending' | ...
+  tx_ref?: string;
+  transaction_ref?: string;
+};
+
+type FWErrorPayload = {
+  message?: string;
+  status?: string;
+  data?: unknown;
+};
+
+/* ====== Service ====== */
 @Injectable()
 export class PayinService {
   private readonly logger = new Logger(PayinService.name);
 
-  private fwSecret: any;
-  private fwPublic: any;
-  private fwBaseUrlV3 = 'https://api.flutterwave.com/v3';
-  // Some V4 payout endpoints (subject to account enablement)
-  private fwBaseUrlV4 = 'https://api.flutterwave.cloud';
-  private secretHash: any;
+  private readonly fwSecret: string;
+  private readonly fwPublic: string;
+  private readonly fwBaseUrlV3: string;
+  private readonly fwBaseUrlV4: string; // conservé (non utilisé ici)
+  private readonly secretHash?: string;
+  private readonly redirectDefault?: string;
+
+  private static readonly DEFAULT_CURRENCY = 'XAF';
+  private static readonly HTTP_TIMEOUT_MS = 10_000;
 
   constructor(
     private readonly http: HttpService,
     private readonly config: ConfigService,
-    @InjectModel(Payin.name) private payinModel: mongoose.Model<PayinDocument>,
+    @InjectModel(Payin.name)
+    private readonly payinModel: mongoose.Model<PayinDocument>,
   ) {
+    this.fwSecret = this.config.get<string>('FLUTTERWAVE_SECRET_KEY') ?? '';
+    this.fwPublic = this.config.get<string>('FLUTTERWAVE_PUBLIC_KEY') ?? '';
+    this.fwBaseUrlV3 =
+      this.config.get<string>('FLUTTERWAVE_BASE_URL_V3') ??
+      'https://api.flutterwave.com/v3';
+    this.fwBaseUrlV4 =
+      this.config.get<string>('FLUTTERWAVE_BASE_URL_V4') ??
+      'https://api.flutterwave.cloud';
     this.secretHash = this.config.get<string>('FLUTTERWAVE_SECRET_HASH');
-    this.fwSecret = this.config.get<string>('FLUTTERWAVE_SECRET_KEY');
-    this.fwPublic = this.config.get<string>('FLUTTERWAVE_PUBLIC_KEY');
+    this.redirectDefault = this.config.get<string>('FLUTTERWAVE_REDIRECT_URL');
   }
 
-  // ---------- Helpers ----------
-  private authHeader() {
+  /* ========================= Helpers ========================= */
+
+  private authHeader(): Record<string, string> {
     return { Authorization: `Bearer ${this.fwSecret}` };
   }
 
-  async initPayin(payload: {
-    amount: number;
-    currency: string;
-    customerEmail?: string;
-    transactionId: string;
-    meta?: any;
-  }) {
-    console.log('Paying initPayin:');
-    const txRef = `tx-${Date.now()}-${randomBytes(4).toString('hex')}`;
-    const tx = await this.payinModel.create({
+  private generateTxRef(prefix = 'tx'): string {
+    return `${prefix}-${Date.now()}-${randomBytes(4).toString('hex')}`;
+  }
+
+  private async updateLocalByTxRef(
+    txRef: string,
+    update: Partial<Payin & { raw?: unknown }>,
+    options: { lean?: boolean; new?: boolean } = {},
+  ) {
+    const res = await this.payinModel
+      .findOneAndUpdate({ txRef }, update, { new: !!options.new })
+      .exec();
+    return options.lean ? res?.toObject?.() : res;
+  }
+
+  private extractFWPayload(raw: unknown): {
+    data: any;
+    status: string;
+    txRef?: string;
+    flwId?: string | number;
+  } {
+    // tolérant : FW peut renvoyer { data: {...} } ou juste {...}
+    const base =
+      (raw as any)?.data?.data ??
+      (raw as any)?.data ??
+      raw ??
+      ({} as Record<string, unknown>);
+
+    const status: string = (base as any)?.status ?? PayinStatus.PENDING;
+    const txRef: string | undefined =
+      (base as any)?.tx_ref ?? (base as any)?.transaction_ref;
+    const flwId: string | number | undefined =
+      (base as any)?.id ?? (base as any)?.flwId;
+
+    return { data: base, status, txRef, flwId };
+  }
+
+  private buildRedirectUrl(dtoRedirect?: string): string | undefined {
+    return (
+      dtoRedirect ??
+      (this.redirectDefault
+        ? `${this.redirectDefault}/subscription/packages`
+        : undefined)
+    );
+  }
+
+  private unwrapAxiosError(error: unknown): {
+    fwData?: FWErrorPayload;
+    message: string;
+  } {
+    const err = error as AxiosError<FWErrorPayload>;
+    const fwData = err?.response?.data;
+    const message =
+      fwData?.message ??
+      (fwData as any) ??
+      err?.message ??
+      'Unknown error from Flutterwave';
+    return { fwData, message };
+  }
+
+  async fwGet<T = any>(url: string, params?: Record<string, any>) {
+    return firstValueFrom(
+      this.http.get<FWBaseResp<T>>(url, {
+        headers: this.authHeader(),
+        timeout: PayinService.HTTP_TIMEOUT_MS,
+        params,
+      }),
+    );
+  }
+
+  async fwPost<T = any>(url: string, body: any) {
+    return firstValueFrom(
+      this.http.post<FWBaseResp<T>>(url, body, {
+        headers: this.authHeader(),
+        timeout: PayinService.HTTP_TIMEOUT_MS,
+      }),
+    );
+  }
+
+  /* ========================= Public API ========================= */
+
+  async initPayin(payload: InitPayinPayload) {
+    const txRef = this.generateTxRef();
+    const doc = await this.payinModel.create({
       txRef,
       amount: payload.amount,
-      currency: payload.currency || 'XAF',
+      currency: payload.currency ?? PayinService.DEFAULT_CURRENCY,
       customerEmail: payload.customerEmail,
       transactionId: payload.transactionId,
       status: PayinStatus.PENDING,
-      meta: payload.meta || {},
+      meta: payload.meta ?? {},
     });
 
     return {
-      txRef: tx.txRef,
-      amount: tx.amount,
-      currency: tx.currency,
-      customerEmail: tx.customerEmail,
-      publicKey: process.env.FLUTTERWAVE_PUBLIC_KEY,
-      // tu peux aussi retourner un redirect_url si tu veux
+      txRef: doc.txRef,
+      amount: doc.amount,
+      currency: doc.currency,
+      customerEmail: doc.customerEmail,
+      publicKey: this.fwPublic,
     };
   }
 
-  // ---------- Pay-In (Hosted Payment) ---------
+  // Hosted Payment (V3)
   async createPayin(dto: CreatePayinDto) {
-    console.log('Paying createPayin: ', dto);
-    const txRef = `tx-${Date.now()}-${randomBytes(4).toString('hex')}`;
-    const payload: any = {
+    const txRef = this.generateTxRef();
+
+    const payload = {
       tx_ref: txRef,
       amount: dto.amount,
       currency: dto.currency,
-      redirect_url:
-        dto.redirectUrl ??
-        this.config.get('FLUTTERWAVE_REDIRECT_URL') + '/subscription/packages',
+      redirect_url: this.buildRedirectUrl(dto.redirectUrl),
       customer: { email: dto.customerEmail, name: dto.customerName },
       meta: { app: 'digikuntz-payments', env: this.config.get('NODE_ENV') },
       payment_options: dto.channel ?? undefined,
     };
+
     const url = `${this.fwBaseUrlV3}/payments`;
-    const res = await firstValueFrom(
-      this.http.post(url, payload, { headers: this.authHeader() }),
-    );
 
-    // Save pending Payin
-    await this.payinModel.create({
-      userId: dto.userId,
-      transactionId: dto.transactionId,
-      txRef: txRef,
-      amount: dto.amount,
-      currency: dto.currency,
-      customerEmail: dto.customerEmail,
-      customerName: dto.customerName,
-      status: 'pending',
-      raw: res.data,
-    });
-    console.log('res data payIn: ', res);
-    const output = {
-      status: 'pending',
-      txRef: txRef,
-      amount: dto.amount,
-      currency: dto.currency,
-      customerEmail: dto.customerEmail,
-      publicKey: process.env.FLUTTERWAVE_PUBLIC_KEY,
-      redirect_url: res.data.data.link,
-    };
-    console.log('output data payIn: ', output);
+    try {
+      const resp = await this.fwPost(url, payload);
+      const resData = resp.data;
 
-    return output;
+      await this.payinModel.create({
+        userId: dto.userId,
+        transactionId: dto.transactionId,
+        txRef,
+        amount: dto.amount,
+        currency: dto.currency,
+        customerEmail: dto.customerEmail,
+        customerName: dto.customerName,
+        status: PayinStatus.PENDING,
+        raw: resData,
+      });
+
+      return {
+        status: PayinStatus.PENDING,
+        txRef,
+        amount: dto.amount,
+        currency: dto.currency,
+        customerEmail: dto.customerEmail,
+        publicKey: this.fwPublic,
+        redirect_url: (resData as any)?.data?.link,
+      };
+    } catch (err: unknown) {
+      this.logger.error('createPayin: error calling Flutterwave', err as any);
+      const { fwData, message } = this.unwrapAxiosError(err);
+      throw new HttpException(
+        { message: message ?? 'Error creating payin', details: fwData },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
   }
 
-  async saveFlutterwaveResult(txRef: string, flwPayload: any) {
-    console.log('Paying saveFlutterwaveResult:');
-    const flwId = flwPayload?.data?.id || flwPayload?.data?.tx?.id || undefined;
-    const status =
-      (flwPayload?.data?.status ||
-        flwPayload?.data?.tx?.status ||
-        flwPayload?.status) ??
-      'pending';
-    const updated = await this.payinModel
-      .findOneAndUpdate(
-        { txRef },
-        { status, flwTxId: flwId, raw: flwPayload },
-        { new: true },
-      )
-      .exec();
-    return updated;
-  }
+  /**
+   * Save FW webhook/result payload into local DB
+   */
+  async saveFlutterwaveResult(raw: unknown) {
+    const { data, status, txRef, flwId } = this.extractFWPayload(raw);
 
-  async verifyWithFlutterwaveByTxRef(txRef: string) {
-    console.log('Paying verify:');
-    // 0. Vérifier que la transaction existe localement d'abord (utile pour debug)
+    if (!txRef) {
+      this.logger.warn('saveFlutterwaveResult: missing tx_ref in payload');
+      throw new HttpException(
+        { message: 'Missing tx_ref' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
     const local = await this.payinModel.findOne({ txRef }).lean().exec();
     if (!local) {
       this.logger.warn(`Payin verify: txRef ${txRef} not found in DB`);
@@ -148,68 +262,93 @@ export class PayinService {
         HttpStatus.NOT_FOUND,
       );
     }
-    const secret = process.env.FLUTTERWAVE_SECRET_KEY;
-    const url = `${this.fwBaseUrlV3}/transactions/verify_by_reference?tx_ref=${encodeURIComponent(txRef)}`;
 
+    const updated = await this.payinModel
+      .findOneAndUpdate(
+        { txRef },
+        {
+          status,
+          flwTxId: String(flwId ?? ''),
+          raw: data,
+        },
+        { new: true },
+      )
+      .exec();
+
+    return updated;
+  }
+
+  /**
+   * Verify payin by txRef using Flutterwave v3 verify_by_reference endpoint
+   */
+  async verifyPayinByTxRef(txRef: string) {
+    const local = await this.payinModel.findOne({ txRef }).lean().exec();
+    if (!local) {
+      this.logger.warn(`verifyPayinByTxRef: txRef ${txRef} not found locally`);
+      throw new HttpException(
+        { message: `Local transaction ${txRef} not found` },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    const url = `${this.fwBaseUrlV3}/transactions/verify_by_reference`;
     try {
       this.logger.debug(
-        `Payin Calling Flutterwave verify_by_reference for tx_ref=${txRef}`,
+        `Calling Flutterwave verify_by_reference for tx_ref=${txRef}`,
       );
-      const resp = await axios.get(url, {
-        headers: { Authorization: `Bearer ${secret}` },
-        timeout: 10000,
-      });
 
+      const resp = await this.fwGet<FWVerifyByRefData>(url, { tx_ref: txRef });
       const data = resp.data;
-      this.logger.debug(
-        `Payin Flutterwave response for ${txRef}: ${JSON.stringify(data)}`,
-      );
-
-      const status = data?.data?.status || data?.status || 'pending';
+      const status =
+        (data?.data as FWVerifyByRefData)?.status ??
+        data?.status ??
+        PayinStatus.PENDING;
 
       const updated = await this.payinModel
         .findOneAndUpdate(
           { txRef },
-          { status, raw: data, flwTxId: data?.data?.id },
+          {
+            status,
+            raw: data,
+            flwTxId: (data?.data as FWVerifyByRefData)?.id,
+          },
           { new: true },
         )
         .exec();
 
       this.logger.log(
-        `Payin Transaction ${txRef} updated to status=${status} (flwId=${data?.data?.id})`,
+        `Payin ${txRef} updated to status=${status} (flwId=${(data?.data as FWVerifyByRefData)?.id})`,
       );
-      return { success: true, data, updated };
-    } catch (error) {
-      // axios error peut contenir response.data avec message explicite de Flutterwave
-      const fwData = error?.response?.data;
-      this.logger.error(`Payin Error verifying tx ${txRef}: ${error?.message}`);
-      if (fwData)
-        this.logger.error(
-          `Payin Flutterwave error payload: ${JSON.stringify(fwData)}`,
-        );
+      return updated;
+    } catch (error: unknown) {
+      const { fwData, message } = this.unwrapAxiosError(error);
 
-      // Mettre à jour localement le statut et stocker l'erreur
+      this.logger.error(`Error verifying tx ${txRef}: ${message}`, fwData ?? '');
       await this.payinModel
         .findOneAndUpdate(
           { txRef },
-          { status: 'failed', error: fwData || error.message },
+          { status: PayinStatus.FAILED, error: fwData ?? message },
           { new: true },
         )
         .exec();
 
-      // Renvoyer une HttpException plus descriptive
-      const message =
-        fwData?.message ||
-        fwData ||
-        error.message ||
-        'Unknown error from Flutterwave';
-      // si Flutterwave renvoie "No transaction was found for this id", on le renvoie tel quel
       throw new HttpException({ message }, HttpStatus.BAD_GATEWAY);
     }
   }
 
   async getPayin(txRef: string) {
     return this.payinModel.findOne({ txRef }).lean().exec();
+  }
+
+  async getPayinStatus(txRef: string) {
+    const data = await this.payinModel.findOne({ txRef }).lean().exec();
+    if (!data) {
+      throw new HttpException(
+        { message: `Transaction ${txRef} not found` },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return { status: data.status };
   }
 
   async findPending(limit = 1000) {
@@ -219,145 +358,110 @@ export class PayinService {
       .exec();
   }
 
-  ///
+  isMoreThan15MinutesAhead(inputDate: string | Date): boolean {
+    const target = new Date(inputDate).getTime();
+    const now = Date.now();
+    const diff = now - target;
+    return diff > 15 * 60 * 1000; // true si plus de 15 min d'avance
+  }
+
   async updatePayinStatus(txRef: string, status: string) {
-    return this.payinModel.findOneAndUpdate(
-      { txRef },
-      { status: status },
-      { new: true },
-    );
+    return this.payinModel
+      .findOneAndUpdate({ txRef }, { status }, { new: true })
+      .exec();
   }
 
   async updatePayin(data: any, status: string) {
-    return this.payinModel.findOneAndUpdate(
-      { txRef: data.tx_ref },
-      {
-        status: status,
-        flwTxId: String(data.id),
-        raw: data,
-      },
-    );
+    const txRef = data?.tx_ref ?? data?.txRef;
+    if (!txRef)
+      throw new HttpException(
+        { message: 'tx_ref is required' },
+        HttpStatus.BAD_REQUEST,
+      );
+    return this.payinModel
+      .findOneAndUpdate(
+        { txRef },
+        { status, flwTxId: String(data?.id ?? ''), raw: data },
+        { new: true },
+      )
+      .exec();
   }
 
+  /**
+   * Generic verify: accept either numeric FW id or txRef
+   */
   async verifyPayin(idOrTxRef: string) {
-    let res;
-
     try {
+      let resp;
       if (/^\d+$/.test(idOrTxRef)) {
-        console.log('verifyPayin using id:', idOrTxRef);
-        // looks like numeric flw tx id
-        res = await firstValueFrom(
-          this.http.get(
-            `${this.fwBaseUrlV3}/transactions/${idOrTxRef}/verify`,
-            {
-              headers: this.authHeader(),
-            },
-          ),
-        );
+        // numeric -> verify by tx id
+        resp = await this.fwGet(`${this.fwBaseUrlV3}/transactions/${idOrTxRef}/verify`);
       } else {
-        console.log('verifyPayin using txRef:', idOrTxRef);
-        res = await firstValueFrom(
-          this.http.get(
-            `${this.fwBaseUrlV3}/transactions/verify_by_reference`,
-            {
-              headers: this.authHeader(),
-              params: { tx_ref: idOrTxRef },
-            },
-          ),
-        );
+        resp = await this.fwGet(`${this.fwBaseUrlV3}/transactions/verify_by_reference`, {
+          tx_ref: idOrTxRef,
+        });
       }
-      this.logger.debug(
-        `Payin Flutterwave response for ${idOrTxRef}: ${JSON.stringify(res.data)}`,
-      );
-      return this.handleClosePayin(idOrTxRef, res);
-    } catch (error) {
-      console.log('error updating payin:', error);
-      // axios error peut contenir response.data avec message explicite de Flutterwave
-      const fwData = error?.response?.data;
-      this.logger.error(
-        `Payin Error verifying tx ${idOrTxRef}: ${error?.message}`,
-      );
-      if (fwData)
-        this.logger.error(
-          `Payin Flutterwave error payload: ${JSON.stringify(fwData)}`,
-        );
 
-      if (
-        fwData?.message &&
-        fwData.message.includes('No transaction was found for this id')
-      ) {
-        console.log('00000. No transaction found, returning local record');
-        return this.handleClosePayin(idOrTxRef);
+      this.logger.debug(
+        `Flutterwave response for ${idOrTxRef}: ${JSON.stringify(resp.data)}`,
+      );
+      return this.handleVerifyPayin(idOrTxRef, resp.data);
+    } catch (error: unknown) {
+      const { fwData, message } = this.unwrapAxiosError(error);
+      this.logger.error(`verifyPayin error for ${idOrTxRef}: ${message}`, fwData ?? '');
+
+      // Si FW indique "not found", on renvoie l'enregistrement local au lieu de throw
+      if (fwData?.message?.includes('No transaction was found for this id')) {
+        this.logger.warn('No transaction found on FW, returning local record');
+        return this.handleVerifyPayin(idOrTxRef);
       }
-      // Mettre à jour localement le statut et stocker l'erreur
+
+      // Mise à jour générique locale -> FAILED (si existe)
       await this.payinModel
         .findOneAndUpdate(
-          { idOrTxRef },
-          { status: 'failed', error: fwData || error.message },
+          { txRef: idOrTxRef },
+          { status: PayinStatus.FAILED, error: fwData ?? message },
           { new: true },
         )
         .exec();
 
-      // Renvoyer une HttpException plus descriptive
-      const message =
-        fwData?.message ||
-        fwData ||
-        error.message ||
-        'Unknown error from Flutterwave';
-      // si Flutterwave renvoie "No transaction was found for this id", on le renvoie tel quel
       throw new HttpException({ message }, HttpStatus.BAD_GATEWAY);
     }
   }
 
-  async handleClosePayin(idOrTxRef: string, res?) {
-    if (res?.data) {
-      console.log('1111 No response data from FW, returning local record');
-      const data = res.data?.data;
-      const status = data?.data?.status || data?.status || PayinStatus.PENDING;
-      const txRef = data.tx_ref;
-      // 0. Vérifier que la transaction existe en BD (utile pour debug)
-      const local = await this.payinModel.findOne({ txRef }).lean().exec();
-      if (!local) {
-        this.logger.warn(`Payin verify: txRef ${txRef} not found in DB`);
-        throw new HttpException(
-          { message: `Local transaction ${txRef} not found` },
-          HttpStatus.NOT_FOUND,
-        );
-      }
-      const updatedData = await this.payinModel
-        .findOneAndUpdate(
-          { txRef },
-          {
-            status: status,
-            flwTxId: String(data.id),
-            raw: data,
-          },
-        )
-        .exec();
-      return updatedData;
-    } else {
-      console.log('2222 No response data from FW, returning local record');
-      return await this.payinModel.findOne({ txRef: idOrTxRef }).lean().exec();
+  private async handleVerifyPayin(idOrTxRef: string, resData?: any) {
+    // Si réponse FW fournie, on persiste via le flux standard
+    if (resData) {
+      this.logger.debug('handleVerifyPayin: saving FW result');
+      return this.saveFlutterwaveResult({ data: resData });
     }
+
+    // Sinon on retourne l'enregistrement local
+    this.logger.debug('handleVerifyPayin: returning local record only');
+    return this.payinModel.findOne({ txRef: idOrTxRef }).lean().exec();
   }
 
-  async verifyWebhook(req: Request) {
-    const signature = req.headers['verif-hash'] as string;
-    const body: any = req.body;
+  /**
+   * Webhook verification using configured secret hash
+   */
+  async verifyWebhook(req: Request & { body?: any; headers?: any }) {
+    const signature = (req.headers as any)['verif-hash'] as string | undefined;
+    const body = req.body ?? {};
 
     if (!signature || signature !== this.secretHash) {
+      this.logger.warn('Invalid Flutterwave webhook signature');
       throw new UnauthorizedException('Invalid Flutterwave webhook signature');
     }
 
-    // exemple : mise à jour du Payin
-    if (
-      body.event === 'charge.completed' &&
-      body.data.status === 'successful'
-    ) {
-      await this.payinModel.findOneAndUpdate(
-        { fwId: body.data.id },
-        { status: 'SUCCESSFUL' },
-      );
+    // Exemple : mettre à jour si charge.completed + successful
+    if (body.event === 'charge.completed' && body.data?.status === 'successful') {
+      await this.payinModel
+        .findOneAndUpdate(
+          { flwTxId: body.data.id },
+          { status: PayinStatus.SUCCESSFUL },
+          { new: true },
+        )
+        .exec();
     }
 
     return { status: 'ok' };

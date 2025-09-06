@@ -5,6 +5,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 import {
+  HttpException,
+  HttpStatus,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -94,154 +96,63 @@ export class FlutterwaveService {
     });
   }
 
-  async verifyPayin(verifyPayin: string) {
-    return this.payinService.verifyPayin(verifyPayin);
-  }
+  async verifyPayin(txRef: string) {
+    // return this.payinService.verifyPayin(verifyPayin);
 
-  async verifyPayout(reference: string) {
-    const url = `${this.fwBaseUrlV3}/transfers?reference=${reference}`;
-    const res: any = await this.http
-      .get(url, {
-        headers: { Authorization: `Bearer ${this.fwSecret}` },
-      })
-      .toPromise();
-
-    if (res.data && res.data.data && res.data.data.length > 0) {
-      const payout = res.data.data[0];
-      await this.payoutModel.findOneAndUpdate(
-        { reference },
-        { status: payout.status, updatedAt: new Date() },
-      );
-      return payout;
+    const payin: any = await this.payinService.verifyPayin(txRef);
+    console.log('just verifyPayin:', payin);
+    if (!payin) {
+      throw new NotFoundException('Payin not found');
     }
-    throw new NotFoundException('Payout not found on Flutterwave');
-  }
-
-  // ---------- Payouts ----------
-  async createPayout(dto: CreatePayoutDto) {
-    // Normalize to V4 direct-transfers when possible; fallback to V3 bank transfers
-    const action = 'instant';
-
-    if (dto.type === 'bank') {
-      // Try V3 bank transfer first for broad availability
-      const payloadV3 = {
-        account_bank: dto.accountBankCode,
-        account_number: dto.accountNumber,
-        amount: dto.amount,
-        currency: dto.destinationCurrency,
-        reference: dto.reference,
-        narration: dto.narration ?? 'Payout',
-        debit_currency: dto.sourceCurrency,
-      };
-      const res = await firstValueFrom(
-        this.http.post(`${this.fwBaseUrlV3}/transfers`, payloadV3, {
-          headers: this.authHeader(),
-        }),
-      );
-      const doc = await this.payoutModel.create({
-        reference: dto.reference,
-        type: 'bank',
-        amount: dto.amount,
-        sourceCurrency: dto.sourceCurrency,
-        destinationCurrency: dto.destinationCurrency,
-        accountBankCode: dto.accountBankCode,
-        accountNumber: dto.accountNumber,
-        status: ['NEW', 'PENDING', 'QUEUED'].includes(res.data?.data?.status)
-          ? 'PROCESSING'
-          : 'INITIATED',
-        raw: res.data,
-      });
-      return { api: 'v3', ...res.data, saved: doc };
+    const transaction = await this.transactionService.findById(
+      String(payin.transactionId),
+    );
+    if (!transaction) {
+      throw new NotFoundException('Transaction not found');
     }
 
-    if (dto.type === 'mobile_money') {
-      // V4 direct transfers mobile money
-      const payloadV4 = {
-        action,
-        type: 'mobile_money',
-        reference: dto.reference,
-        narration: dto.narration ?? 'Payout MoMo',
-        payment_instruction: {
-          amount: { value: dto.amount, applies_to: 'destination_currency' },
-          source_currency: dto.sourceCurrency,
-          destination_currency: dto.destinationCurrency,
-          recipient: {
-            mobile_money: {
-              country: dto.mmCountry, // e.g. 'CM'
-              provider: dto.mmProvider, // 'MTN' | 'ORANGE'
-              msisdn: dto.msisdn, // '2376XXXXXXX'
-            },
-          },
-        },
-      };
-      const res = await firstValueFrom(
-        this.http.post(`${this.fwBaseUrlV4}/direct-transfers`, payloadV4, {
-          headers: this.authHeader(),
-        }),
+    if (payin.status === 'cancelled') {
+      await this.transactionService.updateTransactionStatus(
+        String(payin.transactionId),
+        this.tStatus.PAYINCLOSED,
       );
-      const doc = await this.payoutModel.create({
-        reference: dto.reference,
-        type: 'mobile_money',
-        amount: dto.amount,
-        sourceCurrency: dto.sourceCurrency,
-        destinationCurrency: dto.destinationCurrency,
-        mmCountry: dto.mmCountry,
-        mmProvider: dto.mmProvider,
-        msisdn: dto.msisdn,
-        status: 'PROCESSING',
-        raw: res.data,
-      });
-      return { api: 'v4', ...res.data, saved: doc };
-    }
-
-    if (dto.type === 'wallet') {
-      const payloadV4 = {
-        action,
-        type: 'wallet',
-        reference: dto.reference,
-        narration: dto.narration ?? 'Wallet to wallet',
-        payment_instruction: {
-          amount: { value: dto.amount, applies_to: 'destination_currency' },
-          source_currency: dto.sourceCurrency,
-          destination_currency: dto.destinationCurrency,
-          recipient: {
-            wallet: {
-              provider: 'flutterwave',
-              identifier: dto.walletIdentifier,
-            },
-          },
-        },
-      };
-      const res = await firstValueFrom(
-        this.http.post(`${this.fwBaseUrlV4}/direct-transfers`, payloadV4, {
-          headers: this.authHeader(),
-        }),
+      return { message: 'Payin cancelled', status: 'cancelled' };
+    } else if (payin.status === 'failed') {
+      await this.transactionService.updateTransactionStatus(
+        String(payin.transactionId),
+        this.tStatus.PAYINFAILED,
       );
-      const doc = await this.payoutModel.create({
-        reference: dto.reference,
-        type: 'wallet',
-        amount: dto.amount,
-        sourceCurrency: dto.sourceCurrency,
-        destinationCurrency: dto.destinationCurrency,
-        walletIdentifier: dto.walletIdentifier,
-        status: 'PROCESSING',
-        raw: res.data,
-      });
-      return { api: 'v4', ...res.data, saved: doc };
+      return { message: 'Payin failed', status: 'failed' };
+    } else if (payin.status === 'pending') {
+      await this.transactionService.updateTransactionStatus(
+        String(payin.transactionId),
+        this.tStatus.PAYINPENDING,
+      );
+      return { message: 'Payin pending', status: 'pending' };
+    } else {
+      if (
+        transaction.status === this.tStatus.INITIALIZED ||
+        transaction.status === this.tStatus.PAYINCLOSED ||
+        transaction.status === this.tStatus.PAYINPENDING ||
+        transaction.status === this.tStatus.PAYINERROR
+      ) {
+        await this.transactionService.updateTransactionStatus(
+          String(payin.transactionId),
+          this.tStatus.PAYINSUCCESS,
+        );
+        return { message: 'Payin successful', status: 'successful' };
+      }
+      return { message: 'Payin already on payout', status: 'onPayout' };
     }
   }
 
-  async verifyWebhookPayin(req) {
-    return this.payinService.verifyWebhook(req);
-  }
-
-  async verifyAndClosePayin(txRef: string, userId: string) {
+  async verifyAndClosePayin(txRef: string, userId: string, cron = false) {
     const payin: any = await this.payinService.verifyPayin(txRef);
     console.log('verifyAndClosePayin payin:', payin);
     if (!payin) {
       throw new NotFoundException('Payin not found');
     }
-    if (String(payin.userId) !== String(userId)) {
+    if (String(payin.userId) !== String(userId) && !cron) {
       throw new UnauthorizedException('Unauthorized');
     }
     const transaction = await this.transactionService.findById(
@@ -370,5 +281,232 @@ export class FlutterwaveService {
       message: 'Payin is in pending but transaction data is in Payou',
       status: 'error',
     };
+  }
+
+  // ---------- Payouts ----------
+  async createPayout(dto: CreatePayoutDto) {
+    // Normalize to V4 direct-transfers when possible; fallback to V3 bank transfers
+    const action = 'instant';
+
+    if (dto.type === 'bank') {
+      // Try V3 bank transfer first for broad availability
+      const payloadV3 = {
+        account_bank: dto.accountBankCode,
+        account_number: dto.accountNumber,
+        amount: dto.amount,
+        currency: dto.destinationCurrency,
+        reference: dto.reference,
+        narration: dto.narration ?? 'Payout',
+        debit_currency: dto.sourceCurrency,
+      };
+      const res = await firstValueFrom(
+        this.http.post(`${this.fwBaseUrlV3}/transfers`, payloadV3, {
+          headers: this.authHeader(),
+        }),
+      );
+      const doc = await this.payoutModel.create({
+        reference: dto.reference,
+        type: 'bank',
+        amount: dto.amount,
+        sourceCurrency: dto.sourceCurrency,
+        destinationCurrency: dto.destinationCurrency,
+        accountBankCode: dto.accountBankCode,
+        accountNumber: dto.accountNumber,
+        status: ['NEW', 'PENDING', 'QUEUED'].includes(res.data?.data?.status)
+          ? 'PROCESSING'
+          : 'INITIATED',
+        raw: res.data,
+      });
+      return { api: 'v3', ...res.data, saved: doc };
+    }
+
+    if (dto.type === 'mobile_money') {
+      // V4 direct transfers mobile money
+      const payloadV4 = {
+        action,
+        type: 'mobile_money',
+        reference: dto.reference,
+        narration: dto.narration ?? 'Payout MoMo',
+        payment_instruction: {
+          amount: { value: dto.amount, applies_to: 'destination_currency' },
+          source_currency: dto.sourceCurrency,
+          destination_currency: dto.destinationCurrency,
+          recipient: {
+            mobile_money: {
+              country: dto.mmCountry, // e.g. 'CM'
+              provider: dto.mmProvider, // 'MTN' | 'ORANGE'
+              msisdn: dto.msisdn, // '2376XXXXXXX'
+            },
+          },
+        },
+      };
+      const res = await firstValueFrom(
+        this.http.post(`${this.fwBaseUrlV4}/direct-transfers`, payloadV4, {
+          headers: this.authHeader(),
+        }),
+      );
+      const doc = await this.payoutModel.create({
+        reference: dto.reference,
+        type: 'mobile_money',
+        amount: dto.amount,
+        sourceCurrency: dto.sourceCurrency,
+        destinationCurrency: dto.destinationCurrency,
+        mmCountry: dto.mmCountry,
+        mmProvider: dto.mmProvider,
+        msisdn: dto.msisdn,
+        status: 'PROCESSING',
+        raw: res.data,
+      });
+      return { api: 'v4', ...res.data, saved: doc };
+    }
+
+    if (dto.type === 'wallet') {
+      const payloadV4 = {
+        action,
+        type: 'wallet',
+        reference: dto.reference,
+        narration: dto.narration ?? 'Wallet to wallet',
+        payment_instruction: {
+          amount: { value: dto.amount, applies_to: 'destination_currency' },
+          source_currency: dto.sourceCurrency,
+          destination_currency: dto.destinationCurrency,
+          recipient: {
+            wallet: {
+              provider: 'flutterwave',
+              identifier: dto.walletIdentifier,
+            },
+          },
+        },
+      };
+      const res = await firstValueFrom(
+        this.http.post(`${this.fwBaseUrlV4}/direct-transfers`, payloadV4, {
+          headers: this.authHeader(),
+        }),
+      );
+      const doc = await this.payoutModel.create({
+        reference: dto.reference,
+        type: 'wallet',
+        amount: dto.amount,
+        sourceCurrency: dto.sourceCurrency,
+        destinationCurrency: dto.destinationCurrency,
+        walletIdentifier: dto.walletIdentifier,
+        status: 'PROCESSING',
+        raw: res.data,
+      });
+      return { api: 'v4', ...res.data, saved: doc };
+    }
+  }
+
+  async verifyPayout(reference: string) {
+    const url = `${this.fwBaseUrlV3}/transfers?reference=${reference}`;
+    const res: any = await this.http
+      .get(url, {
+        headers: { Authorization: `Bearer ${this.fwSecret}` },
+      })
+      .toPromise();
+
+    if (res.data && res.data.data && res.data.data.length > 0) {
+      const payout = res.data.data[0];
+      await this.payoutModel.findOneAndUpdate(
+        { reference },
+        { status: payout.status, updatedAt: new Date() },
+      );
+      return payout;
+    }
+    throw new NotFoundException('Payout not found on Flutterwave');
+  }
+
+  async verifyWebhookPayin(req) {
+    return this.payinService.verifyWebhook(req);
+  }
+
+  async getBanksList(country: string) {
+    const iso2 = this.toIso2(country);
+    const url = `${this.fwBaseUrlV3}/banks/${encodeURIComponent(iso2)}`;
+    try {
+      const res = await firstValueFrom(
+        this.http.get(url, { headers: this.authHeader() }),
+      );
+      // L’endpoint renvoie { status, message, data: [...] }
+      return res.data?.data ?? res.data;
+    } catch (e: any) {
+      const fw = e?.response?.data;
+      // message plus clair côté client
+      throw new HttpException(
+        {
+          message:
+            fw?.message ??
+            `Impossible de récupérer les banques pour le pays "${iso2}"`,
+          details: fw ?? e?.message,
+        },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+  }
+
+  private toIso2(country: string): string {
+    const input = String(country).trim();
+
+    // si déjà alpha-2
+    if (/^[A-Za-z]{2}$/.test(input)) return input.toUpperCase();
+
+    // alpha-3 courants -> alpha-2
+    const a3: Record<string, string> = {
+      CMR: 'CM',
+      NGA: 'NG',
+      GHA: 'GH',
+      KEN: 'KE',
+      RWA: 'RW',
+      TZA: 'TZ',
+      UGA: 'UG',
+      ZAF: 'ZA',
+      CIV: 'CI',
+      SEN: 'SN',
+      BEN: 'BJ',
+      TGO: 'TG',
+      MLI: 'ML',
+      BFA: 'BF',
+      NER: 'NE',
+      COD: 'CD',
+      COG: 'CG',
+      MAR: 'MA',
+      TUN: 'TN',
+      DZA: 'DZ',
+      ETH: 'ET',
+      ZMB: 'ZM',
+    };
+    if (/^[A-Za-z]{3}$/.test(input) && a3[input.toUpperCase()]) {
+      return a3[input.toUpperCase()];
+    }
+
+    // indicatifs téléphoniques -> alpha-2 (liste ciblée; ajoute au besoin)
+    const dial: Record<string, string> = {
+      '237': 'CM',
+      '234': 'NG',
+      '233': 'GH',
+      '254': 'KE',
+      '250': 'RW',
+      '255': 'TZ',
+      '256': 'UG',
+      '27': 'ZA',
+      '225': 'CI',
+      '221': 'SN',
+      '228': 'TG',
+      '229': 'BJ',
+      '223': 'ML',
+      '226': 'BF',
+      '227': 'NE',
+      '243': 'CD',
+      '242': 'CG',
+      '212': 'MA',
+      '216': 'TN',
+      '213': 'DZ',
+      '251': 'ET',
+      '260': 'ZM',
+    };
+    if (/^\d{1,4}$/.test(input) && dial[input]) return dial[input];
+
+    // fallback : on renvoie tel quel (laissera FW répondre "invalid country")
+    return input.toUpperCase();
   }
 }

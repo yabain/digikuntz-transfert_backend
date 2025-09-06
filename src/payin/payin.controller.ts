@@ -37,49 +37,49 @@ export class PayinController {
   }
 
   // 2) webhook endpoint pour être notifié par Flutterwave
-  @Post('webhook')
-  async webhook(@Req() req: any, @Headers('verif-hash') verifHash: string) {
-    console.log('Payin webhook:');
-    const secretHash = process.env.FLUTTERWAVE_SECRET_HASH || ''; // configuré dans dashboard Flutterwave
-    const bodyStr = JSON.stringify(req.body || {});
-    // vérification du header (selon doc flutterwave : header 'verif-hash')
-    if (secretHash) {
-      const computed = crypto
-        .createHmac('sha256', secretHash)
-        .update(bodyStr)
-        .digest('hex');
-      if (computed !== verifHash) {
-        this.logger.warn('Webhook signature mismatch');
-        return { status: 'ignored' };
-      }
-    }
-    const payload = req.body;
-    // tx_ref se trouve souvent dans payload.data.tx_ref ou payload.data?.tx?.tx_ref
-    const txRef =
-      payload?.data?.tx_ref ||
-      payload?.data?.tx?.tx_ref ||
-      payload?.data?.reference ||
-      payload?.data?.id;
-    if (!txRef) {
-      this.logger.warn(
-        'Webhook: txRef not found in payload',
-        JSON.stringify(payload),
-      );
-      return { status: 'no-txref' };
-    }
-    const updated = await this.payinService.saveFlutterwaveResult(txRef, payload);
-    this.logger.log(
-      `Webhook processed txRef=${txRef} status=${updated?.status}`,
-    );
-    return { status: 'ok' };
-  }
+  // @Post('webhook')
+  // async webhook(@Req() req: any, @Headers('verif-hash') verifHash: string) {
+  //   console.log('Payin webhook:');
+  //   const secretHash = process.env.FLUTTERWAVE_SECRET_HASH || ''; // configuré dans dashboard Flutterwave
+  //   const bodyStr = JSON.stringify(req.body || {});
+  //   // vérification du header (selon doc flutterwave : header 'verif-hash')
+  //   if (secretHash) {
+  //     const computed = crypto
+  //       .createHmac('sha256', secretHash)
+  //       .update(bodyStr)
+  //       .digest('hex');
+  //     if (computed !== verifHash) {
+  //       this.logger.warn('Webhook signature mismatch');
+  //       return { status: 'ignored' };
+  //     }
+  //   }
+  //   const payload = req.body;
+  //   // tx_ref se trouve souvent dans payload.data.tx_ref ou payload.data?.tx?.tx_ref
+  //   const txRef =
+  //     payload?.data?.tx_ref ||
+  //     payload?.data?.tx?.tx_ref ||
+  //     payload?.data?.reference ||
+  //     payload?.data?.id;
+  //   if (!txRef) {
+  //     this.logger.warn(
+  //       'Webhook: txRef not found in payload',
+  //       JSON.stringify(payload),
+  //     );
+  //     return { status: 'no-txref' };
+  //   }
+  //   const updated = await this.payinService.saveFlutterwaveResult(txRef, payload);
+  //   this.logger.log(
+  //     `Webhook processed txRef=${txRef} status=${updated?.status}`,
+  //   );
+  //   return { status: 'ok' };
+  // }
 
   @Get('status/:txRef')
   async status(@Param('txRef') txRef: string) {
     console.log('Payin status:');
     this.logger.log(`Payin status endpoint called with ${txRef}`);
     try {
-      const resp = await this.payinService.verifyWithFlutterwaveByTxRef(txRef);
+      const resp = await this.payinService.verifyPayin(txRef);
       return resp;
     } catch (err) {
       this.logger.error(
@@ -92,5 +92,10 @@ export class PayinController {
         502,
       );
     }
+  }
+
+  @Get('status/:txRef')
+  async getPayin(@Param('txRef') txRef: string) {
+    return this.payinService.getPayinStatus(txRef);
   }
 }

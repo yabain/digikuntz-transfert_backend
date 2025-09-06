@@ -17,7 +17,6 @@ import {
   Param,
 } from '@nestjs/common';
 import { FlutterwaveService } from './flutterwave.service';
-import { VerifyPayinDto } from 'src/payin/payin.dto';
 import { CreatePayoutDto } from 'src/payout/payout.dto';
 import { AuthGuard } from '@nestjs/passport';
 
@@ -47,11 +46,18 @@ export class FlutterwaveController {
     return this.fw.createPayin(transactionData, req.user._id);
   }
 
-  @Post('payin/verify')
+  @Get('verify-payin/:txRef')
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  verify(@Body() dto: VerifyPayinDto) {
-    return this.fw.verifyPayin(dto.idOrTxRef);
+  verify(@Param('txRef') txRef: string) {
+    return this.fw.verifyPayin(txRef);
+  }
+
+  @Get('get-bank/:code')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  getBanksList(@Param('code') countryCode: string) {
+    return this.fw.getBanksList(countryCode);
   }
 
   @Post('payout')
