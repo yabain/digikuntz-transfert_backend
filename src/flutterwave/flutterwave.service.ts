@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable no-empty */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
@@ -30,6 +31,8 @@ import { TStatus } from 'src/transaction/transaction.schema';
 export class FlutterwaveService {
   private fwSecret: any;
   private fwPublic: any;
+  private fwSecretNGN: any;
+  private fwPublicNGN: any;
   private fwBaseUrlV3 = 'https://api.flutterwave.com/v3';
   // Some V4 payout endpoints (subject to account enablement)
   private fwBaseUrlV4 = 'https://api.flutterwave.cloud';
@@ -46,6 +49,8 @@ export class FlutterwaveService {
     this.secretHash = this.config.get<string>('FLUTTERWAVE_SECRET_HASH');
     this.fwSecret = this.config.get<string>('FLUTTERWAVE_SECRET_KEY');
     this.fwPublic = this.config.get<string>('FLUTTERWAVE_PUBLIC_KEY');
+    this.fwSecretNGN = this.config.get<string>('FLUTTERWAVE_SECRET_KEY_NGN');
+    this.fwPublicNGN = this.config.get<string>('FLUTTERWAVE_PUBLIC_KEY_NGN');
   }
 
   // ---------- Helpers ----------
@@ -53,12 +58,27 @@ export class FlutterwaveService {
     return { Authorization: `Bearer ${this.fwSecret}` };
   }
 
+  private authHeaderNGN() {
+    return { Authorization: `Bearer ${this.fwSecretNGN}` };
+  }
+
   // ---------- Balance ----------
-  async getBalance() {
+  async getBalance(countryWallet) {
+    console.log('Getting balance for wallet:', countryWallet);
     // Wallet balances
     const url = `${this.fwBaseUrlV3}/balances`;
+    let headers;
+    if (countryWallet == 'CM') {
+      headers = this.authHeader();
+    } else if (countryWallet == 'NG') {
+      headers = this.authHeaderNGN();
+    } else {
+      headers = this.authHeaderNGN();
+    }
     const res = await firstValueFrom(
-      this.http.get(url, { headers: this.authHeader() }),
+      this.http.get(url, {
+        headers,
+      }),
     );
     return res.data; // include available balances per currency
   }
@@ -73,6 +93,86 @@ export class FlutterwaveService {
       this.http.get(url, { headers: this.authHeader(), params }),
     );
     return res.data;
+  }
+
+  async listPayinTransactions(
+    countryWallet,
+    query?: {
+      page?: number;
+      status?: string;
+      from?: string;
+      to?: string;
+    },
+  ) {
+    const defaultDate = this.getDateRangeLastMonth();
+
+    const params: any = {};
+    if (query?.page) params.page = query?.page;
+    if (query?.status) params.status = query?.status; //  successful | failed | pending
+    if (query?.from) params.from = query?.from || defaultDate.from;
+    if (query?.to) params.to = query?.to || defaultDate.to;
+
+    let headers;
+    if (countryWallet == 'CM') {
+      headers = this.authHeader();
+    } else if (countryWallet == 'NG') {
+      headers = this.authHeaderNGN();
+    } else {
+      headers = this.authHeaderNGN();
+    }
+
+    const url = `${this.fwBaseUrlV3}/transactions`;
+    const res = await firstValueFrom(this.http.get(url, { headers, params }));
+    return res.data;
+  }
+
+  async listPayoutTransactions(
+    countryWallet,
+    query?: {
+      page?: number;
+      status?: string;
+      from?: string;
+      to?: string;
+    },
+  ) {
+    const defaultDate = this.getDateRangeLastMonth();
+
+    const params: any = {};
+    if (query?.page) params.page = query?.page;
+    if (query?.status) params.status = query?.status; // NEW | SUCCESSFUL | FAILED | PROCESSING
+    if (query?.from) params.from = query?.from || defaultDate.from;
+    if (query?.to) params.to = query?.to || defaultDate.to;
+
+    let headers;
+    if (countryWallet == 'CM') {
+      headers = this.authHeader();
+    } else if (countryWallet == 'NG') {
+      headers = this.authHeaderNGN();
+    } else {
+      headers = this.authHeaderNGN();
+    }
+
+    const url = `${this.fwBaseUrlV3}/transfers`;
+    const res = await firstValueFrom(this.http.get(url, { headers, params }));
+    return res.data;
+  }
+
+  private getDateRangeLastMonth() {
+    const today = new Date();
+
+    // "to" = end of today
+    const to = new Date(today);
+    to.setHours(23, 59, 59, 999);
+
+    // "from" = start of last month
+    const from = new Date(today);
+    from.setMonth(from.getMonth() - 1);
+    from.setHours(0, 0, 0, 0);
+
+    return {
+      from: from.toISOString(),
+      to: to.toISOString(),
+    };
   }
 
   // ---------- Pay-In (Hosted Payment) ----------
@@ -421,7 +521,9 @@ export class FlutterwaveService {
   }
 
   async getBanksList(country: string) {
-    const iso2 = this.toIso2(country);
+    console.log('getting solde');
+    // const iso2 = this.toIso2(country);
+    const iso2 = country;
     const url = `${this.fwBaseUrlV3}/banks/${encodeURIComponent(iso2)}`;
     try {
       const res = await firstValueFrom(

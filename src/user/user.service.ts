@@ -303,10 +303,7 @@ export class UserService {
    * Get total number of users and the percentage of users registered in the last 7 days.
    * @returns An object with usersNumber and pourcentage.
    */
-  async getUsersStatistic(): Promise<{
-    usersNumber: number;
-    pourcentage: number;
-  }> {
+  async getUsersStatistic(): Promise<any> {
     const usersNumber = await this.userModel.countDocuments();
 
     const sevenDaysAgo = new Date();
@@ -316,12 +313,17 @@ export class UserService {
       createdAt: { $gte: sevenDaysAgo },
     });
 
+    const inactiveUsers = await this.userModel.countDocuments({
+      isActive: false,
+    });
+    const activeUser = usersNumber - inactiveUsers;
+
     const pourcentage =
       usersNumber === 0
         ? 0
         : Number(((usersLast7Days / usersNumber) * 100).toFixed(2));
 
-    return { usersNumber, pourcentage };
+    return { usersNumber, pourcentage, activeUser, inactiveUsers };
   }
 
   async getUserByEmail(email: string): Promise<User | null> {

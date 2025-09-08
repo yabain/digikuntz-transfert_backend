@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-base-to-string */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-floating-promises */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
@@ -24,10 +25,19 @@ export class PlansService {
     private optionsService: OptionsService,
   ) {}
 
+  private sanitizeUser(user: any): any {
+    if (!user) return user;
+    const obj = user.toObject ? user.toObject() : user; // convert mongoose doc en objet si besoin
+    delete obj.password;
+    delete obj.resetPasswordToken;
+    delete obj.solde;
+    return obj;
+  }
+  
   async getAllPlans(query: Query): Promise<Plans[]> {
-    // const resPerPage = 10;
-    // const currentPage = Number(query.page) || 1;
-    // const skip = resPerPage * (currentPage - 1);
+    const resPerPage = 50;
+    const currentPage = Number(query.page) || 1;
+    const skip = resPerPage * (currentPage - 1);
 
     const keyword = query.keyword
       ? {
@@ -37,10 +47,20 @@ export class PlansService {
           },
         }
       : {};
-    const optionsList = await this.plansModel.find({ ...keyword });
-    // .limit(resPerPage)
-    // .skip(skip);
-    return optionsList;
+    const plansList = await this.plansModel.find({ ...keyword })
+    .populate('author')
+    .limit(resPerPage)
+    .skip(skip);
+
+    const resp: any = [];
+    for (const plan of plansList) {
+      const planOption = await this.optionsService.getAllOptionsOfPlans(
+        plan._id,
+      );
+      const planData = { ...plan.toObject(), options: planOption };
+      resp.push(planData);
+    }
+    return resp;
   }
 
   async getPlansList(userId: string, reqUser): Promise<Plans[]> {
@@ -99,7 +119,7 @@ export class PlansService {
   }
 
   async getMyPlansStatistics(userId, long?: number): Promise<any> {
-    const totalPlans = await this.plansModel.countDocuments();
+    const totalPlans = await this.plansModel.countDocuments({author: userId});
 
     const duration = long ?? 7;
     const sinceDate = new Date();
@@ -173,8 +193,9 @@ export class PlansService {
     if (!plan) {
       throw new NotFoundException('Plan not found');
     }
+    console.log('plan: ', plan);
 
-    if (plan.author != userData._id && !userData.isAdmin) {
+    if (String(plan.author) != String(userData._id) && !userData.isAdmin) {
       throw new NotFoundException('Unauthorized');
     }
 

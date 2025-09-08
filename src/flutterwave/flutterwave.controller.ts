@@ -19,19 +19,48 @@ import {
 import { FlutterwaveService } from './flutterwave.service';
 import { CreatePayoutDto } from 'src/payout/payout.dto';
 import { AuthGuard } from '@nestjs/passport';
+import { Query as ExpressQuery } from 'express-serve-static-core';
 
 @Controller('fw')
 export class FlutterwaveController {
   constructor(private readonly fw: FlutterwaveService) {}
 
-  @Get('balance')
+  @Get('balance/:countryWallet')
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  getBalance(@Req() req) {
+  getBalance(@Param('countryWallet') countryWallet, @Req() req) {
     if (!req.user.isAdmin) {
       throw new NotFoundException('Unautorised');
     }
-    return this.fw.getBalance();
+    return this.fw.getBalance(countryWallet);
+  }
+
+  @Get('payin-transactons/:countryWallet')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  listPayinTransactions(
+    @Query() query: ExpressQuery,
+    @Param('countryWallet') countryWallet,
+    @Req() req,
+  ) {
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unautorised');
+    }
+    return this.fw.listPayinTransactions(countryWallet, query);
+  }
+
+  @Get('payout-transactons/:countryWallet')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  listPayoutTransactions(
+    @Param('countryWallet') countryWallet,
+    @Query() query: ExpressQuery,
+    @Req() req,
+  ) {
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unautorised');
+    }
+    return this.fw.listPayoutTransactions(countryWallet, query);
   }
 
   @Get('transactions')

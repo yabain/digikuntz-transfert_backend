@@ -15,6 +15,7 @@ import { EmailService } from 'src/email/email.service';
 import { DateService } from 'src/email/date.service';
 // import { WhatsappService } from 'src/whatsapp/whatsapp.service';
 import { WhatsappQr, WhatsappQrSchema } from 'src/whatsapp/whatsapp-qr.schema';
+import { Mail, MailSchema } from 'src/email/mail.schema';
 
 @Module({
   imports: [
@@ -30,11 +31,10 @@ import { WhatsappQr, WhatsappQrSchema } from 'src/whatsapp/whatsapp-qr.schema';
         ignoreExpiration: false,
       }),
     }),
-    MongooseModule.forFeature([{ name: 'User', schema: UserSchema }]),
     MongooseModule.forFeature([
+      { name: 'User', schema: UserSchema },
+      { name: Mail.name, schema: MailSchema },
       { name: WhatsappQr.name, schema: WhatsappQrSchema },
-    ]),
-    MongooseModule.forFeature([
       { name: 'RevokedToken', schema: RevokedTokenSchema },
     ]),
   ],

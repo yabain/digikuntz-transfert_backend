@@ -13,6 +13,7 @@ import { Payin, PayinSchema } from 'src/payin/payin.schema';
 import { Payout, PayoutSchema } from 'src/payout/payout.schema';
 import { PayinService } from 'src/payin/payin.service';
 import { PayoutService } from 'src/payout/payout.service';
+import { MailSchema, Mail } from 'src/email/mail.schema';
 // import { WhatsappModule } from 'src/whatsapp/whatsapp.module';
 
 @Module({
@@ -26,6 +27,7 @@ import { PayoutService } from 'src/payout/payout.service';
       { name: Payin.name, schema: PayinSchema },
       { name: Payout.name, schema: PayoutSchema },
       { name: Country.name, schema: CountrySchema },
+      { name: Mail.name, schema: MailSchema },
     ]),
     // WhatsappModule,
   ],

@@ -11,10 +11,14 @@ import * as fs from 'fs';
 import * as handlebars from 'handlebars';
 import { DateService } from './date.service';
 import { createEvent } from 'ics';
+import { InjectModel } from '@nestjs/mongoose';
+import { Mail } from './mail.schema';
+import mongoose from 'mongoose';
 
 @Injectable()
 export class EmailService {
   private transporter: nodemailer.Transporter;
+
   private readonly templateFolder = path.join(
     __dirname,
     '..',
@@ -24,6 +28,8 @@ export class EmailService {
   );
 
   constructor(
+    @InjectModel(Mail.name)
+    private mailModel: mongoose.Model<Mail>,
     private readonly configService: ConfigService,
     private dateService: DateService,
   ) {
@@ -47,6 +53,45 @@ export class EmailService {
     return regexEmail.test(email);
   }
 
+  async getTransporterData(): Promise<any> {
+    const mailSmtp = await this.mailModel.find({});
+    console.log('mailSmtp', mailSmtp);
+    let newMailSmtp: any;
+    if (mailSmtp.length === 0) {
+      console.log('Creating new mail SMTP configuration: in if');
+      const data = {
+        smtpHost: this.configService.get<string>('SMTP_HOST'),
+        smtpPort: this.configService.get<number>('SMTP_PORT'),
+        smtpSecure: this.configService.get<boolean>('SMTP_SECURE'),
+        smtpUser: this.configService.get<string>('SMTP_USER'),
+        smtpPassword: this.configService.get<string>('SMTP_PASSWORD'),
+        status: true,
+      }
+      console.log('smtp data', data );
+      newMailSmtp = await this.mailModel.create({
+        smtpHost: this.configService.get<string>('SMTP_HOST'),
+        smtpPort: this.configService.get<number>('SMTP_PORT'),
+        smtpSecure: this.configService.get<boolean>('SMTP_SECURE'),
+        smtpUser: this.configService.get<string>('SMTP_USER'),
+        smtpPassword: this.configService.get<string>('SMTP_PASSWORD'),
+        status: true,
+      });
+      console.log('New mail SMTP configuration created:', newMailSmtp);
+    } else newMailSmtp = mailSmtp[0];
+
+    const transporter = nodemailer.createTransport({
+      host: newMailSmtp.smtpHost,
+      port: newMailSmtp.smtpPort,
+      secure: newMailSmtp.smtpSecure,
+      auth: {
+        user: newMailSmtp.smtpUser,
+        pass: newMailSmtp.smtpPassword,
+      },
+    });
+    
+    return transporter;
+  }
+
   async sendEmail(
     toEmail: string,
     subject: string,
@@ -57,6 +102,7 @@ export class EmailService {
       console.log('Sending email');
       message = '<p>' + message + '</p>';
       const from = this.configService.get<string>('SMTP_USER');
+      this.transporter = await this.getTransporterData();
       await this.transporter.sendMail({
         from,
         to: toEmail,
@@ -138,6 +184,7 @@ export class EmailService {
       to,
       subject,
     );
+    this.transporter = await this.getTransporterData();
     await this.transporter.sendMail({
       from: this.configService.get<string>('SMTP_USER'),
       to,
@@ -175,6 +222,7 @@ export class EmailService {
 
       const html = template(context);
 
+      this.transporter = await this.getTransporterData();
       await this.transporter.sendMail({
         from: this.configService.get<string>('SMTP_USER'),
         to: toEmail,
@@ -221,6 +269,7 @@ export class EmailService {
     const html = template(context);
     const icsAttachment = await this.generateIcsFile(event);
 
+    this.transporter = await this.getTransporterData();
     await this.transporter.sendMail({
       from: this.configService.get<string>('SMTP_USER'),
       to: user.email,
