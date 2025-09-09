@@ -12,7 +12,9 @@ import { DateService } from 'src/email/date.service';
 import { EmailService } from 'src/email/email.service';
 import { ItemService } from './item/item.service';
 import { OptionsService } from './options/options.service';
-import { MailSchema, Mail } from 'src/email/mail.schema';
+import { EmailSchema, Email } from 'src/email/email.schema';
+import { SmtpService } from 'src/email/smtp/smtp.service';
+import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
 
 @Module({
   imports: [
@@ -22,7 +24,8 @@ import { MailSchema, Mail } from 'src/email/mail.schema';
       { name: Options.name, schema: OptionsSchema },
       { name: Item.name, schema: ItemSchema },
       { name: Plans.name, schema: PlansSchema },
-      { name: Mail.name, schema: MailSchema },
+      { name: Email.name, schema: EmailSchema },
+      { name: Smtp.name, schema: SmtpSchema },
     ]),
   ],
   providers: [
@@ -32,6 +35,7 @@ import { MailSchema, Mail } from 'src/email/mail.schema';
     ItemService,
     EmailService,
     DateService,
+    SmtpService,
   ],
   controllers: [PlansController],
 })

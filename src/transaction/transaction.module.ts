@@ -13,7 +13,9 @@ import { Payin, PayinSchema } from 'src/payin/payin.schema';
 import { Payout, PayoutSchema } from 'src/payout/payout.schema';
 import { PayinService } from 'src/payin/payin.service';
 import { PayoutService } from 'src/payout/payout.service';
-import { MailSchema, Mail } from 'src/email/mail.schema';
+import { EmailSchema, Email } from 'src/email/email.schema';
+import { SmtpSchema, Smtp } from 'src/email/smtp/smtp.schema';
+import { SmtpService } from 'src/email/smtp/smtp.service';
 // import { WhatsappModule } from 'src/whatsapp/whatsapp.module';
 
 @Module({
@@ -27,7 +29,8 @@ import { MailSchema, Mail } from 'src/email/mail.schema';
       { name: Payin.name, schema: PayinSchema },
       { name: Payout.name, schema: PayoutSchema },
       { name: Country.name, schema: CountrySchema },
-      { name: Mail.name, schema: MailSchema },
+      { name: Email.name, schema: EmailSchema },
+      { name: Smtp.name, schema: SmtpSchema },
     ]),
     // WhatsappModule,
   ],
@@ -38,6 +41,7 @@ import { MailSchema, Mail } from 'src/email/mail.schema';
     FlutterwaveService,
     PayinService,
     PayoutService,
+    SmtpService,
   ],
   controllers: [TransactionController],
 })

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-floating-promises */
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
@@ -12,8 +13,10 @@ import * as handlebars from 'handlebars';
 import { DateService } from './date.service';
 import { createEvent } from 'ics';
 import { InjectModel } from '@nestjs/mongoose';
-import { Mail } from './mail.schema';
+import { Email } from './email.schema';
 import mongoose from 'mongoose';
+import { SmtpService } from './smtp/smtp.service';
+import { Query } from 'express-serve-static-core';
 
 @Injectable()
 export class EmailService {
@@ -28,22 +31,25 @@ export class EmailService {
   );
 
   constructor(
-    @InjectModel(Mail.name)
-    private mailModel: mongoose.Model<Mail>,
+    @InjectModel(Email.name)
+    private emailModel: mongoose.Model<Email>,
     private readonly configService: ConfigService,
     private dateService: DateService,
+    private smtpService: SmtpService,
   ) {
     this.initializeTransporter();
   }
 
-  private initializeTransporter() {
+  async initializeTransporter() {
+    const newMailSmtp = await this.getTransporterData();
+    console.log('newMailSmtp: ', newMailSmtp);
     this.transporter = nodemailer.createTransport({
-      host: this.configService.get<string>('SMTP_HOST'),
-      port: this.configService.get<number>('SMTP_PORT'),
-      secure: this.configService.get<boolean>('SMTP_SECURE'), // true for 465, false for other ports
+      host: newMailSmtp.smtpHost,
+      port: newMailSmtp.smtpPort,
+      secure: newMailSmtp.smtpSecure,
       auth: {
-        user: this.configService.get<string>('SMTP_USER'),
-        pass: this.configService.get<string>('SMTP_PASSWORD'),
+        user: newMailSmtp.smtpUser,
+        pass: newMailSmtp.smtpPassword,
       },
     });
   }
@@ -54,63 +60,51 @@ export class EmailService {
   }
 
   async getTransporterData(): Promise<any> {
-    const mailSmtp = await this.mailModel.find({});
-    console.log('mailSmtp', mailSmtp);
-    let newMailSmtp: any;
-    if (mailSmtp.length === 0) {
-      console.log('Creating new mail SMTP configuration: in if');
-      const data = {
-        smtpHost: this.configService.get<string>('SMTP_HOST'),
-        smtpPort: this.configService.get<number>('SMTP_PORT'),
-        smtpSecure: this.configService.get<boolean>('SMTP_SECURE'),
-        smtpUser: this.configService.get<string>('SMTP_USER'),
-        smtpPassword: this.configService.get<string>('SMTP_PASSWORD'),
-        status: true,
-      }
-      console.log('smtp data', data );
-      newMailSmtp = await this.mailModel.create({
-        smtpHost: this.configService.get<string>('SMTP_HOST'),
-        smtpPort: this.configService.get<number>('SMTP_PORT'),
-        smtpSecure: this.configService.get<boolean>('SMTP_SECURE'),
-        smtpUser: this.configService.get<string>('SMTP_USER'),
-        smtpPassword: this.configService.get<string>('SMTP_PASSWORD'),
-        status: true,
-      });
-      console.log('New mail SMTP configuration created:', newMailSmtp);
-    } else newMailSmtp = mailSmtp[0];
-
-    const transporter = nodemailer.createTransport({
-      host: newMailSmtp.smtpHost,
-      port: newMailSmtp.smtpPort,
-      secure: newMailSmtp.smtpSecure,
-      auth: {
-        user: newMailSmtp.smtpUser,
-        pass: newMailSmtp.smtpPassword,
-      },
-    });
-    
-    return transporter;
+    return await this.smtpService.getSmtpDataAndUpdate();
   }
 
-  async sendEmail(
-    toEmail: string,
-    subject: string,
-    message: string,
-  ): Promise<void> {
-    if (!this.isEmailValide(toEmail)) return;
+  async getOutputMails(query: Query): Promise<any[]> {
+    const resPerPage = 20;
+    const currentPage = Number(query.page) || 1;
+    const skip = resPerPage * (currentPage - 1);
+
+    // Define the keyword search criteria
+    const keyword = query.keyword
+      ? {
+          $or: [
+            { name: { $regex: query.keyword, $options: 'i' } },
+            { firstName: { $regex: query.keyword, $options: 'i' } },
+            { lastName: { $regex: query.keyword, $options: 'i' } },
+          ],
+        }
+      : {};
+
+    const list = await this.emailModel
+      .find({ ...keyword })
+      .sort({ createdAt: -1 })
+      .limit(resPerPage)
+      .skip(skip);
+
+    return list;
+  }
+
+  async sendEmail(to: string, subject: string, message: string): Promise<any> {
+    console.log('to email: ', to);
+    if (!this.isEmailValide(to)) return;
+    const from = this.configService.get<string>('SMTP_USER');
     try {
       console.log('Sending email');
-      message = '<p>' + message + '</p>';
-      const from = this.configService.get<string>('SMTP_USER');
-      this.transporter = await this.getTransporterData();
       await this.transporter.sendMail({
         from,
-        to: toEmail,
+        to,
         subject,
         html: message,
       });
+      this.saveMail({ to, subject, from, status: true });
+      return true;
     } catch (error) {
       console.error("Erreur lors de l'envoi du mail :", error);
+      this.saveMail({ to, subject, from, status: false });
       throw error;
     }
   }
@@ -119,7 +113,7 @@ export class EmailService {
     toEmail: string,
     language: string,
     userName: string,
-  ): Promise<void> {
+  ): Promise<any> {
     if (!this.isEmailValide(toEmail)) return;
     const templateName = 'welcome-email';
     const subject =
@@ -142,6 +136,7 @@ export class EmailService {
     const html = template(context);
 
     await this.proceedToSendEmail(toEmail, subject, html);
+    return true;
   }
 
   async sendSubscriptionNewsletterEmail(
@@ -184,7 +179,7 @@ export class EmailService {
       to,
       subject,
     );
-    this.transporter = await this.getTransporterData();
+    // this.transporter = await this.getTransporterData();
     await this.transporter.sendMail({
       from: this.configService.get<string>('SMTP_USER'),
       to,
@@ -200,12 +195,11 @@ export class EmailService {
     token: string,
   ): Promise<boolean> {
     if (!this.isEmailValide(toEmail)) return false;
+    const from = this.configService.get<string>('SMTP_USER');
+    const subject =
+      language === 'fr' ? 'Réinitialisation de Mot de Passe' : 'Password Reset';
     try {
       const templateName = 'reset-pwd';
-      const subject =
-        language === 'fr'
-          ? 'Réinitialisation de Mot de Passe'
-          : 'Password Reset';
 
       const templatePath = path.join(
         this.templateFolder,
@@ -222,9 +216,9 @@ export class EmailService {
 
       const html = template(context);
 
-      this.transporter = await this.getTransporterData();
+      this.saveMail({ to: toEmail, subject, from, status: true });
       await this.transporter.sendMail({
-        from: this.configService.get<string>('SMTP_USER'),
+        from,
         to: toEmail,
         subject,
         html,
@@ -236,6 +230,7 @@ export class EmailService {
         "Erreur lors de l'envoi du mail de réinitialisation :",
         error,
       );
+      this.saveMail({ to: toEmail, subject, from, status: true });
       return false;
     }
   }
@@ -269,7 +264,7 @@ export class EmailService {
     const html = template(context);
     const icsAttachment = await this.generateIcsFile(event);
 
-    this.transporter = await this.getTransporterData();
+    // this.transporter = await this.getTransporterData();
     await this.transporter.sendMail({
       from: this.configService.get<string>('SMTP_USER'),
       to: user.email,
@@ -317,11 +312,6 @@ export class EmailService {
     });
   }
 
-  /**
-   * Remove all HTML tags and occurrences of \r, \n, and \t from a string.
-   * @param input The input string to clean.
-   * @returns The cleaned string.
-   */
   cleanString(input: string): string {
     // Remove HTML tags using regex
     let result = input.replace(/<[^>]*>/g, '');
@@ -329,5 +319,35 @@ export class EmailService {
     result = result.replace(/[\r\n\t]/g, '');
     // console.log('cleaned string: ', result);
     return result;
+  }
+
+  async saveMail(data) {
+    const okay = await this.emailModel.create({
+      from: data.from,
+      to: data.to,
+      subject: data.subject,
+      status: data.status,
+    });
+    console.log('saving email: ', okay);
+    return okay;
+  }
+
+  async findAllEmail(query): Promise<any[]> {
+    const resPerPage = 10000;
+    const currentPage = Number(query.page) || 1;
+    const skip = resPerPage * (currentPage - 1);
+    const keyword = query.keyword
+      ? {
+          name: {
+            $regex: query.keyword,
+            $options: 'i',
+          },
+        }
+      : {};
+    const Subscribers = await this.emailModel
+      .find({ ...keyword })
+      .limit(resPerPage)
+      .skip(skip);
+    return Subscribers;
   }
 }

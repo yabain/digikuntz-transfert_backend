@@ -6,16 +6,20 @@ import { EmailController } from './email.controller';
 import { DateService } from './date.service';
 import { User, UserSchema } from 'src/user/user.schema';
 import { ConfigModule } from '@nestjs/config';
-import { MailSchema, Mail } from './mail.schema';
+import { SmtpService } from './smtp/smtp.service';
+import { Smtp, SmtpSchema } from './smtp/smtp.schema';
+import { Email, EmailSchema } from './email.schema';
+
 @Module({
   imports: [
     ConfigModule,
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
-      { name: Mail.name, schema: MailSchema },
+      { name: Email.name, schema: EmailSchema },
+      { name: Smtp.name, schema: SmtpSchema },
     ]),
   ],
-  providers: [EmailService, DateService],
+  providers: [EmailService, DateService, SmtpService],
   controllers: [EmailController],
 })
 export class EmailModule {}

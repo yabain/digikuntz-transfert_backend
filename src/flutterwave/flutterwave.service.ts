@@ -102,15 +102,17 @@ export class FlutterwaveService {
       status?: string;
       from?: string;
       to?: string;
+      periode?: number;
     },
   ) {
-    const defaultDate = this.getDateRangeLastMonth();
+    console.log('params: ', query?.periode);
+    const defaultDate = this.getDateRangeLastMonth(query?.periode || 1);
 
     const params: any = {};
-    if (query?.page) params.page = query?.page;
+    params.page = query?.page || 1;
     if (query?.status) params.status = query?.status; //  successful | failed | pending
-    if (query?.from) params.from = query?.from || defaultDate.from;
-    if (query?.to) params.to = query?.to || defaultDate.to;
+    params.from = query?.from || defaultDate.from;
+    params.to = query?.to || defaultDate.to;
 
     let headers;
     if (countryWallet == 'CM') {
@@ -123,6 +125,7 @@ export class FlutterwaveService {
 
     const url = `${this.fwBaseUrlV3}/transactions`;
     const res = await firstValueFrom(this.http.get(url, { headers, params }));
+    console.log('res: ', res.data);
     return res.data;
   }
 
@@ -133,15 +136,16 @@ export class FlutterwaveService {
       status?: string;
       from?: string;
       to?: string;
+      periode?: number;
     },
   ) {
-    const defaultDate = this.getDateRangeLastMonth();
+    const defaultDate = this.getDateRangeLastMonth(query?.periode || 1);
 
     const params: any = {};
-    if (query?.page) params.page = query?.page;
+    params.page = query?.page || 1;
     if (query?.status) params.status = query?.status; // NEW | SUCCESSFUL | FAILED | PROCESSING
-    if (query?.from) params.from = query?.from || defaultDate.from;
-    if (query?.to) params.to = query?.to || defaultDate.to;
+    params.from = query?.from || defaultDate.from;
+    params.to = query?.to || defaultDate.to;
 
     let headers;
     if (countryWallet == 'CM') {
@@ -157,21 +161,22 @@ export class FlutterwaveService {
     return res.data;
   }
 
-  private getDateRangeLastMonth() {
+  private getDateRangeLastMonth(periode: number = 1) {
+    console.log('Periode: ', periode);
     const today = new Date();
 
-    // "to" = end of today
+    // "to" = aujourd’hui
     const to = new Date(today);
-    to.setHours(23, 59, 59, 999);
+    const toStr = to.toISOString().split('T')[0]; // "YYYY-MM-DD"
 
-    // "from" = start of last month
+    // "from" = aujourd’hui - 1 mois
     const from = new Date(today);
-    from.setMonth(from.getMonth() - 1);
-    from.setHours(0, 0, 0, 0);
+    from.setMonth(from.getMonth() - periode);
+    const fromStr = from.toISOString().split('T')[0]; // "YYYY-MM-DD"
 
     return {
-      from: from.toISOString(),
-      to: to.toISOString(),
+      from: fromStr,
+      to: toStr,
     };
   }
 

@@ -15,7 +15,9 @@ import { EmailService } from 'src/email/email.service';
 import { DateService } from 'src/email/date.service';
 // import { WhatsappService } from 'src/whatsapp/whatsapp.service';
 import { WhatsappQr, WhatsappQrSchema } from 'src/whatsapp/whatsapp-qr.schema';
-import { Mail, MailSchema } from 'src/email/mail.schema';
+import { Email, EmailSchema } from 'src/email/email.schema';
+import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
+import { SmtpService } from 'src/email/smtp/smtp.service';
 
 @Module({
   imports: [
@@ -33,9 +35,10 @@ import { Mail, MailSchema } from 'src/email/mail.schema';
     }),
     MongooseModule.forFeature([
       { name: 'User', schema: UserSchema },
-      { name: Mail.name, schema: MailSchema },
+      { name: Email.name, schema: EmailSchema },
       { name: WhatsappQr.name, schema: WhatsappQrSchema },
       { name: 'RevokedToken', schema: RevokedTokenSchema },
+      { name: Smtp.name, schema: SmtpSchema },
     ]),
   ],
   controllers: [AuthController],
@@ -44,6 +47,7 @@ import { Mail, MailSchema } from 'src/email/mail.schema';
     JwtStrategy,
     EmailService,
     DateService,
+    SmtpService,
     // WhatsappService,
   ],
   exports: [JwtStrategy, PassportModule],

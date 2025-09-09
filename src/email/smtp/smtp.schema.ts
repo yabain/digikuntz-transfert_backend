@@ -1,8 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, HydratedDocument } from 'mongoose';
 
+export type SmtpDocument = HydratedDocument<Smtp>;
 @Schema({ timestamps: true })
-export class Mail extends Document {
+export class Smtp extends Document {
   @Prop()
   smtpHost: string;
 
@@ -22,4 +23,4 @@ export class Mail extends Document {
   status: boolean; // True if linked sucsseful an false if connexion failed
 }
 
-export const MailSchema = SchemaFactory.createForClass(Mail);
+export const SmtpSchema = SchemaFactory.createForClass(Smtp);

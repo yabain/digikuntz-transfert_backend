@@ -1,4 +1,4 @@
-import { Module, Options } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { SubscriptionService } from './subscription.service';
 import { SubscriptionController } from './subscription.controller';
 import { AuthModule } from 'src/auth/auth.module';
@@ -13,7 +13,9 @@ import { ItemService } from '../item/item.service';
 import { EmailService } from 'src/email/email.service';
 import { DateService } from 'src/email/date.service';
 import { Plans, PlansSchema } from '../plans.schema';
-import { MailSchema, Mail } from 'src/email/mail.schema';
+import { EmailSchema, Email } from 'src/email/email.schema';
+import { SmtpService } from 'src/email/smtp/smtp.service';
+import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
 
 @Module({
   imports: [
@@ -24,7 +26,8 @@ import { MailSchema, Mail } from 'src/email/mail.schema';
       { name: Item.name, schema: ItemSchema },
       { name: Plans.name, schema: PlansSchema },
       { name: Subscription.name, schema: SubscriptionSchema },
-      { name: Mail.name, schema: MailSchema },
+      { name: Email.name, schema: EmailSchema },
+      { name: Smtp.name, schema: SmtpSchema },
     ]),
   ],
   providers: [
@@ -34,6 +37,7 @@ import { MailSchema, Mail } from 'src/email/mail.schema';
     ItemService,
     EmailService,
     DateService,
+    SmtpService,
   ],
   controllers: [SubscriptionController],
 })
