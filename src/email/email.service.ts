@@ -42,7 +42,6 @@ export class EmailService {
 
   async initializeTransporter() {
     const newMailSmtp = await this.getTransporterData();
-    console.log('newMailSmtp: ', newMailSmtp);
     this.transporter = nodemailer.createTransport({
       host: newMailSmtp.smtpHost,
       port: newMailSmtp.smtpPort,

@@ -26,6 +26,7 @@ import { PayinModule } from './payin/payin.module';
 import { PayoutModule } from './payout/payout.module';
 import { FlutterwaveModule } from './flutterwave/flutterwave.module';
 import { SmtpModule } from './email/smtp/smtp.module';
+import { WhatsappModule } from './whatsapp/whatsapp.module';
 
 @Module({
   imports: [
@@ -83,7 +84,7 @@ import { SmtpModule } from './email/smtp/smtp.module';
     PayoutModule,
     FlutterwaveModule,
     SmtpModule,
-    // WhatsappModule,
+    WhatsappModule,
   ],
   controllers: [AppController],
   providers: [AppService],

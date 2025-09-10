@@ -8,6 +8,7 @@ import {
   Body,
   Controller,
   Get,
+  ForbiddenException,
   NotFoundException,
   Post,
   Put,
@@ -38,8 +39,8 @@ export class WhatsappController {
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async initWhatsapp(@Req() req) {
-    if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+    if (!req.user?.isAdmin) {
+      throw new ForbiddenException('Unauthorized');
     }
     return this.whatsappService.initWhatsapp();
   }
@@ -51,8 +52,8 @@ export class WhatsappController {
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getQr(@Req() req): Promise<any> {
-    if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+    if (!req.user?.isAdmin) {
+      throw new ForbiddenException('Unauthorized');
     }
     const qr = await this.whatsappService.getCurrentQr();
     if (!qr) {
@@ -68,8 +69,8 @@ export class WhatsappController {
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getWhatsappClientStatus(@Req() req): Promise<any> {
-    if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+    if (!req.user?.isAdmin) {
+      throw new ForbiddenException('Unauthorized');
     }
     return this.whatsappService.getWhatsappClientStatus();
   }
@@ -81,14 +82,14 @@ export class WhatsappController {
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async refreshQr(@Req() req): Promise<any> {
-    if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+    if (!req.user?.isAdmin) {
+      throw new ForbiddenException('Unauthorized');
     }
     const qr = await this.whatsappService.refreshQr();
     if (!qr) {
       throw new NotFoundException('QR code not found');
     }
-    return { qr };
+    return qr;
   }
 
   @Post('send')
@@ -99,14 +100,14 @@ export class WhatsappController {
       example: {
         to: '+237690000000',
         message: 'Hello from API',
-        code: 'country-code',
+        code: '237',
       },
     },
   })
   @ApiResponse({ status: 201, description: 'Message sent.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async send(@Body() body: { to: string; message: string; code: string }) {
+  async send(@Body() body: { to: string; message: string; code?: string }) {
     return this.whatsappService.sendMessage(body.to, body.message, body.code);
   }
 
@@ -144,7 +145,7 @@ export class WhatsappController {
   @ApiBody({
     schema: {
       example: {
-        code: 'country-code',
+        code: '237',
         contact: '+237690000000',
       },
     },
@@ -156,8 +157,8 @@ export class WhatsappController {
     @Req() req,
     @Body() body: { code: string; contact: string },
   ): Promise<any> {
-    if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+    if (!req.user?.isAdmin) {
+      throw new ForbiddenException('Unauthorized');
     }
     return this.whatsappService.updateSystemContact(body);
   }
