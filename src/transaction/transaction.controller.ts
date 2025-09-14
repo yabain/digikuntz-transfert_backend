@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
 
 import {
   BadRequestException,
@@ -57,6 +56,36 @@ export class TransactionController {
       throw new NotFoundException('Unautorised');
     }
     return this.transactionService.findAll(query);
+  }
+
+  @Get('get-payout-list/:status')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get statistics about all plans (admin only)' })
+  @ApiResponse({ status: 200, description: 'Plans Statistics.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async getPayoutListByStatus(
+    @Param('status') status: string,
+    @Query() query: ExpressQuery,
+    @Req() req,
+  ): Promise<any> {
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unautorised');
+    }
+    return this.transactionService.getPayoutListByStatus(status, query);
+  }
+
+  @Get('get-statistics')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get statistics about all plans (admin only)' })
+  @ApiResponse({ status: 200, description: 'Plans Statistics.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async getTransactionsStatistics(@Req() req): Promise<any> {
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unautorised');
+    }
+    return this.transactionService.getTransactionsStatistics();
   }
 
   @Get(':id')

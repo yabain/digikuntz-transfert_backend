@@ -17,90 +17,94 @@ import {
 export class UpdateTransactionDto {
   @IsString()
   @IsEmpty()
-  readonly invoiceRef: string;
+  invoiceRef: string;
 
   @IsNumber()
   @IsOptional()
-  readonly payment: number;
+  payment: number;
 
   @IsString()
   @IsOptional()
-  readonly paymentMethod: string;
+  paymentMethod: string;
 
   @IsString()
   @IsOptional()
-  readonly paymentMethodNumber: string;
+  paymentMethodNumber: string;
 
   @IsString()
   @IsOptional()
-  readonly paymentWithTaxes: number; // as 'amount' in payment API req/re
+  transactionRef: string;
+
+  @IsString()
+  @IsOptional()
+  paymentWithTaxes: number; // as 'amount' in payment API req/re
 
   @IsEnum(TStatus, {
     message: 'Enter corect status',
   })
   @IsOptional()
-  readonly status: TStatus; // as 'state' in payment API res
+  status: TStatus; // as 'state' in payment API res
 
   @IsString()
   @IsOptional()
-  readonly taxes: number;
+  taxes: number;
 
   @IsNumber()
   @IsOptional()
-  readonly taxesAmount: number;
+  taxesAmount: number;
 
   @IsOptional()
-  readonly eventId: Event;
+  eventId: Event;
 
   @IsOptional()
   @IsEmpty({ message: 'You cannot pass user id' })
-  readonly userId: User;
+  userId: User;
 
   @IsEmail()
   @IsOptional()
-  readonly userEmail: string;
+  userEmail: string;
 
   @IsString()
   @IsOptional()
-  readonly userName: string;
+  userName: string;
 
   @IsString()
   @IsOptional()
-  readonly userPhone: string;
+  userPhone: string;
 
   @IsEnum(TransactionType, {
     message: 'Enter corect TransactionType',
   })
   @IsOptional()
-  readonly type: TransactionType;
+  transactionType: TransactionType;
 
   @IsEnum(Currency, {
     message: 'Enter corect Currency',
   })
   @IsOptional()
-  readonly moneyCode: Currency; // as 'moneyCode' in payment API req/res
+  moneyCode: Currency; // as 'moneyCode' in payment API req/res
 
   @IsOptional()
-  readonly titled: string; // as 'raison' in payment API req/res
+  titled: string; // as 'raison' in payment API req/res
 
   @IsEnum(PaymentMethode, {
     message: 'Enter corect PaymentMethode',
   })
   @IsOptional()
-  readonly paymentMode: PaymentMethode; // In payment API req/res
+  paymentMode: PaymentMethode; // In payment API req/res
 
   @IsOptional()
-  readonly token: string; // In payment API res
+  token: string; // In payment API res
 
   @IsOptional()
-  readonly ref: string; // In payment API res
+  ref: string; // In payment API res
 
   @IsOptional()
-  readonly reqStatusCode: number; // statusCode in payment API res
+  reqStatusCode: number; // statusCode in payment API res
 
   @IsOptional()
-  readonly reqErrorCode: number; // data.error in payment API res
+  reqErrorCode: number; // data.error in payment API res
 
   @IsOptional()
-  readonly message: string; // Deduced from the response code
+  message: string; // Deduced from the response code
 }

@@ -89,11 +89,15 @@ export class FlutterwaveController {
     return this.fw.getBanksList(countryCode);
   }
 
-  @Post('payout')
+  // init payout transaction
+  @Get('payout/:transactionId')
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  createPayout(@Body() dto: CreatePayoutDto) {
-    return this.fw.createPayout(dto);
+  createPayout(@Req() req, @Param('transactionId') transactionId) {
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unautorised');
+    }
+    return this.fw.createPayout(transactionId);
   }
 
   // Webhook: this route must be PUBLIC (override guard upstream if needed)

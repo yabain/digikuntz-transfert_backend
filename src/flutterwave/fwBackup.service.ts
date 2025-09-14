@@ -1,3 +1,7 @@
+/* 
+    Ceci est un backup du service flutterwave-node-v3 (External)
+*/
+/* eslint-disable @typescript-eslint/no-floating-promises */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable no-empty */
 /* eslint-disable @typescript-eslint/no-unused-vars */
@@ -25,7 +29,8 @@ import { CreatePayoutDto } from 'src/payout/payout.dto';
 import { PayinService } from 'src/payin/payin.service';
 import { TransactionService } from 'src/transaction/transaction.service';
 import { ExceptionsHandler } from '@nestjs/core/exceptions/exceptions-handler';
-import { Transaction, TStatus } from 'src/transaction/transaction.schema';
+import { TStatus } from 'src/transaction/transaction.schema';
+import * as Flutterwave from 'flutterwave-node-v3';
 
 @Injectable()
 export class FlutterwaveService {
@@ -38,6 +43,7 @@ export class FlutterwaveService {
   private fwBaseUrlV4 = 'https://api.flutterwave.cloud';
   private secretHash: any;
   private tStatus: any = TStatus;
+  private flw: Flutterwave;
 
   constructor(
     private readonly http: HttpService,
@@ -51,6 +57,7 @@ export class FlutterwaveService {
     this.fwPublic = this.config.get<string>('FLUTTERWAVE_PUBLIC_KEY');
     this.fwSecretNGN = this.config.get<string>('FLUTTERWAVE_SECRET_KEY_NGN');
     this.fwPublicNGN = this.config.get<string>('FLUTTERWAVE_PUBLIC_KEY_NGN');
+    this.flw = new Flutterwave(this.fwPublic, this.fwSecret);
   }
 
   // ---------- Helpers ----------
@@ -60,6 +67,55 @@ export class FlutterwaveService {
 
   private authHeaderNGN() {
     return { Authorization: `Bearer ${this.fwSecretNGN}` };
+  }
+
+  async initiatePayoutBankTransfer(transferDetails: {
+    account_bank: string;
+    account_number: string;
+    amount: number;
+    currency: string;
+    narration?: string;
+  }): Promise<any> {
+    const payload = {
+      ...transferDetails,
+      reference: `tx_ref_${Date.now()}`,
+    };
+
+    try {
+      const response = await this.flw.Transfer.initiate(payload);
+      return response;
+    } catch (error) {
+      console.error('Error during Flutterwave payout:', error.response.data);
+      throw error;
+    }
+  }
+
+  async initiatePayoutMobileMoneyPayout(payoutDetails: {
+    amount: number;
+    phone_number: string;
+    network: string;
+    currency: string;
+    narration?: string;
+  }): Promise<any> {
+    const payload = {
+      account_bank: payoutDetails.network,
+      account_number: payoutDetails.phone_number,
+      amount: payoutDetails.amount,
+      currency: payoutDetails.currency,
+      narration: payoutDetails.narration,
+      reference: `tx_ref_${Date.now()}`,
+    };
+
+    try {
+      const response = await this.flw.Transfer.initiate(payload);
+      return response;
+    } catch (error) {
+      console.error(
+        'Error during Flutterwave mobile money payout:',
+        error.response.data,
+      );
+      throw error;
+    }
   }
 
   // ---------- Balance ----------
@@ -183,13 +239,9 @@ export class FlutterwaveService {
   // ---------- Pay-In (Hosted Payment) ----------
   async createPayin(transactionData: any, userId) {
     transactionData.userId = userId;
-    const raw = {
-      ...transactionData,
-      userId,
-      transactionType: 'transfer',
-    };
+    console.log('Create Payin transactionData: ', transactionData);
     const savedTransaction =
-      await this.transactionService.createTransaction(raw);
+      await this.transactionService.createTransaction(transactionData);
     if (!savedTransaction) {
       throw new NotFoundException('Error to save transaction details');
     }
@@ -209,6 +261,7 @@ export class FlutterwaveService {
     // return this.payinService.verifyPayin(verifyPayin);
 
     const payin: any = await this.payinService.verifyPayin(txRef);
+    console.log('just verifyPayin:', payin);
     if (!payin) {
       throw new NotFoundException('Payin not found');
     }
@@ -393,94 +446,58 @@ export class FlutterwaveService {
 
   // ---------- Payouts ----------
 
-  async createPayout(transactionId: string) {
-    const transaction = await this.transactionService.findById(transactionId);
-    if (!transaction || transaction.status !== TStatus.PAYINSUCCESS) {
-      throw new NotFoundException('Transaction not found or not payin success');
-    }
-
-    const payloadPayout = {
-      accountBankCode: transaction.bankCode,
-      accountNumber: transaction.bankAccountNumber,
-      amount: transaction.receiverAmount,
-      destinationCurrency: transaction.receiverCurrency,
-      sourceCurrency: transaction.receiverCurrency,
-      reference: transaction._id,
-      narration: 'Paiement Orange Money CM',
-      type: 'mobile_money',
-    };
-
-    console.log('Payout creation: ', payloadPayout);
-    //     {
-    //   "accountBankCode": "MTN",
-    //   "accountNumber": "237672764405",
-    //   "amount": 100,
-    //   "destinationCurrency": "XAF",
-    //   "sourceCurrency": "XAF",
-    //   "reference": "payout_ref_test105",
-    //   "narration": "Paiement Orange Money CM",
-    //   "type": "mobile_money"
-    // }
-    const countryCode = this.toIso2(payloadPayout.destinationCurrency);
-    let headers: any;
-    if (countryCode == 'CM') {
-      headers = this.authHeader();
-    } else if (countryCode == 'NG') {
-      headers = this.authHeaderNGN();
-    } else {
-      // for coming FW accounts
-      headers = this.authHeader();
-    }
+  async createPayout(dto: CreatePayoutDto) {
+    console.log('Payout creation: ', dto);
     try {
+      // const payload = {
+      //   account_bank: dto.accountBankCode, // banque ou opérateur MoMo
+      //   account_number: dto.accountNumber, // N° compte ou MSISDN
+      //   amount: dto.amount,
+      //   currency: dto.destinationCurrency,
+      //   reference: dto.reference,
+      //   narration: (dto.narration ?? 'Payout').substring(0, 100),
+      //   debit_currency: dto.sourceCurrency,
+      // };
       const payload = {
-        account_bank: payloadPayout.accountBankCode, // banque ou opérateur MoMo
-        account_number: payloadPayout.accountNumber, // N° compte ou MSISDN
-        amount: payloadPayout.amount,
-        currency: payloadPayout.destinationCurrency,
-        reference: payloadPayout.reference,
-        narration: payloadPayout.narration,
-        debit_currency: payloadPayout.sourceCurrency,
-        beneficiary_name: 'Flambel SANOU',
-        meta: [
-          {
-            beneficiary_country: countryCode,
-            sender: transaction.countryCode,
-            sender_address: transaction.senderCountry,
-            sender_country: payloadPayout.sourceCurrency,
-            sender_mobile_number: '+' + transaction.senderContact,
-          },
-        ],
+        account_bank: 'ORANGE',
+        account_number: '237691224472',
+        amount: 1500,
+        currency: 'XAF',
+        debit_currency: 'XAF',
+        reference: 'test_payout_ref_001',
+        narration: 'Décaissement OM Cameroun',
       };
+      const res = await this.initiatePayoutMobileMoneyPayout({
+        amount: 100,
+        phone_number: '237691224472',
+        network: 'ORANGE',
+        narration: 'Décaissement OM Cameroun',
+        currency: 'XAF',
+      });
 
-      const res = await firstValueFrom(
-        this.http.post(`${this.fwBaseUrlV3}/transfers`, payload, {
-          headers,
-        }),
-      );
+      // const res = await firstValueFrom(
+      //   this.http.post(`${this.fwBaseUrlV3}/transfers`, payload, {
+      //     headers: this.authHeader(),
+      //   }),
+      // );
 
       console.log('res of fw: ', res);
 
       const status = this.normalizeStatus(res.data?.data?.status);
 
       const doc = await this.payoutModel.create({
-        reference: payloadPayout.reference,
-        transactionId: transaction._id,
-        type: payloadPayout.type, // 'bank' | 'mobile_money' | 'wallet'
-        amount: payloadPayout.amount,
-        sourceCurrency: payloadPayout.sourceCurrency,
-        destinationCurrency: payloadPayout.destinationCurrency,
-        accountBankCode: payloadPayout.accountBankCode,
-        accountNumber: payloadPayout.accountNumber,
+        reference: dto.reference,
+        type: dto.type, // 'bank' | 'mobile_money' | 'wallet'
+        amount: dto.amount,
+        sourceCurrency: dto.sourceCurrency,
+        destinationCurrency: dto.destinationCurrency,
+        accountBankCode: dto.accountBankCode,
+        accountNumber: dto.accountNumber,
         status,
         raw: res.data,
       });
 
-      const resp = { api: 'v3', ...res.data, saved: doc };
-      const update = await this.transactionService.updateTransactionStatus(
-        transactionId,
-        TStatus.PAYOUTPENDING,
-      );
-      return update;
+      return { api: 'v3', ...res.data, saved: doc };
     } catch (err) {
       if (err.response) {
         console.error('FW Error:', err.response.data);
@@ -563,11 +580,7 @@ export class FlutterwaveService {
     // alpha-3 courants -> alpha-2
     const a3: Record<string, string> = {
       CMR: 'CM',
-      XAF: 'CM',
-      Cameroon: 'CM',
       NGA: 'NG',
-      NGN: 'NG',
-      Nigeria: 'NG',
       GHA: 'GH',
       KEN: 'KE',
       RWA: 'RW',

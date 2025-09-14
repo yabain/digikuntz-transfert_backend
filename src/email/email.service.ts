@@ -63,7 +63,7 @@ export class EmailService {
   }
 
   async getOutputMails(query: Query): Promise<any[]> {
-    const resPerPage = 20;
+    const resPerPage = 50;
     const currentPage = Number(query.page) || 1;
     const skip = resPerPage * (currentPage - 1);
 

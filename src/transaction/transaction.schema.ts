@@ -7,7 +7,8 @@ export enum TransactionType {
   WITHDRAWAL = 'withdrawal',
   PAYMENT = 'payment',
   TRANSFER = 'transfer',
-  FUNDRAISING = 'FUNDRAISING',
+  SUBSCRIPTION = 'subscription',
+  FUNDRAISING = 'fundraising',
 }
 
 export enum Currency {
@@ -28,13 +29,14 @@ export enum TStatus {
   PAYOUTSUCCESS = 'transaction_payout_success',
   PAYOUTERROR = 'transaction_payout_error',
   PAYOUTCLOSED = 'transaction_payout_closed',
+  PAYOUTREJECTED = 'transaction_payout_rejected',
 
   ERROR = 'transaction_error',
   SUCCESS = 'transaction_success',
 }
 
 export enum PaymentMethode {
-  OM = 'ORANGE',
+  OM = 'ORANGEMONEY',
   MTN = 'MTN',
   PAYPAL = 'PAYPAL',
   VISA = 'VISA',
@@ -47,50 +49,73 @@ export enum PaymentMethode {
 export class Transaction {
   @Prop()
   bankAccountNumber: string;
+
   @Prop()
   bankCode: string;
+
   @Prop()
   estimation: string;
+
   @Prop()
   transactionRef: string;
+
   @Prop()
   invoiceTaxes: string;
+
   @Prop()
   paymentMethod: string;
+
   @Prop()
   paymentStatus: string;
+
   @Prop()
   paymentWithTaxes: string;
+
   @Prop()
   raisonForTransfer: string;
+
   @Prop()
   receiverAddress: string;
+
   @Prop()
   receiverAmount: string;
+
   @Prop()
   receiverContact: string;
+
   @Prop()
   receiverCountry: string;
+
   @Prop()
   receiverCurrency: string;
+
   @Prop()
   receiverEmail: string;
+
   @Prop()
   receiverMobileAccountNumber: string;
+
   @Prop()
   receiverName: string;
+
   @Prop()
   senderContact: string;
+
   @Prop()
   senderCountry: string;
+
   @Prop()
   senderCurrency: string;
+
   @Prop()
   senderEmail: string;
+
   @Prop()
   senderId: string;
+
   @Prop()
   senderName: string;
+
   @Prop()
   taxesAmount: string;
 
@@ -104,7 +129,7 @@ export class Transaction {
   userId: User;
 
   @Prop()
-  type: TransactionType;
+  transactionType: TransactionType;
 
   @Prop()
   paymentMode: PaymentMethode; // In payment API req/res

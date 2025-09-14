@@ -48,10 +48,55 @@ export class TransactionService {
         }
       : {};
     const transactions = await this.transactionModel
-      .find({ ...keyword, type: 'public' })
+      .find({ ...keyword })
       .limit(resPerPage)
       .skip(skip);
     return transactions;
+  }
+  async getPayoutListByStatus(status, query?): Promise<any> {
+    console.log('status: ', status);
+    const resPerPage = 10;
+    const currentPage = Number(query?.page) || 1;
+    const skip = resPerPage * (currentPage - 1);
+
+    let res: any;
+    if (status == 'rejected') {
+      res = await this.transactionModel.aggregate([
+        {
+          $match: {
+            status: 'transaction_payin_rejected',
+            transactionType: { $in: ['transfer', 'withdrawal'] },
+          },
+        },
+        { $skip: skip },
+        { $limit: resPerPage },
+      ]);
+    } else if (status == 'accepted') {
+      res = await this.transactionModel.aggregate([
+        {
+          $match: {
+            status: 'transaction_payout_success',
+            transactionType: { $in: ['transfer', 'withdrawal'] },
+          },
+        },
+        { $skip: skip },
+        { $limit: resPerPage },
+      ]);
+    } else {
+      res = await this.transactionModel.aggregate([
+        {
+          $match: {
+            status: 'transaction_payin_success',
+            transactionType: { $in: ['transfer', 'withdrawal'] },
+          },
+        },
+        { $skip: skip },
+        { $limit: resPerPage },
+      ]);
+    }
+    console.log('result of ' + status, res.length);
+
+    return res;
   }
 
   async findById(transactionId: string): Promise<any> {
@@ -70,6 +115,88 @@ export class TransactionService {
     transaction.userId.password = ''; // Remove the password from the response for security
 
     return transaction;
+  }
+
+  async getTransactionsStatistics(): Promise<any> {
+    const totalTransferTransaction = await this.transactionModel.countDocuments(
+      {
+        transactionType: 'transfer',
+      },
+    );
+
+    const totalWithdrawalTransaction =
+      await this.transactionModel.countDocuments({
+        transactionType: 'withdrawal',
+      });
+
+    const pendingTransferTransaction =
+      await this.transactionModel.countDocuments({
+        status: 'transaction_payin_success',
+        transactionType: 'transfer',
+      });
+
+    const pendingWithdrawalTransaction =
+      await this.transactionModel.countDocuments({
+        status: 'transaction_payin_success',
+        transactionType: 'withdrawal',
+      });
+
+    // const errorTransferTransaction = await this.transactionModel.countDocuments(
+    //   {
+    //     status: 'transaction_payin_error',
+    //     transactionType: 'transfer',
+    //   },
+    // );
+
+    // const errorWithdrawalTransaction =
+    //   await this.transactionModel.countDocuments({
+    //     status: 'transaction_payin_error',
+    //     transactionType: 'withdrawal',
+    //   });
+
+    const rejectedTransferTransaction =
+      await this.transactionModel.countDocuments({
+        status: 'transaction_payin_rejected',
+        transactionType: 'transfer',
+      });
+
+    const rejectedWithdrawalTransaction =
+      await this.transactionModel.countDocuments({
+        status: 'transaction_payin_rejected',
+        transactionType: 'withdrawal',
+      });
+
+    const endedTransferTransaction = await this.transactionModel.countDocuments(
+      {
+        status: 'transaction_payout_success',
+        transactionType: 'transfer',
+      },
+    );
+
+    const endedWithdrawalTransaction =
+      await this.transactionModel.countDocuments({
+        status: 'transaction_payout_success',
+        transactionType: 'withdrawal',
+      });
+
+    const totalTransaction =
+      totalTransferTransaction + totalWithdrawalTransaction;
+
+    const rejectedTransaction =
+      rejectedTransferTransaction + rejectedWithdrawalTransaction;
+
+    const pendingTransaction =
+      pendingTransferTransaction + pendingWithdrawalTransaction;
+
+    const endedTransaction =
+      endedTransferTransaction + endedWithdrawalTransaction;
+
+    return {
+      totalTransaction,
+      rejectedTransaction,
+      pendingTransaction,
+      endedTransaction,
+    };
   }
 
   async getTransactionsListOfUser(

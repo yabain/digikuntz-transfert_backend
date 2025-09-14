@@ -30,22 +30,4 @@ export class CreatePayoutDto {
   @IsOptional()
   @IsString()
   accountNumber?: string;
-
-  // MOBILE MONEY
-  @IsOptional()
-  @IsString()
-  mmCountry?: string; // e.g. CM
-
-  @IsOptional()
-  @IsIn(['MTN', 'ORANGE', 'AIRTEL', 'VODAFONE'])
-  mmProvider?: string;
-
-  @IsOptional()
-  @IsString()
-  msisdn?: string; // msisdn in intl format
-
-  // WALLET
-  @IsOptional()
-  @IsString()
-  walletIdentifier?: string; // recipient merchant id/email}
 }
