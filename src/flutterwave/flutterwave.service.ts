@@ -391,6 +391,7 @@ export class FlutterwaveService {
     };
   }
 
+
   // ---------- Payouts ----------
 
   async createPayout(transactionId: string) {
@@ -421,8 +422,10 @@ export class FlutterwaveService {
     //   "narration": "Paiement Orange Money CM",
     //   "type": "mobile_money"
     // }
+
     const countryCode = this.toIso2(payloadPayout.destinationCurrency);
     let headers: any;
+
     if (countryCode == 'CM') {
       headers = this.authHeader();
     } else if (countryCode == 'NG') {
