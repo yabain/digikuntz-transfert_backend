@@ -391,7 +391,6 @@ export class FlutterwaveService {
     };
   }
 
-
   // ---------- Payouts ----------
 
   async createPayout(transactionId: string) {

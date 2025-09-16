@@ -18,6 +18,15 @@ async function bootstrap() {
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
+  // --- Handlers globaux pour éviter que le backend tombe ---
+  process.on('uncaughtException', (err) => {
+    console.error('🚨 Uncaught Exception:', err);
+  });
+
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('🚨 Unhandled Rejection at:', promise, 'reason:', reason);
+  });
+
   // Middleware de logging (optionnel)
   app.use((req, res, next) => {
     // console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);

@@ -109,6 +109,7 @@ export class WhatsappService implements OnModuleInit {
     this.frontUrl =
       this.configService.get<string>('FRONT_URL') ||
       'https://payments.digikuntz.com';
+    this.getSmtpData();
   }
 
   async getSmtpData() {
@@ -258,40 +259,37 @@ export class WhatsappService implements OnModuleInit {
     );
 
     // 1) Résoudre l'ID WhatsApp (vérifie aussi que le numéro est réellement sur WhatsApp)
-    const wid = await this.client.getNumberId(phoneDigits); // retourne { _serialized: 'XXXXXXXXXX@c.us', ... } ou null
-    if (!wid) {
-      this.currentFailNumber++;
-      return {
-        success: false,
-        error: 'Recipient is not a WhatsApp account',
-        estimatedDelivery: 'retry',
-      };
-    }
-
-    // 2) Envoyer en utilisant l’ID sérialisé officiel
     try {
+      const wid = await this.client.getNumberId(phoneDigits);
+      if (!wid) {
+        return {
+          success: false,
+          error: 'Recipient is not a WhatsApp account',
+          estimatedDelivery: 'retry',
+        };
+      }
+
       await this.client.sendMessage(wid._serialized, message);
-      this.logger.log(`Message sent → ${wid._serialized}`);
       return { success: true, estimatedDelivery: 'immediate' };
     } catch (err: any) {
       // Petit retry si l’injection n’est pas tout à fait prête
       const msg = String(err?.message ?? err);
-      if (msg.includes('getChat') || msg.includes('Evaluation failed')) {
-        await new Promise((res) => setTimeout(res, 1200));
-        try {
-          await this.client.sendMessage(wid._serialized, message);
-          this.logger.log(`Message sent on retry → ${wid._serialized}`);
-          return { success: true, estimatedDelivery: 'immediate' };
-        } catch (err2: any) {
-          this.currentFailNumber++;
-          await this.checkForMassFailure();
-          return {
-            success: false,
-            error: String(err2?.message ?? err2),
-            estimatedDelivery: 'retry',
-          };
-        }
-      }
+      // if (msg.includes('getChat') || msg.includes('Evaluation failed')) {
+      //   await new Promise((res) => setTimeout(res, 1200));
+      //   try {
+      //     await this.client.sendMessage(wid._serialized, message);
+      //     this.logger.log(`Message sent on retry → ${wid._serialized}`);
+      //     return { success: true, estimatedDelivery: 'immediate' };
+      //   } catch (err2: any) {
+      //     this.currentFailNumber++;
+      //     await this.checkForMassFailure();
+      //     return {
+      //       success: false,
+      //       error: String(err2?.message ?? err2),
+      //       estimatedDelivery: 'retry',
+      //     };
+      //   }
+      // }
 
       this.currentFailNumber++;
       await this.checkForMassFailure();
@@ -384,7 +382,6 @@ export class WhatsappService implements OnModuleInit {
   }
 
   private async markReadyAndClearQr(message: string) {
-    this.isReady = true;
     this.needToScan = false;
     this.reconnectAttempts = 0;
 
@@ -397,12 +394,15 @@ export class WhatsappService implements OnModuleInit {
     // ping “service ready” si tu veux garder le comportement
     const phoneToPing = this.memoryQr.phone || '91224472';
     const code = this.memoryQr.code || '237';
-    await this.sendMessage(
-      phoneToPing,
-      '✅ ✅ *WhatsApp Service is ready*',
-      code,
-    );
-    await this.sendWhatsappConnectedNotification();
+    if (!this.isReady) {
+      await this.sendMessage(
+        phoneToPing,
+        '✅ ✅ *WhatsApp Service is ready*',
+        code,
+      );
+      await this.sendWhatsappConnectedNotification();
+    }
+    this.isReady = true;
   }
 
   private async clearQrAndMarkReady(message: string) {
