@@ -63,7 +63,7 @@ export class EmailService {
   }
 
   async getOutputMails(query: Query): Promise<any[]> {
-    const resPerPage = 50;
+    const resPerPage = 10;
     const currentPage = Number(query.page) || 1;
     const skip = resPerPage * (currentPage - 1);
 
@@ -71,9 +71,8 @@ export class EmailService {
     const keyword = query.keyword
       ? {
           $or: [
-            { name: { $regex: query.keyword, $options: 'i' } },
-            { firstName: { $regex: query.keyword, $options: 'i' } },
-            { lastName: { $regex: query.keyword, $options: 'i' } },
+            { to: { $regex: query.keyword, $options: 'i' } },
+            { subject: { $regex: query.keyword, $options: 'i' } },
           ],
         }
       : {};
@@ -332,12 +331,12 @@ export class EmailService {
   }
 
   async findAllEmail(query): Promise<any[]> {
-    const resPerPage = 10000;
+    const resPerPage = 10;
     const currentPage = Number(query.page) || 1;
     const skip = resPerPage * (currentPage - 1);
     const keyword = query.keyword
       ? {
-          name: {
+          to: {
             $regex: query.keyword,
             $options: 'i',
           },
