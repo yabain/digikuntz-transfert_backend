@@ -47,8 +47,8 @@ export class FlutterwaveService {
     private transactionService: TransactionService,
   ) {
     this.secretHash = this.config.get<string>('FLUTTERWAVE_SECRET_HASH');
-    this.fwSecret = this.config.get<string>('FLUTTERWAVE_SECRET_KEY');
-    this.fwPublic = this.config.get<string>('FLUTTERWAVE_PUBLIC_KEY');
+    this.fwSecret = this.config.get<string>('FLUTTERWAVE_SECRET_KEY_CMR2');
+    this.fwPublic = this.config.get<string>('FLUTTERWAVE_PUBLIC_KEY_CMR2');
     this.fwSecretNGN = this.config.get<string>('FLUTTERWAVE_SECRET_KEY_NGN');
     this.fwPublicNGN = this.config.get<string>('FLUTTERWAVE_PUBLIC_KEY_NGN');
   }
