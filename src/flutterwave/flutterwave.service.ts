@@ -47,8 +47,8 @@ export class FlutterwaveService {
     private transactionService: TransactionService,
   ) {
     this.secretHash = this.config.get<string>('FLUTTERWAVE_SECRET_HASH');
-    this.fwSecret = this.config.get<string>('FLUTTERWAVE_SECRET_KEY_CMR2');
-    this.fwPublic = this.config.get<string>('FLUTTERWAVE_PUBLIC_KEY_CMR2');
+    this.fwSecret = this.config.get<string>('FLUTTERWAVE_SECRET_KEY');
+    this.fwPublic = this.config.get<string>('FLUTTERWAVE_PUBLIC_KEY');
     this.fwSecretNGN = this.config.get<string>('FLUTTERWAVE_SECRET_KEY_NGN');
     this.fwPublicNGN = this.config.get<string>('FLUTTERWAVE_PUBLIC_KEY_NGN');
   }
@@ -406,8 +406,8 @@ export class FlutterwaveService {
       destinationCurrency: transaction.receiverCurrency,
       sourceCurrency: transaction.receiverCurrency,
       reference: transaction._id,
-      narration: 'Paiement Orange Money CM',
-      type: 'mobile_money',
+      narration: transaction.raisonForTransfer,
+      type: this.getreceiverAccountType(transaction), // 'bank' | 'mobile_money' | 'wallet'
     };
 
     console.log('Payout creation: ', payloadPayout);
@@ -435,24 +435,26 @@ export class FlutterwaveService {
     }
     try {
       const payload = {
-        account_bank: payloadPayout.accountBankCode, // banque ou opérateur MoMo
-        account_number: payloadPayout.accountNumber, // N° compte ou MSISDN
+        account_bank: payloadPayout.accountBankCode, // bank or MoMo operator
+        account_number: payloadPayout.accountNumber, // account number or MSISDN
         amount: payloadPayout.amount,
         currency: payloadPayout.destinationCurrency,
         reference: payloadPayout.reference,
         narration: payloadPayout.narration,
         debit_currency: payloadPayout.sourceCurrency,
-        beneficiary_name: 'Flambel SANOU',
+        beneficiary_name: transaction.receiverName,
         meta: [
           {
-            beneficiary_country: countryCode,
-            sender: transaction.countryCode,
+            beneficiary_country: transaction.receiverCountry,
+            sender: transaction.senderName,
             sender_address: transaction.senderCountry,
-            sender_country: payloadPayout.sourceCurrency,
-            sender_mobile_number: '+' + transaction.senderContact,
+            sender_country: transaction.senderCountry,
+            sender_mobile_number: transaction.senderContact,
           },
         ],
       };
+
+      console.log('payload for sending: ', payload);
 
       const res = await firstValueFrom(
         this.http.post(`${this.fwBaseUrlV3}/transfers`, payload, {
@@ -491,6 +493,16 @@ export class FlutterwaveService {
       }
       throw err;
     }
+  }
+
+  getreceiverAccountType(transaction) {
+    if (
+      transaction.paymentMethod === 'OM' ||
+      transaction.paymentMethod === 'MTN'
+    )
+      return 'mobile_money';
+    else if (transaction.paymentMethod === 'BANK') return 'bank';
+    else return 'wallet';
   }
 
   async verifyPayout(reference: string) {
