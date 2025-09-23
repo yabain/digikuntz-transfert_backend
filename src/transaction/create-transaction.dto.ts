@@ -46,6 +46,9 @@ export class CreateTransactionDto {
   @IsNotEmpty()
   taxes: number;
 
+  @IsNotEmpty()
+  receiverCountryCode: string;
+
   @IsNumber()
   @IsNotEmpty()
   taxesAmount: number;

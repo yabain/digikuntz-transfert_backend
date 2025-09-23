@@ -445,7 +445,7 @@ export class FlutterwaveService {
         beneficiary_name: transaction.receiverName,
         meta: [
           {
-            beneficiary_country: transaction.receiverCountry,
+            beneficiary_country: this.toIso2(transaction.receiverCountryCode),
             sender: transaction.senderName,
             sender_address: transaction.senderCountry,
             sender_country: transaction.senderCountry,

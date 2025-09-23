@@ -82,6 +82,27 @@ export class TransactionService {
         { $skip: skip },
         { $limit: resPerPage },
       ]);
+    } else if (status == 'pending') {
+      res = await this.transactionModel.aggregate([
+        {
+          $match: {
+            $and: [
+              {
+                status: {
+                  $in: [
+                    'transaction_payin_success',
+                    'transaction_payout_pending',
+                    'transaction_payout_error',
+                  ],
+                },
+              },
+              { transactionType: { $in: ['transfer', 'withdrawal'] } },
+            ],
+          },
+        },
+        { $skip: skip },
+        { $limit: resPerPage },
+      ]);
     } else {
       res = await this.transactionModel.aggregate([
         {

@@ -81,7 +81,7 @@ export class Transaction {
   receiverAmount: string;
 
   @Prop()
-  receiverAccountType: string;
+  receiverCountryCode: string;
 
   @Prop()
   receiverContact: string;
