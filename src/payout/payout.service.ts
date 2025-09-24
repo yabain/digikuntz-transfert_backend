@@ -55,14 +55,21 @@ export class PayoutService {
    * Normalisation des statuts V3
    */
   private normalizeStatus(status: string): string {
-    const map: Record<string, string> = {
-      NEW: 'PROCESSING',
-      PENDING: 'PROCESSING',
-      QUEUED: 'PROCESSING',
-      SUCCESSFUL: 'SUCCESSFUL',
-      FAILED: 'FAILED',
-    };
-    return map[status] || 'UNKNOWN';
+    // const map: Record<string, string> = {
+    //   NEW: 'PROCESSING',
+    //   PENDING: 'PROCESSING',
+    //   QUEUED: 'PROCESSING',
+    //   SUCCESSFUL: 'SUCCESSFUL',
+    //   FAILED: 'FAILED',
+    // };
+    // return map[status] || 'UNKNOWN';
+    if (status === 'SUCCESSFUL') {
+      return PayoutStatus.SUCCESSFUL;
+    }
+    if (status === 'FAILED') {
+      return PayoutStatus.FAILED;
+    }
+    return PayoutStatus.PROCESSING;
   }
 
   async getPayout(reference: string) {
@@ -127,8 +134,82 @@ export class PayoutService {
       .exec();
   }
 
+  async retryPayout(reference: string) {
+    // 1) Fetch existing payout and validate state
+    const existing = await this.payoutModel.findOne({ reference }).lean().exec();
+    if (!existing) {
+      throw new NotFoundException('Payout not found for this reference');
+    }
+    if (existing.status !== PayoutStatus.FAILED) {
+      throw new HttpException(
+        { message: 'Only FAILED payouts can be retried' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // 2) Load related transaction to enrich FW payload
+    if (!existing.transactionId) {
+      throw new NotFoundException('Linked transaction not found');
+    }
+    const transactionIdStr = existing.transactionId.toString();
+    const transaction = await this.transactionService.findById(transactionIdStr);
+
+    // 3) Build new reference and payloads
+    const newReference = `${reference}-retry-${Date.now()}`;
+    const payloadPayout = {
+      reference: newReference,
+      transactionId: existing.transactionId,
+      userId: existing.userId,
+      type: existing.type,
+      amount: existing.amount,
+      sourceCurrency: existing.sourceCurrency,
+      destinationCurrency: existing.destinationCurrency,
+      accountBankCode: existing.accountBankCode,
+      accountNumber: existing.accountNumber,
+      narration: existing.narration ?? 'Payout retry',
+    };
+
+    const fwPayload: any = {
+      account_bank: payloadPayout.accountBankCode,
+      account_number: payloadPayout.accountNumber,
+      amount: payloadPayout.amount,
+      currency: payloadPayout.destinationCurrency,
+      reference: payloadPayout.reference,
+      narration: payloadPayout.narration,
+      debit_currency: payloadPayout.sourceCurrency,
+      beneficiary_name: transaction?.receiverName,
+      meta: [
+        {
+          beneficiary_country: transaction?.receiverCountryCode,
+          sender: transaction?.senderName,
+          sender_address: transaction?.senderCountry,
+          sender_country: transaction?.senderCountry,
+          sender_mobile_number: transaction?.senderContact,
+        },
+      ],
+    };
+
+    // 4) Call Flutterwave transfers endpoint
+    const url = `${this.fwBaseUrlV3}/transfers`;
+    const res: any = await this.http
+      .post(url, fwPayload, {
+        headers: { Authorization: `Bearer ${this.fwSecret}` },
+      })
+      .toPromise();
+
+    // 5) Save new payout record and update transaction status
+    const saved = await this.createPayout(payloadPayout, res);
+    await this.transactionService.updateTransactionStatus(
+      transactionIdStr,
+      TStatus.PAYOUTPENDING,
+    );
+
+    return { reference: newReference, saved, fw: res?.data };
+  }
+
   async verifyPayout(reference: string) {
     const oldStatus = await this.getPayoutStatus(reference);
+    console.log('oldStatus: ', oldStatus);
     if (!oldStatus)
       throw new NotFoundException('Payout not found for this reference');
     const url = `${this.fwBaseUrlV3}/transfers?reference=${reference}`;
@@ -140,6 +221,7 @@ export class PayoutService {
 
     if (res.data && res.data.data && res.data.data.length > 0) {
       const payout = res.data.data[0];
+      console.log('payout', payout);
       if (oldStatus !== payout.status) {
         await this.updatePayout(payout);
         if (payout.status === 'SUCCESSFUL') {
@@ -148,6 +230,7 @@ export class PayoutService {
               reference,
               TStatus.PAYOUTSUCCESS,
             );
+            console.log('transaction SUCCESSFUL', transaction);
           // send Email payment success
           // Send Whatsapp
         }
@@ -158,8 +241,9 @@ export class PayoutService {
               TStatus.PAYOUTERROR,
               payout
             );
-          // send Email payment success
-          // Send Whatsapp
+            console.log('transaction FAILED', transaction);
+          // send Email payment failed to admin
+          // Send Whatsapp to admin
         }
       }
       return payout;
