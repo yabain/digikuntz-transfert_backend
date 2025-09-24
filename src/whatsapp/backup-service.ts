@@ -102,7 +102,7 @@ export class WhatsappService implements OnModuleInit {
   /** Frontend URL for messages */
   private frontUrl: any = '';
 
-  private alertEmail: string = 'support@yabi.cm';
+  private alertEmail: string = 'support@digikuntz.com';
 
   /**
    * Creates a new WhatsApp service instance

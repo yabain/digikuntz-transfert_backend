@@ -17,7 +17,7 @@ export class PayinCron {
     private fw: FlutterwaveService,
   ) {}
 
-  @Cron(CronExpression.EVERY_MINUTE) // ou EVERY_5_MINUTES
+  @Cron(CronExpression.EVERY_MINUTE) // ou EVERY_MINUTES
   async handleCron() {
     this.logger.debug('Cron check pending Payin');
     const pendings: any = await this.payinService.findPending(1000);

@@ -9,7 +9,7 @@ pipeline {
   stages {
     stage('Build') {
       steps {
-        sh 'docker build -t yabain/yabi-backend .'
+        sh 'docker build -t yabain/digikuntz-payment-backend .'
       }
     }
     stage('Login') {
@@ -19,7 +19,7 @@ pipeline {
     }
     stage('Push') {
       steps {
-        sh 'docker push yabain/yabi-backend'
+        sh 'docker push yabain/digikuntz-payment-backend'
       }
     }
   }

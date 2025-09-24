@@ -50,8 +50,7 @@ export class AuthService {
         datas.email === 'flambel55@gmail.com' ||
         datas.email === 'f.sanou@yaba-in.com' ||
         datas.email === 'contact@yaba-in.com' ||
-        datas.email === 'admin@yabi.cm' ||
-        datas.email === 'contact@yabi.cm'
+        datas.email === 'choudja@gic.cm'
       ) {
         datas = Object.assign(datas, {
           verified: true,

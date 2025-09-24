@@ -194,9 +194,9 @@ export class WhatsappService implements OnModuleInit {
       });
 
       this.setupEventHandlers();
-      await this.client.initialize();
 
       try {
+        await this.client.initialize();
         const state = await (this.client as any).getState?.();
         this.logger.log(`Initial WA state: ${state ?? 'UNKNOWN'}`);
       } catch {

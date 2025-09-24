@@ -28,7 +28,7 @@ export const multerConfig = {
 };
 
 export const generateFileUrl = (filename: string): string => {
-  const baseUrl = process.env.BACK_URL || 'https://app.yabi.cm';
+  const baseUrl = process.env.BACK_URL || 'https://app.digikuntz.com';
   return `${baseUrl}/uploads/${filename}`;
 };
 

@@ -292,7 +292,7 @@ export class EmailService {
         location: event.eventData.location,
         url: `${this.configService.get<string>('FRONT_URL')}/tabs/events/${event.eventData._id}_shared`,
         organizer: {
-          name: 'Yabi Events',
+          name: 'Digikuntz Payment',
           email: this.configService.get<string>('SMTP_USER'),
         },
       };
@@ -302,7 +302,7 @@ export class EmailService {
           reject(error);
         } else {
           resolve({
-            filename: 'YabiEvents.ics',
+            filename: 'digikuntz-payment.ics',
             content: Buffer.from(value),
           });
         }

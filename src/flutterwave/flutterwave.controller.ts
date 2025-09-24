@@ -17,7 +17,6 @@ import {
   Param,
 } from '@nestjs/common';
 import { FlutterwaveService } from './flutterwave.service';
-import { CreatePayoutDto } from 'src/payout/payout.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { Query as ExpressQuery } from 'express-serve-static-core';
 
@@ -97,7 +96,7 @@ export class FlutterwaveController {
     if (!req.user.isAdmin) {
       throw new NotFoundException('Unautorised');
     }
-    return this.fw.createPayout(transactionId);
+    return this.fw.createPayout(transactionId, req.user._id);
   }
 
   // Webhook: this route must be PUBLIC (override guard upstream if needed)
@@ -113,6 +112,12 @@ export class FlutterwaveController {
   verifyAndClosePayin(@Param('id') txRef: string, @Req() req) {
     console.log('verifyAndClosePayin tx: ', txRef, req.user._id);
     return this.fw.verifyAndClosePayin(txRef, req.user._id);
+  }
+
+  @Get('verify-payout/:id')
+  verifyPayout(@Param('id') reference: string) {
+    console.log('verifyPayout tx: ', reference);
+    return this.fw.verifyPayout(reference);
   }
 
   @Get('open-payin/:id')

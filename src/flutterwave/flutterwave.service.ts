@@ -23,6 +23,7 @@ import { CreatePayinDto, VerifyPayinDto } from 'src/payin/payin.dto';
 import { Payout, PayoutDocument } from 'src/payout/payout.schema';
 import { CreatePayoutDto } from 'src/payout/payout.dto';
 import { PayinService } from 'src/payin/payin.service';
+import { PayoutService } from 'src/payout/payout.service';
 import { TransactionService } from 'src/transaction/transaction.service';
 import { ExceptionsHandler } from '@nestjs/core/exceptions/exceptions-handler';
 import { Transaction, TStatus } from 'src/transaction/transaction.schema';
@@ -44,6 +45,7 @@ export class FlutterwaveService {
     private readonly config: ConfigService,
     @InjectModel(Payout.name) private payoutModel: Model<PayoutDocument>,
     private payinService: PayinService,
+    private payoutService: PayoutService,
     private transactionService: TransactionService,
   ) {
     this.secretHash = this.config.get<string>('FLUTTERWAVE_SECRET_HASH');
@@ -393,7 +395,7 @@ export class FlutterwaveService {
 
   // ---------- Payouts ----------
 
-  async createPayout(transactionId: string) {
+  async createPayout(transactionId: string, userId) {
     const transaction = await this.transactionService.findById(transactionId);
     if (!transaction || transaction.status !== TStatus.PAYINSUCCESS) {
       throw new NotFoundException('Transaction not found or not payin success');
@@ -406,7 +408,9 @@ export class FlutterwaveService {
       destinationCurrency: transaction.receiverCurrency,
       sourceCurrency: transaction.receiverCurrency,
       reference: transaction._id,
+      transactionId: transaction._id,
       narration: transaction.raisonForTransfer,
+      userId: userId,
       type: this.getreceiverAccountType(transaction), // 'bank' | 'mobile_money' | 'wallet'
     };
 
@@ -466,18 +470,7 @@ export class FlutterwaveService {
 
       const status = this.normalizeStatus(res.data?.data?.status);
 
-      const doc = await this.payoutModel.create({
-        reference: payloadPayout.reference,
-        transactionId: transaction._id,
-        type: payloadPayout.type, // 'bank' | 'mobile_money' | 'wallet'
-        amount: payloadPayout.amount,
-        sourceCurrency: payloadPayout.sourceCurrency,
-        destinationCurrency: payloadPayout.destinationCurrency,
-        accountBankCode: payloadPayout.accountBankCode,
-        accountNumber: payloadPayout.accountNumber,
-        status,
-        raw: res.data,
-      });
+      const doc = await this.payoutService.createPayout(payloadPayout, res);
 
       const resp = { api: 'v3', ...res.data, saved: doc };
       const update = await this.transactionService.updateTransactionStatus(
@@ -506,22 +499,7 @@ export class FlutterwaveService {
   }
 
   async verifyPayout(reference: string) {
-    const url = `${this.fwBaseUrlV3}/transfers?reference=${reference}`;
-    const res: any = await this.http
-      .get(url, {
-        headers: { Authorization: `Bearer ${this.fwSecret}` },
-      })
-      .toPromise();
-
-    if (res.data && res.data.data && res.data.data.length > 0) {
-      const payout = res.data.data[0];
-      await this.payoutModel.findOneAndUpdate(
-        { reference },
-        { status: payout.status, updatedAt: new Date() },
-      );
-      return payout;
-    }
-    throw new NotFoundException('Payout not found on Flutterwave');
+    return await this.payoutService.verifyPayout(reference);
   }
 
   /**

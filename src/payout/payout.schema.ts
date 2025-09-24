@@ -1,11 +1,30 @@
+/* eslint-disable prettier/prettier */
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Transaction } from '../transaction/transaction.schema';
+import mongoose from 'mongoose';
+import { Document } from 'mongoose';
 import { HydratedDocument } from 'mongoose';
+import { User } from 'src/user/user.schema';
 
 export type PayoutDocument = HydratedDocument<Payout>;
-export type PayoutStatus = 'INITIATED' | 'PROCESSING' | 'SUCCESSFUL' | 'FAILED';
+export enum PayoutStatus {
+  INITIATED = 'INITIATED' ,
+  PROCESSING = 'PROCESSING',
+  SUCCESSFUL = 'SUCCESSFUL',
+  FAILED = 'FAILED',
+}
 
 @Schema({ timestamps: true })
-export class Payout {
+export class Payout extends Document  {
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Transaction' })
+  transactionId: Transaction;
+
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
+  userId: User;
+
+  @Prop({ default: 'INITIATED' })
+  status: PayoutStatus;
+
   @Prop({ required: true })
   reference: string;
 
@@ -30,21 +49,6 @@ export class Payout {
 
   @Prop()
   accountNumber?: string;
-
-  @Prop()
-  mmCountry?: string;
-
-  @Prop()
-  mmProvider?: string;
-
-  @Prop()
-  msisdn?: string;
-
-  @Prop()
-  walletIdentifier?: string;
-
-  @Prop({ default: 'INITIATED' })
-  status: PayoutStatus;
 
   @Prop({ type: Object })
   raw?: any; // API response}

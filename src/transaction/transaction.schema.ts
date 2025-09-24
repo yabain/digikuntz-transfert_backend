@@ -146,6 +146,9 @@ export class Transaction {
   @Prop()
   reqStatusCode: number; // statusCode in payment API res
 
+  @Prop({ type: Object })
+  raw?: any; // API response}
+
   @Prop()
   reqErrorCode: number; // data.error in payment API res
 

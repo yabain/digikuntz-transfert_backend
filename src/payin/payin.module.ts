@@ -14,6 +14,7 @@ import {
   Transaction,
   TransactionSchema,
 } from 'src/transaction/transaction.schema';
+import { PayoutService } from 'src/payout/payout.service';
 
 @Module({
   imports: [
@@ -26,7 +27,13 @@ import {
       { name: Transaction.name, schema: TransactionSchema },
     ]),
   ],
-  providers: [PayinService, PayinCron, FlutterwaveService, TransactionService],
+  providers: [
+    PayinService,
+    PayinCron,
+    FlutterwaveService,
+    TransactionService,
+    PayoutService,
+  ],
   controllers: [PayinController],
   exports: [PayinService],
 })

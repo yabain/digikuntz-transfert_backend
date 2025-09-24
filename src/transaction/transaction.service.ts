@@ -53,6 +53,7 @@ export class TransactionService {
       .skip(skip);
     return transactions;
   }
+
   async getPayoutListByStatus(status, query?): Promise<any> {
     console.log('status: ', status);
     const resPerPage = 10;
@@ -246,15 +247,25 @@ export class TransactionService {
   async updateTransactionStatus(
     transactionId: string,
     status: TStatus,
+    raw?: any,
   ): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(transactionId)) {
       throw new NotFoundException('Invalid transaction ID');
     }
-    const transaction = await this.transactionModel.findByIdAndUpdate(
-      transactionId,
-      { status: status },
-      { new: true },
-    );
+    let transaction: any;
+    if (raw) {
+      transaction = await this.transactionModel.findByIdAndUpdate(
+        transactionId,
+        { status: status, raw },
+        { new: true },
+      );
+    } else {
+      transaction = await this.transactionModel.findByIdAndUpdate(
+        transactionId,
+        { status: status },
+        { new: true },
+      );
+    }
     if (!transaction) throw new NotFoundException('Transaction not found');
     return transaction;
   }
