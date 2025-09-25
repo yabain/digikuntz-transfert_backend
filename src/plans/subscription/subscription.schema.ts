@@ -3,46 +3,41 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { User } from '../../user/user.schema';
 import mongoose from 'mongoose';
 import { Document } from 'mongoose';
+import { Plans } from '../plans.schema';
 
 export enum SubscriptionCycle {
-  YEAR = 'year',
-  MONTH = 'month',
-  WEEK = 'week',
-  DAY = 'day'
+  YEAR = 'yearly',
+  MONTH = 'monthly',
+  WEEK = 'weekly',
+  DAY = 'dayly'
 }
 @Schema({
   timestamps: true,
 })
 export class Subscription extends Document {
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
-  author: User;
+  userId: User;
+
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
+  planAuthor: User;
+
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Plans' })
+  planId: Plans;
 
   @Prop()
-  title: string;
-
-  @Prop()
-  subTitle: string;
-
-  @Prop()
-  imageUrl: string;
+  quantity: number;
 
   @Prop()
   cycle: SubscriptionCycle;
 
   @Prop()
-  description: string;
+  startDate: Date;
 
   @Prop()
-  isActive: boolean;
+  endDate: Date;
 
   @Prop()
-  price: number;
-
-  @Prop()
-  currency: string;
-
-  @Prop()
-  subscriberNumber: number;
+  status: boolean;
 }
 
 export const SubscriptionSchema = SchemaFactory.createForClass(Subscription);

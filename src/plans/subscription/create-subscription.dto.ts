@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 import { User } from '../../user/user.schema';
 import { Options } from '../options/options.shema';
+import { Plans } from '../plans.schema';
 import { SubscriptionCycle } from './subscription.schema';
 import {
   IsString,
@@ -14,50 +15,28 @@ import {
 } from 'class-validator';
 
 export class CreateSubscriptionDto {
-  @IsEmpty({ message: 'You cannot pass user id' })
-  readonly author: User;
-
-  @IsString()
-  @IsNotEmpty()
-  @MinLength(3)
-  readonly title: string;
-
-  @IsString()
-  @IsNotEmpty()
-  @MinLength(3)
-  readonly subTitle: string;
-
-  @IsString()
-  @IsNotEmpty()
-  readonly imageUrl: string;
-
-  @IsEnum(SubscriptionCycle, {
-    message: 'Enter corect SubscriptionCycle : Public or Private',
-  })
-  @IsNotEmpty()
-  readonly cycle: SubscriptionCycle;
-
-  @IsString()
-  @IsNotEmpty()
-  readonly description: string;
 
   @IsNotEmpty()
-  readonly options: Options[];
+  userId: User;
 
-  @IsBoolean()
   @IsNotEmpty()
-  readonly isActive: boolean;
+  planAuthor: User;
 
-  @IsNumber()
   @IsNotEmpty()
-  readonly price: number;
+  planId: Plans;
 
-  @IsString()
   @IsNotEmpty()
-  readonly currency: string;
+  quantity: number;
 
-  @IsNumber()
   @IsNotEmpty()
-  readonly subscriberNumber: number;
+  cycle: SubscriptionCycle;
 
+  @IsNotEmpty()
+  startDate: Date;
+
+  @IsNotEmpty()
+  endDate: Date;
+
+  @IsNotEmpty()
+  status: boolean;
 }

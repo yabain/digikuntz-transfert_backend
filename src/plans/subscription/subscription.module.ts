@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { SubscriptionService } from './subscription.service';
 import { SubscriptionController } from './subscription.controller';
+import { SubscriptionCronService } from './subscription.cron';
 import { AuthModule } from 'src/auth/auth.module';
 import { MongooseModule } from '@nestjs/mongoose';
 import { User, UserSchema } from '../../user/user.schema';
@@ -32,6 +33,7 @@ import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
   ],
   providers: [
     SubscriptionService,
+    SubscriptionCronService,
     UserService,
     OptionsService,
     ItemService,
@@ -40,5 +42,6 @@ import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
     SmtpService,
   ],
   controllers: [SubscriptionController],
+  exports: [SubscriptionService, SubscriptionCronService], // Exporter pour utilisation dans d'autres modules
 })
 export class SubscriptionModule {}

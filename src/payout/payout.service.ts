@@ -134,9 +134,53 @@ export class PayoutService {
       .exec();
   }
 
+  async verifyPayout(reference: string) {
+    const oldStatus = await this.getPayoutStatus(reference);
+    console.log('oldStatus: ', oldStatus);
+    if (!oldStatus)
+      throw new NotFoundException('Payout not found for this reference');
+    const url = `${this.fwBaseUrlV3}/transfers?reference=${reference}`;
+    const res: any = await this.http
+      .get(url, {
+        headers: { Authorization: `Bearer ${this.fwSecret}` },
+      })
+      .toPromise();
+
+    if (res.data && res.data.data && res.data.data.length > 0) {
+      const payout = res.data.data[0];
+      console.log('payout', payout);
+      if (oldStatus !== payout.status) {
+        await this.updatePayout(payout);
+        if (payout.status === 'SUCCESSFUL') {
+          const transaction =
+            await this.transactionService.updateTransactionStatus(
+              reference,
+              TStatus.PAYOUTSUCCESS,
+            );
+            console.log('transaction SUCCESSFUL', transaction);
+          // send Email payment success
+          // Send Whatsapp
+        }
+        if (payout.status === 'FAILED') {
+          const transaction =
+            await this.transactionService.updateTransactionStatus(
+              reference,
+              TStatus.PAYOUTERROR,
+              payout
+            );
+            console.log('transaction FAILED', transaction);
+          // send Email payment failed to admin
+          // Send Whatsapp to admin
+        }
+      }
+      return payout;
+    }
+    throw new NotFoundException('Payout not found on Flutterwave');
+  }
+
   async retryPayout(reference: string) {
     // 1) Fetch existing payout and validate state
-    const existing = await this.payoutModel.findOne({ reference }).lean().exec();
+    const existing: any = await this.payoutModel.findOne({ reference }).lean().exec();
     if (!existing) {
       throw new NotFoundException('Payout not found for this reference');
     }
@@ -205,49 +249,5 @@ export class PayoutService {
     );
 
     return { reference: newReference, saved, fw: res?.data };
-  }
-
-  async verifyPayout(reference: string) {
-    const oldStatus = await this.getPayoutStatus(reference);
-    console.log('oldStatus: ', oldStatus);
-    if (!oldStatus)
-      throw new NotFoundException('Payout not found for this reference');
-    const url = `${this.fwBaseUrlV3}/transfers?reference=${reference}`;
-    const res: any = await this.http
-      .get(url, {
-        headers: { Authorization: `Bearer ${this.fwSecret}` },
-      })
-      .toPromise();
-
-    if (res.data && res.data.data && res.data.data.length > 0) {
-      const payout = res.data.data[0];
-      console.log('payout', payout);
-      if (oldStatus !== payout.status) {
-        await this.updatePayout(payout);
-        if (payout.status === 'SUCCESSFUL') {
-          const transaction =
-            await this.transactionService.updateTransactionStatus(
-              reference,
-              TStatus.PAYOUTSUCCESS,
-            );
-            console.log('transaction SUCCESSFUL', transaction);
-          // send Email payment success
-          // Send Whatsapp
-        }
-        if (payout.status === 'FAILED') {
-          const transaction =
-            await this.transactionService.updateTransactionStatus(
-              reference,
-              TStatus.PAYOUTERROR,
-              payout
-            );
-            console.log('transaction FAILED', transaction);
-          // send Email payment failed to admin
-          // Send Whatsapp to admin
-        }
-      }
-      return payout;
-    }
-    throw new NotFoundException('Payout not found on Flutterwave');
   }
 }

@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 import { User } from '../../user/user.schema';
 import { Options } from '../options/options.shema';
+import { Plans } from '../plans.schema';
 import { SubscriptionCycle } from './subscription.schema';
 import {
   IsString,
@@ -14,50 +15,27 @@ import {
 } from 'class-validator';
 
 export class UpdateSubscriptionDto {
-  @IsEmpty({ message: 'You cannot pass user id' })
-  readonly author: User;
-
-  @IsString()
   @IsOptional()
-  @MinLength(3)
-  readonly title: string;
-
-  @IsString()
-  @IsOptional()
-  @MinLength(3)
-  readonly subTitle: string;
-
-  @IsString()
-  @IsOptional()
-  readonly imageUrl: string;
-
-  @IsEnum(SubscriptionCycle, {
-    message: 'Enter corect SubscriptionCycle : Public or Private',
-  })
-  @IsOptional()
-  readonly cycle: SubscriptionCycle;
-
-  @IsString()
-  @IsOptional()
-  readonly description: string;
+  userId: User;
 
   @IsOptional()
-  readonly options: Options[];
+  planAuthor: User;
 
-  @IsBoolean()
   @IsOptional()
-  readonly isActive: boolean;
+  planId: Plans;
 
-  @IsNumber()
   @IsOptional()
-  readonly price: number;
+  quantity: number;
 
-  @IsString()
   @IsOptional()
-  readonly currency: string;
+  cycle: SubscriptionCycle;
 
-  @IsNumber()
   @IsOptional()
-  readonly subscriberNumber: number;
+  startDate: Date;
 
+  @IsOptional()
+  endDate: Date;
+
+  @IsOptional()
+  status: boolean;
 }

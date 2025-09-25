@@ -217,13 +217,11 @@ export class PlansService {
     if (!mongoose.Types.ObjectId.isValid(planId)) {
       throw new NotFoundException('Invalid plan ID');
     }
-
     const plan = await this.plansModel.findById(planId);
     if (!plan) {
       throw new NotFoundException('Plan not found');
     }
-
-    if (plan.author != userData._id && !userData.isAdmin) {
+    if (plan.author.toString() != userData._id.toString() && !userData.isAdmin) {
       throw new NotFoundException('Unauthorized');
     }
     await this.optionsService.deleteOptionsOfPlan(plan._id);
