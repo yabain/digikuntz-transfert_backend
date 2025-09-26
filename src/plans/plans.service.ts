@@ -70,7 +70,8 @@ export class PlansService {
 
     let idUser = '';
     idUser = reqUser.isAdmin ? userId : reqUser._id;
-    const plansList = await this.plansModel.find({ author: idUser });
+    const plansList = await this.plansModel.find({ author: idUser })
+    .populate('author');
     if (!plansList) {
       return [];
     }
