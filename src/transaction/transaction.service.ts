@@ -284,9 +284,15 @@ export class TransactionService {
       return false;
     }
     if (payout.status === 'SUCCESSFUL') {
-      return this.updateTransactionStatus(transactionData._id, TStatus.SUCCESS);
+      return this.updateTransactionStatus(
+        transactionData._id,
+        TStatus.PAYOUTSUCCESS,
+      );
     } else if (payout.status === 'FAILED') {
-      return this.updateTransactionStatus(transactionData._id, TStatus.ERROR);
+      return this.updateTransactionStatus(
+        transactionData._id,
+        TStatus.PAYOUTERROR,
+      );
     } else return true;
   }
 
