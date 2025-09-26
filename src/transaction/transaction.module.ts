@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { TransactionService } from './transaction.service';
 import { HttpModule } from '@nestjs/axios';
 import { MongooseModule } from '@nestjs/mongoose';
-import { TransactionSchema } from './transaction.schema';
+import { Transaction, TransactionSchema } from './transaction.schema';
 import { TransactionController } from './transaction.controller';
 import { EmailService } from 'src/email/email.service';
 import { Country, CountrySchema } from 'src/country/country.schema';
@@ -16,6 +16,7 @@ import { PayoutService } from 'src/payout/payout.service';
 import { EmailSchema, Email } from 'src/email/email.schema';
 import { SmtpSchema, Smtp } from 'src/email/smtp/smtp.schema';
 import { SmtpService } from 'src/email/smtp/smtp.service';
+import { TransactionCron } from './transaction.cron';
 // import { WhatsappModule } from 'src/whatsapp/whatsapp.module';
 
 @Module({
@@ -31,6 +32,7 @@ import { SmtpService } from 'src/email/smtp/smtp.service';
       { name: Country.name, schema: CountrySchema },
       { name: Email.name, schema: EmailSchema },
       { name: Smtp.name, schema: SmtpSchema },
+      { name: Transaction.name, schema: TransactionSchema },
     ]),
     // WhatsappModule,
   ],
@@ -42,7 +44,9 @@ import { SmtpService } from 'src/email/smtp/smtp.service';
     PayinService,
     PayoutService,
     SmtpService,
+    TransactionCron,
   ],
   controllers: [TransactionController],
+  exports: [TransactionService],
 })
 export class TransactionModule {}

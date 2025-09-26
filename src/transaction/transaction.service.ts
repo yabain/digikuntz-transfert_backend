@@ -14,7 +14,7 @@ import {
   Injectable,
   NotFoundException,
   Logger,
-  UnauthorizedException,
+  // UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TStatus } from './transaction.schema';
@@ -22,6 +22,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Transaction } from './transaction.schema';
 import * as mongoose from 'mongoose';
 import { Query } from 'express-serve-static-core';
+import { Payout } from 'src/payout/payout.schema';
+// import { PayoutService } from 'src/payout/payout.service';
 // import { CreateTransactionDto } from './create-transaction.dto';
 
 @Injectable()
@@ -30,8 +32,11 @@ export class TransactionService {
   constructor(
     @InjectModel(Transaction.name)
     private transactionModel: mongoose.Model<Transaction>,
+    @InjectModel(Payout.name)
+    private payoutModel: mongoose.Model<Payout>,
     private httpService: HttpService,
     private configService: ConfigService,
+    // private payoutService: PayoutService,
   ) {}
 
   async findAll(query: Query): Promise<Transaction[]> {
@@ -56,7 +61,7 @@ export class TransactionService {
 
   async getPayoutListByStatus(status, query?): Promise<any> {
     console.log('status: ', status);
-    const resPerPage = 10;
+    const resPerPage = Number(query?.resPerPage) || 10;
     const currentPage = Number(query?.page) || 1;
     const skip = resPerPage * (currentPage - 1);
 
@@ -117,6 +122,31 @@ export class TransactionService {
       ]);
     }
     console.log('result of ' + status, res.length);
+
+    return res;
+  }
+
+  async getPayoutPendingListByStatus(query?): Promise<any> {
+    const resPerPage = Number(query?.resPerPage) || 10;
+    const currentPage = Number(query?.page) || 1;
+    const skip = resPerPage * (currentPage - 1);
+
+    const res = await this.transactionModel.aggregate([
+      {
+        $match: {
+          $and: [
+            {
+              status: {
+                $in: ['transaction_payout_pending'],
+              },
+            },
+            { transactionType: { $in: ['transfer', 'withdrawal'] } },
+          ],
+        },
+      },
+      { $skip: skip },
+      { $limit: resPerPage },
+    ]);
 
     return res;
   }
@@ -244,6 +274,22 @@ export class TransactionService {
     return transactions;
   }
 
+  async getPayout(reference: string) {
+    return this.payoutModel.findOne({ reference }).lean().exec();
+  }
+
+  async verifyTransactionPayoutStatus(transactionData: any) {
+    const payout: any = await this.getPayout(transactionData._id);
+    if (!payout) {
+      return false;
+    }
+    if (payout.status === 'SUCCESSFUL') {
+      return this.updateTransactionStatus(transactionData._id, TStatus.SUCCESS);
+    } else if (payout.status === 'FAILED') {
+      return this.updateTransactionStatus(transactionData._id, TStatus.ERROR);
+    } else return true;
+  }
+
   async updateTransactionStatus(
     transactionId: string,
     status: TStatus,
@@ -347,35 +393,36 @@ export class TransactionService {
 
   private async chechTransactionStatus(
     transactionId: string,
-    userData: any,
+    // userData: any,
   ): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(transactionId)) {
       throw new NotFoundException('Invalid transaction ID');
     }
-    const transaction = await this.getTransactionData(transactionId, userData);
+    // const transaction = await this.getTransactionData(transactionId, userData);
+    const transaction = await this.getTransactionData(transactionId);
     if (!transaction) throw new NotFoundException('Transaction not found.');
-    if (transaction.userId !== userData._id && !userData.isAdmin) {
-      throw new UnauthorizedException('Unauthorized');
-    }
+    // if (transaction.userId !== userData._id && !userData.isAdmin) {
+    //   throw new UnauthorizedException('Unauthorized');
+    // }
     return {
       success: true,
-      status: transaction.reqStatus,
+      status: transaction.status,
       transactionData: transaction,
     };
   }
 
   private async getTransactionData(
     transactionId: string,
-    userData: any,
+    // userData: any,
   ): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(transactionId)) {
       throw new NotFoundException('Invalid transaction ID');
     }
     const transaction = await this.transactionModel.findById(transactionId);
     if (!transaction) throw new NotFoundException('Transaction not found');
-    if (transaction.userId !== userData._id && !userData.isAdmin) {
-      throw new UnauthorizedException('Unauthorized');
-    }
+    // if (transaction.userId !== userData._id && !userData.isAdmin) {
+    //   throw new UnauthorizedException('Unauthorized');
+    // }
 
     return transaction;
   }

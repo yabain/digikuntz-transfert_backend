@@ -76,6 +76,14 @@ export class PayoutService {
     return this.payoutModel.findOne({ reference }).lean().exec();
   }
 
+  async getPayoutById(payoutId: string) {
+    return this.payoutModel.findById({ payoutId }).lean().exec();
+  }
+
+  async getPayoutByTransactionId(transactionId: string) {
+    return this.payoutModel.find({ transactionId }).lean().exec();
+  }
+
   private async updateLocalByRef(
     reference: string,
     update: Partial<Payout & { raw?: unknown }>,

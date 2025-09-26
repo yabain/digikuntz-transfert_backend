@@ -122,6 +122,7 @@ export class SubscriptionService {
       .find({ ...keyword })
       .limit(resPerPage)
       .skip(skip);
+    
     return optionsList;
   }
 
