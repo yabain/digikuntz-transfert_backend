@@ -11,7 +11,4 @@ export class UpdateItemDto {
   @IsEmpty({ message: 'You cannot pass usernId' })
   readonly usernId: string;
 
-  @IsBoolean()
-  @IsOptional()
-  readonly isActive: boolean;
 }

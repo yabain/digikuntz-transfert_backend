@@ -13,7 +13,4 @@ export class CreateItemDto {
   @IsNotEmpty()
   readonly userId: string;
 
-  @IsBoolean()
-  @IsNotEmpty()
-  readonly isActive: boolean;
 }

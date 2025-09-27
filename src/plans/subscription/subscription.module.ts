@@ -7,7 +7,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { User, UserSchema } from '../../user/user.schema';
 import { UserService } from '../../user/user.service';
 import { Subscription, SubscriptionSchema } from './subscription.schema';
-import { OptionsSchema } from '../options/options.shema';
+import { OptionsSchema, Options } from '../options/options.shema';
 import { OptionsService } from '../options/options.service';
 import { Item, ItemSchema } from '../item/item.shema';
 import { ItemService } from '../item/item.service';
@@ -23,7 +23,7 @@ import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
     AuthModule,
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
-      { name: 'Options', schema: OptionsSchema },
+      { name: Options.name, schema: OptionsSchema },
       { name: Item.name, schema: ItemSchema },
       { name: Plans.name, schema: PlansSchema },
       { name: Subscription.name, schema: SubscriptionSchema },
