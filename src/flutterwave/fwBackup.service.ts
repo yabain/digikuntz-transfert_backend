@@ -181,7 +181,7 @@ export class FlutterwaveService {
 
     const url = `${this.fwBaseUrlV3}/transactions`;
     const res = await firstValueFrom(this.http.get(url, { headers, params }));
-    console.log('res: ', res.data);
+    // console.log('res: ', res.data);
     return res.data;
   }
 
