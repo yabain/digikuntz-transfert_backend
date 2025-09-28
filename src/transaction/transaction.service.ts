@@ -121,7 +121,7 @@ export class TransactionService {
         { $limit: resPerPage },
       ]);
     }
-    console.log('result of ' + status, res.length);
+    // console.log('result of ' + status, res.length);
 
     return res;
   }

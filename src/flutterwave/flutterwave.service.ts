@@ -258,10 +258,11 @@ export class FlutterwaveService {
 
   async verifyAndClosePayin(txRef: string, userId: string, cron = false) {
     const payin: any = await this.payinService.verifyPayin(txRef);
-    console.log('verifyAndClosePayin payin:', payin);
+    // console.log('verifyAndClosePayin payin (fw service):', payin);
     if (!payin) {
       throw new NotFoundException('Payin not found');
     }
+
     if (String(payin.userId) !== String(userId) && !cron) {
       throw new UnauthorizedException('Unauthorized');
     }

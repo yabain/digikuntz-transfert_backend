@@ -21,10 +21,10 @@ export class PayinCron {
   async handleCron() {
     this.logger.debug('Cron check pending Payin');
     const pendings: any = await this.payinService.findPending(1000);
-    console.log('pendings resp: ', pendings);
+    // console.log('pendings resp (Payin cron) : ', pendings);
     for (const p of pendings) {
       try {
-        if (this.payinService.isMoreThan15MinutesAhead(p.updatedAt)) {
+        if (this.payinService.isMoreThan15MinutesAhead(p.createdAt)) {
           await this.fw.verifyAndClosePayin(p.txRef, 'no_id', true);
         } else {
           await this.fw.verifyPayin(p.txRef);

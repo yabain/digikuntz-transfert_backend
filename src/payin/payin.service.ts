@@ -391,19 +391,22 @@ export class PayinService {
    * Generic verify: accept either numeric FW id or txRef
    */
   async verifyPayin(idOrTxRef: string) {
+    console.log('verifyPayin: idOrTxRef', idOrTxRef);
     try {
       let resp;
       if (/^\d+$/.test(idOrTxRef)) {
+        this.logger.debug(`verifyPayin: idOrTxRef is numeric: ${idOrTxRef}`);
         // numeric -> verify by tx id
         resp = await this.fwGet(`${this.fwBaseUrlV3}/transactions/${idOrTxRef}/verify`);
       } else {
+        this.logger.debug(`verifyPayin: idOrTxRef is txRef: ${idOrTxRef}`);
         resp = await this.fwGet(`${this.fwBaseUrlV3}/transactions/verify_by_reference`, {
           tx_ref: idOrTxRef,
         });
       }
 
-      this.logger.debug(
-        `Flutterwave response for ${idOrTxRef}: ${JSON.stringify(resp.data)}`,
+      console.log(
+        `Flutterwave response for ${idOrTxRef}: ${resp.data}`,
       );
       return this.handleVerifyPayin(idOrTxRef, resp.data);
     } catch (error: unknown) {
