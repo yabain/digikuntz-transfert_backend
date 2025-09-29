@@ -13,7 +13,7 @@ export class UpdateUserDto {
 
   @IsEmpty()
   @IsOptional()
-  readonly solde: number;
+  readonly balance: number;
 
   @IsEmpty({ message: 'password must been empty' })
   @IsOptional()

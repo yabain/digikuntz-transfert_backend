@@ -22,13 +22,13 @@ export class TransactionCron {
     };
     const pending: any =
       await this.transactionService.getPayoutPendingListByStatus(resPerPage);
-    console.log('Cron Verify transaction: ', pending);
+    console.log('(Transaction Cron) Verify transaction: ', pending);
     for (const t of pending) {
       try {
         await this.transactionService.verifyTransactionPayoutStatus(t);
       } catch (err) {
         this.logger.warn(
-          'Error verifying transaction ' + t.reference + ' : ' + err.message,
+          '(Transaction Cron) Error verifying transaction ' + t.reference + ' : ' + err.message,
         );
       }
     }

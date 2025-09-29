@@ -26,7 +26,7 @@ import { PayinService } from 'src/payin/payin.service';
 import { PayoutService } from 'src/payout/payout.service';
 import { TransactionService } from 'src/transaction/transaction.service';
 import { ExceptionsHandler } from '@nestjs/core/exceptions/exceptions-handler';
-import { Transaction, TStatus } from 'src/transaction/transaction.schema';
+import { Transaction, TStatus, TransactionType } from 'src/transaction/transaction.schema';
 
 @Injectable()
 export class FlutterwaveService {
@@ -39,6 +39,7 @@ export class FlutterwaveService {
   private fwBaseUrlV4 = 'https://api.flutterwave.cloud';
   private secretHash: any;
   private tStatus: any = TStatus;
+  private transactionType: any = TransactionType;
 
   constructor(
     private readonly http: HttpService,
@@ -188,7 +189,7 @@ export class FlutterwaveService {
     const raw = {
       ...transactionData,
       userId,
-      transactionType: 'transfer',
+      // transactionType: 'transfer',
     };
     const savedTransaction =
       await this.transactionService.createTransaction(raw);
@@ -279,6 +280,7 @@ export class FlutterwaveService {
     ) {
       return { message: 'Payin already cancelled', status: 'cancelled' };
     }
+
     if (
       (payin.status === 'cancelled' &&
         transaction.status === this.tStatus.PAYINERROR) ||
@@ -294,6 +296,14 @@ export class FlutterwaveService {
       return { message: 'Payin cancelled', status: 'cancelled' };
     }
 
+    if (payin.status === 'failed') {
+      await this.transactionService.updateTransactionStatus(
+        String(payin.transactionId),
+        this.tStatus.PAYINFAILED,
+      );
+      return { message: 'Payin failed', status: 'failed' };
+    }
+
     if (payin.status === 'successful') {
       if (
         transaction.status === this.tStatus.INITIALIZED ||
@@ -301,10 +311,20 @@ export class FlutterwaveService {
         transaction.status === this.tStatus.PAYINPENDING ||
         transaction.status === this.tStatus.PAYINERROR
       ) {
-        await this.transactionService.updateTransactionStatus(
-          String(payin.transactionId),
-          this.tStatus.PAYINSUCCESS,
-        );
+        try {
+          if(transaction.transactionService === this.transactionType.SUBSCRIPTION) {
+            // Credit account
+            // Send email and whatsapp account credited
+          }
+
+          await this.transactionService.updateTransactionStatus(
+            String(payin.transactionId),
+            this.tStatus.PAYINSUCCESS
+          );
+        }
+        catch (err) {
+          console.log('Error updating transaction status', err);
+        }
         return { message: 'Payin completed', status: 'successful' };
       }
       return { message: 'Payin already successful', status: 'successful' };
@@ -522,7 +542,7 @@ export class FlutterwaveService {
   }
 
   async getBanksList(country: string) {
-    console.log('getting solde');
+    console.log('getting balance');
     // const iso2 = this.toIso2(country);
     const iso2 = country;
     const url = `${this.fwBaseUrlV3}/banks/${encodeURIComponent(iso2)}`;

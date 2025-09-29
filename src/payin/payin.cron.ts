@@ -19,9 +19,9 @@ export class PayinCron {
 
   @Cron(CronExpression.EVERY_MINUTE) // ou EVERY_MINUTES
   async handleCron() {
-    this.logger.debug('Cron check pending Payin');
-    const pendings: any = await this.payinService.findPending(1000);
-    // console.log('pendings resp (Payin cron) : ', pendings);
+    this.logger.debug('(Payin cron) check pending Payin');
+    const pendings: any = await this.payinService.findPending(100);
+    console.log('pendings resp (Payin cron) : ', pendings);
     for (const p of pendings) {
       try {
         if (this.payinService.isMoreThan15MinutesAhead(p.createdAt)) {

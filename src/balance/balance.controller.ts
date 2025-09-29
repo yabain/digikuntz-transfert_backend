@@ -18,33 +18,33 @@ import {
   ApiOperation,
   ApiResponse,
 } from '@nestjs/swagger';
-import { SoldeService } from './solde.service';
+import { BalanceService } from './balance.service';
 
-@Controller('solde')
-export class SoldeController {
-  constructor(private readonly soldeService: SoldeService) {}
+@Controller('balance')
+export class BalanceController {
+  constructor(private readonly balanceService: BalanceService) {}
 
   @Get()
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get solde of current users' })
-  @ApiResponse({ status: 200, description: 'Solde of users returned.' })
+  @ApiOperation({ summary: 'Get balance of current users' })
+  @ApiResponse({ status: 200, description: 'Balance of users returned.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async getSolde(@Req() req): Promise<any> {
-    console.log('solde')
-    return this.soldeService.getSoldeByUserId(req.user._id);
+  async getBalance(@Req() req): Promise<any> {
+    console.log('balance')
+    return this.balanceService.getBalanceByUserId(req.user._id);
   }
 
   @Get('user/:id')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get solde of users (admin only)' })
-  @ApiResponse({ status: 200, description: 'Solde of users returned.' })
+  @ApiOperation({ summary: 'Get balance of users (admin only)' })
+  @ApiResponse({ status: 200, description: 'Balance of users returned.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async getSoldeOfUser(@Param('id') userId: string, @Req() req): Promise<any> {
+  async getBalanceOfUser(@Param('id') userId: string, @Req() req): Promise<any> {
     if (!req.user.isAdmin) {
       throw new NotFoundException('Unautorised');
     }
-    return this.soldeService.getSoldeByUserId(userId);
+    return this.balanceService.getBalanceByUserId(userId);
   }
 }

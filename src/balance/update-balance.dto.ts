@@ -8,5 +8,5 @@ export class UpdateUserDto {
 
   @IsEmpty()
   @IsOptional()
-  readonly solde: number;
+  readonly balance: number;
 }

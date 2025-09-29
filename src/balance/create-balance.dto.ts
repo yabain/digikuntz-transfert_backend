@@ -6,11 +6,11 @@ import {
 import { ApiProperty } from '@nestjs/swagger';
 import { User } from 'src/user/user.schema';
 
-export class CreateSoldeDto {
+export class CreateBalanceDto {
   @IsNotEmpty()
   readonly userId: User;
 
   @ApiProperty()
   @IsNotEmpty()
-  readonly solde: number;
+  readonly balance: number;
 }

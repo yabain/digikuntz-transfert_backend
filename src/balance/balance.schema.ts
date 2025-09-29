@@ -7,12 +7,12 @@ import { Document } from 'mongoose';
 @Schema({
   timestamps: true,
 })
-export class Solde extends Document {
+export class Balance extends Document {
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
   userId: User;
 
   @Prop()
-  solde: number;
+  balance: number;
 }
 
-export const SoldeSchema = SchemaFactory.createForClass(Solde);
+export const BalanceSchema = SchemaFactory.createForClass(Balance);

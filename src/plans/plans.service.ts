@@ -30,7 +30,7 @@ export class PlansService {
     const obj = user.toObject ? user.toObject() : user; // convert mongoose doc en objet si besoin
     delete obj.password;
     delete obj.resetPasswordToken;
-    delete obj.solde;
+    delete obj.balance;
     return obj;
   }
   

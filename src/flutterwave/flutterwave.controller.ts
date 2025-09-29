@@ -71,6 +71,7 @@ export class FlutterwaveController {
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   createPayin(@Body() transactionData: any, @Req() req) {
+    console.log('(fw controller) transactionData: ', transactionData);
     return this.fw.createPayin(transactionData, req.user._id);
   }
 

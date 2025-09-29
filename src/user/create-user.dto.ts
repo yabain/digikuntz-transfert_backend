@@ -24,7 +24,7 @@ export class CreateUserDto {
 
   @ApiProperty()
   @IsNotEmpty()
-  readonly solde: number;
+  readonly balance: number;
 
   @ApiProperty({ example: 'password123' })
   @IsString()

@@ -546,7 +546,7 @@ export class FlutterwaveService {
   }
 
   async getBanksList(country: string) {
-    console.log('getting solde');
+    console.log('getting balance');
     // const iso2 = this.toIso2(country);
     const iso2 = country;
     const url = `${this.fwBaseUrlV3}/banks/${encodeURIComponent(iso2)}`;
