@@ -19,7 +19,7 @@ export class BalanceService {
     @InjectModel(Balance.name)
     private balanceModel: mongoose.Model<Balance>,
     private userService: UserService,
-  ) {}
+  ) { }
 
   async creatBalance(data: CreateBalanceDto): Promise<any> {
     const balance = await this.balanceModel.create({ ...data });
@@ -33,7 +33,7 @@ export class BalanceService {
 
     let balance = await this.balanceModel.findOne({ userId });
     if (!balance) {
-      balance = await this.creatBalance({ userId, balance: 0})
+      balance = await this.creatBalance({ userId, balance: 0 })
     }
     return balance;
   }
@@ -73,16 +73,15 @@ export class BalanceService {
       throw new BadRequestException('Currency mismatch');
     }
 
+    console.log('(creditBalance) user 000: ', user);
     const userBalance = await this.getBalanceByUserId(userId);
-    
+    console.log('(creditBalance) userBalance: ', userBalance);
+
     // Update user balance in the database
-    const resp = await this.balanceModel.findByIdAndUpdate(
-      userId,
-      { $inc: { balance: amount } },
-      {
-        new: true,
-        runValidators: true,
-      },
+    const resp = await this.balanceModel.findOneAndUpdate(
+      { userId: userId },
+      { $inc: { balance: amount } },  // increment balance
+      { new: true, runValidators: true } // return updated balance
     );
 
     if (!resp) {
@@ -96,22 +95,23 @@ export class BalanceService {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new NotFoundException('Invalid user');
     }
-
+  
     // Atomic conditional debit: only decrement if current balance >= amount
     const resp = await this.balanceModel.findOneAndUpdate(
-      { _id: userId, balance: { $gte: amount } },
+      { userId: userId, balance: { $gte: amount } },
       { $inc: { balance: -amount } },
       {
         new: true,
         runValidators: true,
       },
     );
-
+  
     if (!resp) {
       // Either user not found or insufficient funds
       throw new BadRequestException('Insufficient balance or user not found');
     }
-
+  
     return resp;
   }
+  
 }

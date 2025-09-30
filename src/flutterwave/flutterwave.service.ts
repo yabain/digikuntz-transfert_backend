@@ -326,7 +326,7 @@ export class FlutterwaveService {
             // Credit account
             await this.balanceService.creditBalance(
               transaction.senderId,
-              transaction.estimation,
+              Number(transaction.estimation),
               transaction.senderCurrency,
             );
 

@@ -3,10 +3,12 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 import {
+  Body,
   Controller,
   Get,
   NotFoundException,
   Param,
+  Post,
   Req,
   UseGuards,
   UsePipes,
@@ -22,7 +24,7 @@ import { BalanceService } from './balance.service';
 
 @Controller('balance')
 export class BalanceController {
-  constructor(private readonly balanceService: BalanceService) {}
+  constructor(private readonly balanceService: BalanceService) { }
 
   @Get()
   @ApiBearerAuth()
@@ -46,5 +48,21 @@ export class BalanceController {
       throw new NotFoundException('Unautorised');
     }
     return this.balanceService.getBalanceByUserId(userId);
+  }
+
+  @Post('credit')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get Credit balance of user' })
+  @ApiResponse({ status: 200, description: 'Balance of user returned.' })
+  // @UseGuards(AuthGuard('jwt'))
+  // @UsePipes(ValidationPipe)
+  async creditBalance(
+    @Req() req,
+    @Body() body: any,): Promise<any> {
+    console.log('balance');
+    // if (!req.user.isAdmin) {
+    //   throw new NotFoundException('Unautorised');
+    // }
+    return this.balanceService.creditBalance(body.userId, body.amount, body.currency);
   }
 }

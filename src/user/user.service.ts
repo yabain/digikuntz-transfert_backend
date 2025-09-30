@@ -128,6 +128,7 @@ export class UserService {
       .populate('countryId')
       .populate('cityId');
     if (!user) {
+      console.error('(getUserById) User not found for ID:', userId)
       throw new NotFoundException('User not found');
     } else {
       user.password = '';
@@ -137,6 +138,7 @@ export class UserService {
     // Enrich user data with follower and following counts
     let userData: any = { ...user };
     userData = userData._doc;
+    console.error('(getUserById) User data:', this.sanitizeUser(userData))
 
     return this.sanitizeUser(userData);
   }
