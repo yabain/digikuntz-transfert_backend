@@ -17,6 +17,20 @@ import { EmailSchema, Email } from 'src/email/email.schema';
 import { SmtpSchema, Smtp } from 'src/email/smtp/smtp.schema';
 import { SmtpService } from 'src/email/smtp/smtp.service';
 import { TransactionCron } from './transaction.cron';
+import { BalanceService } from 'src/balance/balance.service';
+import { Balance, BalanceSchema } from 'src/balance/balance.schema';
+import { UserService } from 'src/user/user.service';
+import { User, UserSchema } from 'src/user/user.schema';
+import {
+  Subscription,
+  SubscriptionSchema,
+} from 'src/plans/subscription/subscription.schema';
+import { SubscriptionService } from 'src/plans/subscription/subscription.service';
+import { ItemService } from 'src/plans/item/item.service';
+import { OptionsService } from 'src/plans/options/options.service';
+import { Item, ItemSchema } from 'src/plans/item/item.shema';
+import { Plans, PlansSchema } from 'src/plans/plans.schema';
+import { Options, OptionsSchema } from 'src/plans/options/options.shema';
 // import { WhatsappModule } from 'src/whatsapp/whatsapp.module';
 
 @Module({
@@ -33,6 +47,12 @@ import { TransactionCron } from './transaction.cron';
       { name: Email.name, schema: EmailSchema },
       { name: Smtp.name, schema: SmtpSchema },
       { name: Transaction.name, schema: TransactionSchema },
+      { name: Balance.name, schema: BalanceSchema },
+      { name: User.name, schema: UserSchema },
+      { name: Subscription.name, schema: SubscriptionSchema },
+      { name: Item.name, schema: ItemSchema },
+      { name: Plans.name, schema: PlansSchema },
+      { name: Options.name, schema: OptionsSchema },
     ]),
     // WhatsappModule,
   ],
@@ -45,6 +65,11 @@ import { TransactionCron } from './transaction.cron';
     PayoutService,
     SmtpService,
     TransactionCron,
+    BalanceService,
+    UserService,
+    SubscriptionService,
+    ItemService,
+    OptionsService,
   ],
   controllers: [TransactionController],
   exports: [TransactionService],

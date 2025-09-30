@@ -52,11 +52,7 @@ export class SubscriptionService {
    * @param quantity Nombre de cycles à ajouter
    * @returns Date de fin d'abonnement
    */
-  private calculateEndDate(
-    startDate: Date,
-    cycle: string,
-    quantity: number,
-  ): Date {
+  calculateEndDate(startDate: Date, cycle: string, quantity: number): Date {
     const endDate = new Date(startDate);
 
     switch (cycle) {
@@ -122,7 +118,7 @@ export class SubscriptionService {
       .find({ ...keyword })
       .limit(resPerPage)
       .skip(skip);
-    
+
     return optionsList;
   }
 
@@ -166,6 +162,31 @@ export class SubscriptionService {
     return subscriptionData;
   }
 
+  async getSubscriptionByUserIdAndPlanId(userId: string, planId: string): Promise<any> {
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new NotFoundException('Invalid subscription ID');
+    }
+    if (!mongoose.Types.ObjectId.isValid(planId)) {
+      throw new NotFoundException('Invalid subscription ID');
+    }
+
+    // Find the subscription by ID
+    const subscription = await this.subscriptionModel
+      .findOne(
+        { userId: userId, planId: planId }
+      )
+      .populate('author');
+    if (!subscription) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Enrich subscription data with follower and following counts
+    let subscriptionData: any = { ...subscription };
+    subscriptionData = subscriptionData._doc;
+
+    return subscriptionData;
+  }
+
   async verifySubscription(userId: string, planId: string): Promise<boolean> {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new NotFoundException('Invalid user ID');
@@ -191,30 +212,60 @@ export class SubscriptionService {
       throw new NotFoundException('Invalid subscription ID');
     }
 
-    const existingSubscription = await this.subscriptionModel.findById(subscriptionId);
-    
+    const existingSubscription =
+      await this.subscriptionModel.findById(subscriptionId);
+
     if (existingSubscription) {
       // Extend existing long
-      const newQuantity = existingSubscription.quantity + subscriptionData.quantity;
+      const newQuantity =
+        existingSubscription.quantity + subscriptionData.quantity;
       const newEndDate = this.calculateEndDate(
         existingSubscription.startDate,
         existingSubscription.cycle,
-        newQuantity
+        newQuantity,
       );
-      
+
       return await this.subscriptionModel.findByIdAndUpdate(
         subscriptionId,
-        { 
+        {
           quantity: newQuantity,
-          endDate: newEndDate 
+          endDate: newEndDate,
         },
-        { new: true, runValidators: true }
+        { new: true, runValidators: true },
       );
     } else {
       // Create a new subscription
       return await this.creatSubscription(subscriptionData);
     }
   }
+
+  async upgrateSubscription(subscriptionData: any, newQuantity: number) {
+
+    const subscription = await this.subscriptionModel.findByIdAndUpdate(
+      { _id: subscriptionData._id },
+      {
+        $inc: { quantity: newQuantity },
+        status: true,
+        endDate: this.calculateEndDate(
+          subscriptionData.startDate,
+          subscriptionData.cycle,
+          newQuantity,
+        ),
+      },
+      {
+        new: true,
+        runValidators: true,
+      },
+    );
+
+    if (!subscription) {
+      throw new NotFoundException('Error to upgrate subscription');
+    }
+
+    return subscription;
+  }
+
+  async downgrateSubscription() {}
 
   async stopSubscription(
     subscriptionId: string,
@@ -301,30 +352,33 @@ export class SubscriptionService {
         .find({ userId })
         .populate('planId', 'title price cycle')
         .populate('planAuthor', 'name email');
-      
+
       return subscriptionList;
     } catch (error) {
-      throw new NotFoundException(`Error fetching subscription list: ${error.message}`);
+      throw new NotFoundException(
+        `Error fetching subscription list: ${error.message}`,
+      );
     }
   }
 
   async getSubscriberList(userId: any): Promise<any> {
-
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new NotFoundException('Invalid subscriber ID');
     }
 
-
     try {
-      const subscriberList: any =
-        await this.subscriptionModel.find({planAuthor: userId});
+      const subscriberList: any = await this.subscriptionModel.find({
+        planAuthor: userId,
+      });
       if (!subscriberList) {
         throw new NotFoundException('No subscriber found');
       }
 
       return subscriberList;
     } catch (e) {
-      throw new NotFoundException('Error to find subscriber list of user: ' + e);
+      throw new NotFoundException(
+        'Error to find subscriber list of user: ' + e,
+      );
     }
   }
 
@@ -385,12 +439,15 @@ export class SubscriptionService {
   async getExpiredSubscriptions(): Promise<Subscription[]> {
     return await this.subscriptionModel.find({
       endDate: { $lt: new Date() },
-      status: true
+      status: true,
     });
   }
 
   // Renew subscription
-  async renewSubscription(subscriptionId: string, additionalQuantity: number): Promise<any> {
+  async renewSubscription(
+    subscriptionId: string,
+    additionalQuantity: number,
+  ): Promise<any> {
     const subscription = await this.subscriptionModel.findById(subscriptionId);
     if (!subscription) {
       throw new NotFoundException('Subscription not found');
@@ -399,16 +456,16 @@ export class SubscriptionService {
     const newEndDate = this.calculateEndDate(
       subscription.endDate, // Start to current endDate
       subscription.cycle,
-      additionalQuantity
+      additionalQuantity,
     );
 
     return await this.subscriptionModel.findByIdAndUpdate(
       subscriptionId,
-      { 
+      {
         quantity: subscription.quantity + additionalQuantity,
-        endDate: newEndDate 
+        endDate: newEndDate,
       },
-      { new: true }
+      { new: true },
     );
   }
 
@@ -416,7 +473,7 @@ export class SubscriptionService {
   async isSubscriptionActive(subscriptionId: string): Promise<boolean> {
     const subscription = await this.subscriptionModel.findById(subscriptionId);
     if (!subscription) return false;
-    
+
     return subscription.status && new Date() <= subscription.endDate;
   }
 
@@ -426,9 +483,9 @@ export class SubscriptionService {
       userId,
       planId,
       status: true,
-      endDate: { $gte: new Date() }
+      endDate: { $gte: new Date() },
     });
-    
+
     return !!subscription;
   }
 }

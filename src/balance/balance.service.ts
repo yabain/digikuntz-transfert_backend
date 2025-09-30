@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/unbound-method */
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-unused-expressions */
@@ -10,12 +11,14 @@ import * as mongoose from 'mongoose';
 import { CreateBalanceDto } from './create-balance.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { Balance } from './balance.schema';
+import { UserService } from 'src/user/user.service';
 
 @Injectable()
 export class BalanceService {
   constructor(
     @InjectModel(Balance.name)
     private balanceModel: mongoose.Model<Balance>,
+    private userService: UserService,
   ) {}
 
   async creatBalance(data: CreateBalanceDto): Promise<any> {
@@ -57,12 +60,22 @@ export class BalanceService {
     return resp;
   }
 
-  async creditBalance(userId: string, amount: number): Promise<any> {
+  async creditBalance(userId: string, amount: number, senderCurrency: string): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new NotFoundException('Invalid user');
     }
 
-    // Update the user in the database
+    const user = await this.userService.getUserById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    if (user.countryId.currency !== senderCurrency) {
+      throw new BadRequestException('Currency mismatch');
+    }
+
+    const userBalance = await this.getBalanceByUserId(userId);
+    
+    // Update user balance in the database
     const resp = await this.balanceModel.findByIdAndUpdate(
       userId,
       { $inc: { balance: amount } },

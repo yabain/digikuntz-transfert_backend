@@ -26,7 +26,13 @@ import { PayinService } from 'src/payin/payin.service';
 import { PayoutService } from 'src/payout/payout.service';
 import { TransactionService } from 'src/transaction/transaction.service';
 import { ExceptionsHandler } from '@nestjs/core/exceptions/exceptions-handler';
-import { Transaction, TStatus, TransactionType } from 'src/transaction/transaction.schema';
+import {
+  Transaction,
+  TStatus,
+  TransactionType,
+} from 'src/transaction/transaction.schema';
+import { BalanceService } from 'src/balance/balance.service';
+import { SubscriptionService } from 'src/plans/subscription/subscription.service';
 
 @Injectable()
 export class FlutterwaveService {
@@ -48,6 +54,8 @@ export class FlutterwaveService {
     private payinService: PayinService,
     private payoutService: PayoutService,
     private transactionService: TransactionService,
+    private balanceService: BalanceService,
+    private subscriptionService: SubscriptionService,
   ) {
     this.secretHash = this.config.get<string>('FLUTTERWAVE_SECRET_HASH');
     this.fwSecret = this.config.get<string>('FLUTTERWAVE_SECRET_KEY');
@@ -312,18 +320,51 @@ export class FlutterwaveService {
         transaction.status === this.tStatus.PAYINERROR
       ) {
         try {
-          if(transaction.transactionService === this.transactionType.SUBSCRIPTION) {
+          if (
+            transaction.transactionType === this.transactionType.SUBSCRIPTION
+          ) {
             // Credit account
+            await this.balanceService.creditBalance(
+              transaction.senderId,
+              transaction.estimation,
+              transaction.senderCurrency,
+            );
+
+            const subscriptionStatus =
+              await this.subscriptionService.verifySubscription(
+                transaction.userId, // Current user Id
+                transaction.receiverCountry, // Plan Id
+              );
+
+            if (subscriptionStatus) {
+              const subscription =
+                await this.subscriptionService.getSubscriptionByUserIdAndPlanId(
+                  transaction.userId, // Current user Id
+                  transaction.receiverCountry, // Plan Id
+                );
+
+              if (!subscription) {
+                throw new NotFoundException('subscription not found');
+              }
+
+              await this.subscriptionService.upgrateSubscription(
+                subscription,
+                Number(transaction.receiverCountryCode()),
+              );
+            } else {
+              await this.createSubscription(transaction);
+            }
+
             // Send email and whatsapp account credited
           }
 
           await this.transactionService.updateTransactionStatus(
             String(payin.transactionId),
-            this.tStatus.PAYINSUCCESS
+            this.tStatus.PAYINSUCCESS,
           );
-        }
-        catch (err) {
-          console.log('Error updating transaction status', err);
+
+        } catch (err) {
+          console.log('(fw service) Error to subscribe', err);
         }
         return { message: 'Payin completed', status: 'successful' };
       }
@@ -362,6 +403,23 @@ export class FlutterwaveService {
     // transaction.tStatus = 'COMPLETED';
     // await transaction.save();
     return { message: 'Payin already completed', status: 'successful' };
+  }
+
+  async createSubscription(transaction) {
+    await this.subscriptionService.creatSubscription({
+      userId: transaction.senderId,
+      planAuthor: transaction.bankAccountNumber,
+      planId: transaction.receiverCountry,
+      quantity: Number(transaction.receiverCountryCode),
+      cycle: transaction.receiverAddress,
+      startDate: transaction.createdAt,
+      endDate: this.subscriptionService.calculateEndDate(
+        transaction.createdAt,
+        transaction.receiverAddress,
+        Number(transaction.receiverCountryCode),
+      ),
+      status: true,
+    });
   }
 
   async openPayin(txRef: string, userId: string) {
