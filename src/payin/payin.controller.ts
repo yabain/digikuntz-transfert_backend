@@ -74,28 +74,8 @@ export class PayinController {
   //   return { status: 'ok' };
   // }
 
-  @Get('status/:txRef')
-  async status(@Param('txRef') txRef: string) {
-    console.log('Payin status:');
-    this.logger.log(`Payin status endpoint called with ${txRef}`);
-    try {
-      const resp = await this.payinService.verifyPayin(txRef);
-      return resp;
-    } catch (err) {
-      this.logger.error(
-        `status error for ${txRef}: ${err?.message || JSON.stringify(err)}`,
-      );
-      // si err est HttpException, on peut renvoyer son contenu, sinon on renvoie generic
-      if (err instanceof HttpException) throw err;
-      throw new HttpException(
-        { message: err?.message || 'Error verifying transaction' },
-        502,
-      );
-    }
-  }
-
-  @Get('status/:txRef')
-  async getPayin(@Param('txRef') txRef: string) {
-    return this.payinService.getPayinStatus(txRef);
+  @Get('get-txRef/:txRef')
+  async getPayinByTxRef(@Param('txRef') txRef: string) {
+    return this.payinService.getPayinByTxRef(txRef);
   }
 }

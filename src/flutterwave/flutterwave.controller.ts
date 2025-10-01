@@ -107,14 +107,6 @@ export class FlutterwaveController {
     return this.fw.verifyWebhookPayin(req);
   }
 
-  @Get('verify-close-payin/:id')
-  @UseGuards(AuthGuard('jwt'))
-  @UsePipes(ValidationPipe)
-  verifyAndClosePayin(@Param('id') txRef: string, @Req() req) {
-    console.log('verifyAndClosePayin tx: ', txRef, req.user._id);
-    return this.fw.verifyAndClosePayin(txRef, req.user._id);
-  }
-
   @Get('verify-payout/:id')
   verifyPayout(@Param('id') reference: string) {
     console.log('verifyPayout tx: ', reference);

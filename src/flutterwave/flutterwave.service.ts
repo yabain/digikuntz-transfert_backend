@@ -217,8 +217,6 @@ export class FlutterwaveService {
   }
 
   async verifyPayin(txRef: string) {
-    // return this.payinService.verifyPayin(verifyPayin);
-
     const payin: any = await this.payinService.verifyPayin(txRef);
     if (!payin) {
       throw new NotFoundException('Payin not found');
@@ -231,22 +229,17 @@ export class FlutterwaveService {
     }
 
     if (payin.status === 'cancelled') {
-      await this.transactionService.updateTransactionStatus(
-        String(payin.transactionId),
-        this.tStatus.PAYINCLOSED,
-      );
-      return { message: 'Payin cancelled', status: 'cancelled' };
-    } else if (payin.status === 'failed') {
-      await this.transactionService.updateTransactionStatus(
-        String(payin.transactionId),
-        this.tStatus.PAYINFAILED,
-      );
-      return { message: 'Payin failed', status: 'failed' };
-    } else if (payin.status === 'pending') {
-      await this.transactionService.updateTransactionStatus(
-        String(payin.transactionId),
-        this.tStatus.PAYINPENDING,
-      );
+      /* Keep the transaction "pending" because the user can
+      relaunch new payment attempts on the flutterwave front
+      and if the status is no longer in this "pending" state,
+      the cron will no longer update it with checks. The "payin cron"
+      will take care of closing after 15 minutes with veryfyAndClose. */
+
+      // await this.transactionService.updateTransactionStatus(
+      //   String(payin.transactionId),
+      //   this.tStatus.PAYINCLOSED,
+      // );
+      // return { message: 'Payin cancelled', status: 'cancelled' };
       return { message: 'Payin pending', status: 'pending' };
     } else {
       if (payin.status === 'successful') {
@@ -284,20 +277,61 @@ export class FlutterwaveService {
           return { message: 'Payin completed', status: 'successful' };
         }
         return { message: 'Payin already successful', status: 'successful' };
+    } else if (payin.status === 'failed') {
+      /* Keep the transaction "pending" because the user can
+      relaunch new payment attempts on the flutterwave front
+      and if the status is no longer in this "pending" state,
+      the cron will no longer update it with checks. The "payin cron"
+      will take care of closing after 15 minutes. */
+
+      // await this.transactionService.updateTransactionStatus(
+      //   String(payin.transactionId),
+      //   this.tStatus.PAYINFAILED,
+      // );
+      // return { message: 'Payin failed', status: 'failed' };
+
+      return { message: 'Payin pending', status: 'pending' };
+    } else if (payin.status === 'successfull') {
+      try {
+        if (
+          transaction.transactionType === this.transactionType.SUBSCRIPTION
+        ) {
+          this.handleSubscription(transaction);
+        }
+
+      } catch (err) {
+        console.log('(fw service: verifyAndClosePayin) Error: ', err);
+        return { message: '(fw service: verifyAndClosePayin) Error: ' + err, status: 'error' };
       }
-      return { message: 'Payin already on payout', status: 'onPayout' };
+      if (
+        transaction.status === this.tStatus.INITIALIZED ||
+        transaction.status === this.tStatus.PAYINCLOSED ||
+        transaction.status === this.tStatus.PAYINPENDING ||
+        transaction.status === this.tStatus.PAYINERROR
+      ) {
+        await this.transactionService.updateTransactionStatus(
+          String(payin.transactionId),
+          this.tStatus.PAYINSUCCESS,
+        );
+>>>>>>> Stashed changes
+      }
+      return { message: 'Payin already successful', status: 'successful' };
+
+    } else {
+      if (transaction.status !== this.tStatus.PAYINPENDING) {
+        await this.transactionService.updateTransactionStatus(
+          String(payin.transactionId),
+          this.tStatus.PAYINPENDING,
+        );
+      }
+      return { message: 'Payin pending', status: 'pending' };
     }
   }
 
-  async verifyAndClosePayin(txRef: string, userId: string, cron = false) {
-    const payin: any = await this.payinService.verifyPayin(txRef);
-    // console.log('verifyAndClosePayin payin (fw service):', payin);
+  async verifyAndClosePayin(txRef: string) {
+    const payin: any = await this.payinService.verifyPayin(txRef, true);
     if (!payin) {
       throw new NotFoundException('Payin not found');
-    }
-
-    if (String(payin.userId) !== String(userId) && !cron) {
-      throw new UnauthorizedException('Unauthorized');
     }
     const transaction = await this.transactionService.findById(
       String(payin.transactionId),
@@ -310,6 +344,11 @@ export class FlutterwaveService {
       payin.status === 'cancelled' &&
       transaction.status === this.tStatus.PAYINCLOSED
     ) {
+      await this.transactionService.updateTransactionStatus(
+        String(payin.transactionId),
+        this.tStatus.PAYINCLOSED,
+        payin.raw.data,
+      );
       return { message: 'Payin already cancelled', status: 'cancelled' };
     }
 
@@ -337,6 +376,17 @@ export class FlutterwaveService {
     }
 
     if (payin.status === 'successful') {
+      try {
+        if (
+          transaction.transactionType === this.transactionType.SUBSCRIPTION
+        ) {
+          this.handleSubscription(transaction);
+        }
+
+      } catch (err) {
+        console.log('(fw service: verifyAndClosePayin) Error: ', err);
+        return { message: '(fw service: verifyAndClosePayin) Error: ' + err, status: 'error' };
+      }
       if (
         transaction.status === this.tStatus.INITIALIZED ||
         transaction.status === this.tStatus.PAYINCLOSED ||
@@ -369,6 +419,11 @@ export class FlutterwaveService {
           console.log('(fw service) Error to subscribe', err);
         }
         return { message: 'Payin completed', status: 'successful' };
+        await this.transactionService.updateTransactionStatus(
+          String(payin.transactionId),
+          this.tStatus.PAYINSUCCESS,
+        );
+>>>>>>> Stashed changes
       }
       return { message: 'Payin already successful', status: 'successful' };
     }
@@ -410,6 +465,40 @@ export class FlutterwaveService {
     return { message: 'Payin already completed', status: 'successful' };
   }
 
+  async handleSubscription(transaction) {
+    // Credit account
+    await this.balanceService.creditBalance(
+      transaction.senderId,
+      Number(transaction.estimation),
+      transaction.senderCurrency,
+    );
+
+    const subscriptionStatus =
+      await this.subscriptionService.verifySubscription(
+        transaction.userId, // Current user Id
+        transaction.receiverCountry, // Plan Id
+      );
+
+    if (subscriptionStatus) {
+      const subscription =
+        await this.subscriptionService.getSubscriptionByUserIdAndPlanId(
+          transaction.userId, // Current user Id
+          transaction.receiverCountry, // Plan Id
+        );
+
+      if (!subscription) {
+        throw new NotFoundException('subscription not found');
+      }
+
+      await this.subscriptionService.upgrateSubscription(
+        subscription,
+        Number(transaction.receiverCountryCode()),
+      );
+    } else {
+      await this.createSubscription(transaction);
+    }
+  }
+
   async createSubscription(transaction) {
     await this.subscriptionService.createSubscription({
       userId: transaction.senderId,
@@ -432,7 +521,7 @@ export class FlutterwaveService {
   }
 
   async openPayin(txRef: string, userId: string) {
-    const payin: any = await this.payinService.getPayin(txRef);
+    const payin: any = await this.payinService.getPayinByTxRef(txRef);
     console.log('verify an open payin:', payin);
     if (!payin) {
       throw new NotFoundException('Payin not found');

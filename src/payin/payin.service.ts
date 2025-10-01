@@ -244,7 +244,10 @@ export class PayinService {
    * Save FW webhook/result payload into local DB
    */
   async saveFlutterwaveResult(raw: unknown) {
+    console.log('saveFlutterwaveResult in: ', raw);
     const { data, status, txRef, flwId } = this.extractFWPayload(raw);
+
+    console.log('saveFlutterwaveResult out:', this.extractFWPayload(raw));
 
     if (!txRef) {
       this.logger.warn('saveFlutterwaveResult: missing tx_ref in payload');
@@ -336,7 +339,12 @@ export class PayinService {
     }
   }
 
-  async getPayin(txRef: string) {
+  async getPayinById(payinId: string) {
+    return this.payinModel.findById(payinId).lean().exec();
+  }
+
+
+  async getPayinByTxRef(txRef: string) {
     return this.payinModel.findOne({ txRef }).lean().exec();
   }
 
@@ -358,11 +366,23 @@ export class PayinService {
       .exec();
   }
 
-  isMoreThan60MinutesAhead(inputDate: string | Date): boolean {
+  isMoreThan15MinutesAhead(inputDate: string | Date): boolean {
     const target = new Date(inputDate).getTime();
     const now = Date.now();
     const diff = now - target;
     return diff > 60 * 60 * 1000; // true si plus de 60 min d'avance
+  }
+  isMoreThan30MinutesAhead(inputDate: string | Date): boolean {
+    const target = new Date(inputDate).getTime();
+    const now = Date.now();
+    const diff = now - target;
+    return diff > 30 * 60 * 1000; // true si plus de 15 min d'avance
+  }
+  isMoreThan60MinutesAhead(inputDate: string | Date): boolean {
+    const target = new Date(inputDate).getTime();
+    const now = Date.now();
+    const diff = now - target;
+    return diff > 60 * 60 * 1000; // true si plus de 15 min d'avance
   }
 
   async updatePayinStatus(txRef: string, status: string) {
@@ -390,7 +410,7 @@ export class PayinService {
   /**
    * Generic verify: accept either numeric FW id or txRef
    */
-  async verifyPayin(idOrTxRef: string) {
+  async verifyPayin(idOrTxRef: string, saveLocal = false) {
     console.log('verifyPayin: idOrTxRef', idOrTxRef);
     try {
       let resp;
@@ -408,7 +428,12 @@ export class PayinService {
       console.log(
         `Flutterwave response for ${idOrTxRef}: ${resp.data}`,
       );
-      return this.handleVerifyPayin(idOrTxRef, resp.data);
+      console.log('resp.data: ', resp.data);
+      if (resp.data.data.status === 'successfull' || resp.data.data.status === 'pending') {
+        return this.handleVerifyPayin(idOrTxRef, true, resp.data);
+      }
+
+      return this.handleVerifyPayin(idOrTxRef, saveLocal, resp.data);
     } catch (error: unknown) {
       const { fwData, message } = this.unwrapAxiosError(error);
       this.logger.error(`verifyPayin error for ${idOrTxRef}: ${message}`, fwData ?? '');
@@ -416,7 +441,7 @@ export class PayinService {
       // Si FW indique "not found", on renvoie l'enregistrement local au lieu de throw
       if (fwData?.message?.includes('No transaction was found for this id')) {
         this.logger.warn('No transaction found on FW, returning local record');
-        return this.handleVerifyPayin(idOrTxRef);
+        return this.handleVerifyPayin(idOrTxRef, saveLocal);
       }
 
       // Mise à jour générique locale -> FAILED (si existe)
@@ -432,14 +457,14 @@ export class PayinService {
     }
   }
 
-  private async handleVerifyPayin(idOrTxRef: string, resData?: any) {
-    // Si réponse FW fournie, on persiste via le flux standard
-    if (resData) {
-      this.logger.debug('handleVerifyPayin: saving FW result');
+
+  private async handleVerifyPayin(idOrTxRef: string, saveLocal = false, resData?: any) {
+
+    if (resData && saveLocal) {
+      this.logger.debug('handleVerifyPayin: saving FW result and returning');
       return this.saveFlutterwaveResult({ data: resData });
     }
 
-    // Sinon on retourne l'enregistrement local
     this.logger.debug('handleVerifyPayin: returning local record only');
     return this.payinModel.findOne({ txRef: idOrTxRef }).lean().exec();
   }

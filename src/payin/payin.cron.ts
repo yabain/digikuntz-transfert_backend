@@ -12,13 +12,17 @@ import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
 @Injectable()
 export class PayinCron {
   private readonly logger = new Logger(PayinCron.name);
+  lastExecutionDate: Date = new Date();
   constructor(
     private payinService: PayinService,
     private fw: FlutterwaveService,
   ) {}
 
-  @Cron(CronExpression.EVERY_MINUTE) // ou EVERY_MINUTES
+  @Cron(CronExpression.EVERY_30_SECONDS) // ou EVERY_30_SECONDS
   async handleCron() {
+    if (!this.isMoreThan10sec(this.lastExecutionDate)) {
+      this.logger.debug('(Payin cron) Can not execut cron now');
+    }
     this.logger.debug('(Payin cron) check pending Payin');
     const pendings: any = await this.payinService.findPending(100);
     console.log('pendings resp (Payin cron) : ', pendings);
@@ -26,7 +30,10 @@ export class PayinCron {
       try {
         if (this.payinService.isMoreThan60MinutesAhead(p.createdAt)) {
           await this.fw.verifyAndClosePayin(p.txRef, 'no_id', true);
+          console.log('(Payin cron) verifying after 60mn txRef: ', p.txRef);
+          await this.fw.verifyAndClosePayin(p.txRef);
         } else {
+          console.log('(Payin cron) Direct verifying txRef: ', p.txRef);
           await this.fw.verifyPayin(p.txRef);
         }
         // const res = await this.payinService.verifyPayin(p.txRef);
@@ -34,6 +41,14 @@ export class PayinCron {
         this.logger.warn('Error verifying tx ' + p.txRef + ' : ' + err.message);
       }
     }
+    this.lastExecutionDate = new Date();
+  }
+
+  isMoreThan10sec(inputDate: string | Date): boolean {
+    const target = new Date(inputDate).getTime();
+    const now = Date.now();
+    const diff = now - target;
+    return diff > 10 * 1000; // true si plus de 15 min d'avance
   }
 
   // @Cron(CronExpression.EVERY_10_MINUTES)
