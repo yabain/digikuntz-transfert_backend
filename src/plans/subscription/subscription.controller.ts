@@ -198,7 +198,7 @@ export class SubscriptionController {
     if (!req.user.isAdmin) {
       throw new NotFoundException('Unauthorized');
     }
-    return this.subscriptionService.updateStatus(subscriptionId);
+    return this.subscriptionService.updateStatus(subscriptionId, true);
   }
 
   // ========== USER ROUTES ==========
@@ -460,14 +460,10 @@ export class SubscriptionController {
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async createSubscription(
-    @Body() subscription: CreateSubscriptionDto,
-    @Req() req,
+    @Body() subscriptionData: CreateSubscriptionDto,
+    // @Req() req,
   ): Promise<any> {
-    subscription.userId = req.user._id;
-    subscription.planAuthor = req.user._id;
-    subscription.status = true;
-    subscription.startDate = new Date();
-    return this.subscriptionService.creatSubscription(subscription);
+    return this.subscriptionService.subscribe(subscriptionData);
   }
 
   /**

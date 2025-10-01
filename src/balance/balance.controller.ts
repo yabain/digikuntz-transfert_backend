@@ -52,7 +52,7 @@ export class BalanceController {
 
   @Post('credit')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get Credit balance of user' })
+  @ApiOperation({ summary: 'Credit balance of user' })
   @ApiResponse({ status: 200, description: 'Balance of user returned.' })
   // @UseGuards(AuthGuard('jwt'))
   // @UsePipes(ValidationPipe)
@@ -64,5 +64,21 @@ export class BalanceController {
     //   throw new NotFoundException('Unautorised');
     // }
     return this.balanceService.creditBalance(body.userId, body.amount, body.currency);
+  }
+
+  @Post('debit')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Debit balance of user' })
+  @ApiResponse({ status: 200, description: 'Balance of user returned.' })
+  // @UseGuards(AuthGuard('jwt'))
+  // @UsePipes(ValidationPipe)
+  async debitBalance(
+    @Req() req,
+    @Body() body: any,): Promise<any> {
+    console.log('balance');
+    // if (!req.user.isAdmin) {
+    //   throw new NotFoundException('Unautorised');
+    // }
+    return this.balanceService.debitBalance(body.userId, body.amount, body.currency);
   }
 }

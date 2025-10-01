@@ -24,7 +24,7 @@ export class PayinCron {
     console.log('pendings resp (Payin cron) : ', pendings);
     for (const p of pendings) {
       try {
-        if (this.payinService.isMoreThan15MinutesAhead(p.createdAt)) {
+        if (this.payinService.isMoreThan60MinutesAhead(p.createdAt)) {
           await this.fw.verifyAndClosePayin(p.txRef, 'no_id', true);
         } else {
           await this.fw.verifyPayin(p.txRef);

@@ -358,11 +358,11 @@ export class PayinService {
       .exec();
   }
 
-  isMoreThan15MinutesAhead(inputDate: string | Date): boolean {
+  isMoreThan60MinutesAhead(inputDate: string | Date): boolean {
     const target = new Date(inputDate).getTime();
     const now = Date.now();
     const diff = now - target;
-    return diff > 15 * 60 * 1000; // true si plus de 15 min d'avance
+    return diff > 60 * 60 * 1000; // true si plus de 60 min d'avance
   }
 
   async updatePayinStatus(txRef: string, status: string) {

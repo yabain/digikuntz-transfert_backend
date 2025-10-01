@@ -24,6 +24,27 @@ export class SubscriptionService {
     private optionsService: OptionsService,
   ) {}
 
+  async subscribe(subscriptionData: CreateSubscriptionDto) {
+    const subscriptionStatus = await this.verifySubscription(
+      subscriptionData.userId.toString(),
+      subscriptionData.planId.toString(),
+    );
+
+    if (subscriptionStatus) {
+      const subscription = await this.getSubscriptionByUserIdAndPlanId(
+        subscriptionData.userId.toString(),
+        subscriptionData.planId.toString(),
+      );
+
+      if (!subscription) {
+        throw new NotFoundException('subscription not found');
+      }
+
+      await this.upgrateSubscription(subscription, subscriptionData.quantity);
+    } else {
+      if (subscriptionData) await this.createSubscription(subscriptionData);
+    }
+  }
   async getSubscriptionsStatistic(): Promise<{
     subscribersNumber: number;
     pourcentage: number;
@@ -79,7 +100,7 @@ export class SubscriptionService {
     return endDate;
   }
 
-  async creatSubscription(
+  async createSubscription(
     subscriptionData: CreateSubscriptionDto,
   ): Promise<Subscription> {
     // Calculer la date de fin d'abonnement
@@ -150,7 +171,9 @@ export class SubscriptionService {
     // Find the subscription by ID
     const subscription = await this.subscriptionModel
       .findById(subscriptionId)
-      .populate('author');
+      .populate('userId')
+      .populate('planAuthor')
+      .populate('planId');
     if (!subscription) {
       throw new NotFoundException('User not found');
     }
@@ -162,7 +185,10 @@ export class SubscriptionService {
     return subscriptionData;
   }
 
-  async getSubscriptionByUserIdAndPlanId(userId: string, planId: string): Promise<any> {
+  async getSubscriptionByUserIdAndPlanId(
+    userId: string,
+    planId: string,
+  ): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new NotFoundException('Invalid subscription ID');
     }
@@ -172,10 +198,10 @@ export class SubscriptionService {
 
     // Find the subscription by ID
     const subscription = await this.subscriptionModel
-      .findOne(
-        { userId: userId, planId: planId }
-      )
-      .populate('author');
+      .findOne({ userId: userId, planId: planId })
+      .populate('userId')
+      .populate('planAuthor')
+      .populate('planId');
     if (!subscription) {
       throw new NotFoundException('User not found');
     }
@@ -198,9 +224,18 @@ export class SubscriptionService {
       userId: userId,
       planId: planId,
     });
-    if (!subscription) {
-      return false; // 'Subscription not found';
+    if (!subscription || !subscription.status) {
+      return false; // 'Subscription not found' or expired;
     }
+    const currentDate = new Date();
+    if (currentDate > subscription.endDate) {
+      // Update subscription status to inactive
+      await this.subscriptionModel.findByIdAndUpdate(subscription._id, {
+        status: false,
+      });
+      return false; // 'Subscription expired';
+    }
+
     return true;
   }
 
@@ -235,17 +270,15 @@ export class SubscriptionService {
       );
     } else {
       // Create a new subscription
-      return await this.creatSubscription(subscriptionData);
+      return await this.createSubscription(subscriptionData);
     }
   }
 
   async upgrateSubscription(subscriptionData: any, newQuantity: number) {
-
     const subscription = await this.subscriptionModel.findByIdAndUpdate(
       { _id: subscriptionData._id },
       {
         $inc: { quantity: newQuantity },
-        status: true,
         endDate: this.calculateEndDate(
           subscriptionData.startDate,
           subscriptionData.cycle,
@@ -257,12 +290,44 @@ export class SubscriptionService {
         runValidators: true,
       },
     );
+    if(!subscription){
+      throw new NotFoundException('Error to upgrate subscription');
+    }
+
+    const currentData = new Date();
+    if (subscription.endDate < currentData) {
+      await this.updateStatus(subscription._id, false);
+    } else {
+      await this.updateStatus(subscription._id, true);
+    }
 
     if (!subscription) {
       throw new NotFoundException('Error to upgrate subscription');
     }
 
     return subscription;
+  }
+
+  async updateStatus(subscriptionId: any, status): Promise<any> {
+    if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {
+      throw new NotFoundException('Invalid subscription ID');
+    }
+
+    const subscription = await this.subscriptionModel.findById(subscriptionId);
+    if (!subscription) {
+      throw new NotFoundException('User not found');
+    }
+    const updatedSubscription = await this.subscriptionModel
+      .findByIdAndUpdate(
+        subscriptionId,
+        { status: status },
+        { new: true, runValidators: true },
+      )
+
+    if (!updatedSubscription) {
+      throw new NotFoundException('User not found');
+    }
+    return true;
   }
 
   async downgrateSubscription() {}
@@ -411,30 +476,6 @@ export class SubscriptionService {
     return subscriptionArray;
   }
 
-  async updateStatus(subscriptionId: any): Promise<any> {
-    if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {
-      throw new NotFoundException('Invalid subscription ID');
-    }
-
-    const subscription = await this.subscriptionModel.findById(subscriptionId);
-    if (!subscription) {
-      throw new NotFoundException('User not found');
-    }
-    const updatedUser = await this.subscriptionModel
-      .findByIdAndUpdate(
-        subscriptionId,
-        { active: subscription.status ? false : true },
-        { new: true, runValidators: true },
-      )
-      .populate('cityId')
-      .populate('countryId');
-
-    if (!updatedUser) {
-      throw new NotFoundException('User not found');
-    }
-    return true;
-  }
-
   // Obtenir les abonnements expirés
   async getExpiredSubscriptions(): Promise<Subscription[]> {
     return await this.subscriptionModel.find({
@@ -487,5 +528,22 @@ export class SubscriptionService {
     });
 
     return !!subscription;
+  }
+
+  parseTransactionToSubscription(transaction) {
+    return {
+      userId: transaction.senderId, // Current user Id
+      planAuthor: transaction.bankAccountNumber, // Id of Author of plan
+      planId: transaction.receiverCountry,
+      quantity: Number(transaction.receiverCountryCode), // Number of cycle to subscribe
+      cycle: transaction.receiverAddress, // Cycle type : dayly | monthly | weeklee | yearly
+      startDate: transaction.createdAt,
+      endDate: this.calculateEndDate(
+        transaction.createdAt,
+        transaction.receiverAddress,
+        Number(transaction.receiverCountryCode),
+      ),
+      status: true,
+    };
   }
 }

@@ -249,17 +249,41 @@ export class FlutterwaveService {
       );
       return { message: 'Payin pending', status: 'pending' };
     } else {
-      if (
-        transaction.status === this.tStatus.INITIALIZED ||
-        transaction.status === this.tStatus.PAYINCLOSED ||
-        transaction.status === this.tStatus.PAYINPENDING ||
-        transaction.status === this.tStatus.PAYINERROR
-      ) {
-        await this.transactionService.updateTransactionStatus(
-          String(payin.transactionId),
-          this.tStatus.PAYINSUCCESS,
-        );
-        return { message: 'Payin successful', status: 'successful' };
+      if (payin.status === 'successful') {
+        if (
+          transaction.status === this.tStatus.INITIALIZED ||
+          transaction.status === this.tStatus.PAYINCLOSED ||
+          transaction.status === this.tStatus.PAYINPENDING ||
+          transaction.status === this.tStatus.PAYINERROR
+        ) {
+          try {
+            if (
+              transaction.transactionType === this.transactionType.SUBSCRIPTION
+            ) {
+              // Credit account
+              await this.balanceService.creditBalance(
+                transaction.bankAccountNumber,
+                Number(transaction.estimation),
+                transaction.senderCurrency,
+              );
+
+              const subscription = this.subscriptionService.subscribe(
+                this.parseTransactionToSubscription(transaction),
+              );
+
+              // Send email and whatsapp account credited
+            }
+
+            await this.transactionService.updateTransactionStatus(
+              String(payin.transactionId),
+              this.tStatus.PAYINSUCCESS,
+            );
+          } catch (err) {
+            console.log('(fw service) Error to subscribe', err);
+          }
+          return { message: 'Payin completed', status: 'successful' };
+        }
+        return { message: 'Payin already successful', status: 'successful' };
       }
       return { message: 'Payin already on payout', status: 'onPayout' };
     }
@@ -325,35 +349,14 @@ export class FlutterwaveService {
           ) {
             // Credit account
             await this.balanceService.creditBalance(
-              transaction.senderId,
+              transaction.bankAccountNumber,
               Number(transaction.estimation),
               transaction.senderCurrency,
             );
 
-            const subscriptionStatus =
-              await this.subscriptionService.verifySubscription(
-                transaction.userId, // Current user Id
-                transaction.receiverCountry, // Plan Id
-              );
-
-            if (subscriptionStatus) {
-              const subscription =
-                await this.subscriptionService.getSubscriptionByUserIdAndPlanId(
-                  transaction.userId, // Current user Id
-                  transaction.receiverCountry, // Plan Id
-                );
-
-              if (!subscription) {
-                throw new NotFoundException('subscription not found');
-              }
-
-              await this.subscriptionService.upgrateSubscription(
-                subscription,
-                Number(transaction.receiverCountryCode()),
-              );
-            } else {
-              await this.createSubscription(transaction);
-            }
+            const subscription = this.subscriptionService.subscribe(
+              this.parseTransactionToSubscription(transaction),
+            );
 
             // Send email and whatsapp account credited
           }
@@ -362,7 +365,6 @@ export class FlutterwaveService {
             String(payin.transactionId),
             this.tStatus.PAYINSUCCESS,
           );
-
         } catch (err) {
           console.log('(fw service) Error to subscribe', err);
         }
@@ -371,7 +373,10 @@ export class FlutterwaveService {
       return { message: 'Payin already successful', status: 'successful' };
     }
 
-    if (payin.status === 'pending') {
+    if (
+      payin.status === 'pending' &&
+      this.payinService.isMoreThan60MinutesAhead(payin.createdAt)
+    ) {
       await this.payinService.updatePayinStatus(txRef, 'cancelled');
 
       if (
@@ -406,7 +411,7 @@ export class FlutterwaveService {
   }
 
   async createSubscription(transaction) {
-    await this.subscriptionService.creatSubscription({
+    await this.subscriptionService.createSubscription({
       userId: transaction.senderId,
       planAuthor: transaction.bankAccountNumber,
       planId: transaction.receiverCountry,
@@ -420,6 +425,10 @@ export class FlutterwaveService {
       ),
       status: true,
     });
+  }
+
+  parseTransactionToSubscription(transaction) {
+    return this.subscriptionService.parseTransactionToSubscription(transaction);
   }
 
   async openPayin(txRef: string, userId: string) {
