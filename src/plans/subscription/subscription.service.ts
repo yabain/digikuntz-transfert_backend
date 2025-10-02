@@ -32,7 +32,7 @@ export class SubscriptionService {
 
     if (subscriptionStatus.existingSubscription) {
 
-      await this.upgrateSubscription(subscriptionStatus.id, subscriptionData.quantity);
+      await this.upgradeSubscription(subscriptionStatus.id, subscriptionData.quantity);
     } else {
       if (subscriptionData) await this.createSubscription(subscriptionData);
     }
@@ -268,36 +268,50 @@ export class SubscriptionService {
     }
   }
 
-  async upgrateSubscription(subscriptionId: any, newQuantity: number) {
-    const subscriptionData = await this.getSubscriptionById(subscriptionId);
+  async upgradeSubscription(subscriptionId: any, additionalQuantity: number) {
+    if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {
+      throw new NotFoundException('Invalid subscription ID');
+    }
+  
+    if (typeof additionalQuantity !== 'number' || additionalQuantity <= 0) {
+      throw new NotFoundException('Invalid quantity to add');
+    }
+  
+    // Récupérer la souscription
+    const subscriptionData: any = await this.subscriptionModel.findById(subscriptionId);
     if (!subscriptionData) {
       throw new NotFoundException('Subscription not found');
     }
+  
+    // Nouveau total de cycles
+    const newQuantityTotal = (subscriptionData.quantity || 0) + additionalQuantity;
+  
+    // Nouvelle endDate calculée à partir de startDate et du total de cycles
     const newEndDate = this.calculateEndDate(
-      subscriptionData.startDate,
+      new Date(subscriptionData.startDate),
       subscriptionData.cycle,
-      newQuantity,
-    )
-    const newStatus: boolean = newEndDate > new Date();
-    
-    const subscription = await this.subscriptionModel.findByIdAndUpdate(
-      { _id: subscriptionData._id },
+      newQuantityTotal,
+    );
+  
+    const newStatus: boolean = newEndDate.getTime() > Date.now();
+  
+    const updated = await this.subscriptionModel.findByIdAndUpdate(
+      subscriptionData._id,
       {
-        $inc: { quantity: newQuantity },
+        quantity: newQuantityTotal, // on met le total directement
         endDate: newEndDate,
         status: newStatus,
       },
-      {
-        new: true,
-        runValidators: true,
-      },
+      { new: true, runValidators: true },
     );
-    if(!subscription){
-      throw new NotFoundException('Error to upgrate subscription');
+  
+    if (!updated) {
+      throw new NotFoundException('Error upgrading subscription');
     }
-    
-    return subscription;
+  
+    return updated;
   }
+  
 
   async updateStatus(subscriptionId: any, status): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {

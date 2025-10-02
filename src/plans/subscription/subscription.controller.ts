@@ -829,11 +829,10 @@ export class SubscriptionController {
     return this.subscriptionService.getAllActiveSubscriptions(query);
   }
 
-  
   @Post('upgrade')
   async upgrateSubscription(
     @Body() data: any,
   ): Promise<any> {
-    return this.subscriptionService.upgrateSubscription(data.subscriptionId, data.quantity);
+    return this.subscriptionService.upgradeSubscription(data.subscriptionId, data.quantity);
   }
 }

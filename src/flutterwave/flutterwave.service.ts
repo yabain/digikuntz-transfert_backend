@@ -396,7 +396,7 @@ export class FlutterwaveService {
         //   '(fw service: handleSubscription) update subscriptionStatus: '
         // );
 
-        await this.subscriptionService.upgrateSubscription(
+        await this.subscriptionService.upgradeSubscription(
           subscriptionStatus.id,
           Number(transaction.quantity),
         );
