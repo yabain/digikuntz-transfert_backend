@@ -11,21 +11,33 @@ import { PayoutService } from './payout.service';
 @Injectable()
 export class PayoutCron {
   private readonly logger = new Logger(PayoutCron.name);
+  private isRunning = false;
+
   constructor(
     private payoutService: PayoutService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE) // ou EVERY_MINUTES
   async handleCron() {
-    this.logger.debug('Cron check processing Payout');
+    if (this.isRunning) {
+      this.logger.debug('Payout cron already running, skipping...');
+      return;
+    }
+    
+    this.isRunning = true;
+    try {
+      this.logger.debug('Cron check processing Payout');
     const processings: any = await this.payoutService.findPending(1000);
     console.log('(payout cron) Processings resp: ', processings);
-    for (const p of processings) {
-      try {
-          await this.payoutService.verifyPayout(p.reference);
-      } catch (err) {
-        this.logger.warn('(payout cron)Error verifying payout ' + p.reference + ' : ' + err.message);
+      for (const p of processings) {
+        try {
+            await this.payoutService.verifyPayout(p.reference);
+        } catch (err) {
+          this.logger.warn('(payout cron)Error verifying payout ' + p.reference + ' : ' + err.message);
+        }
       }
+    } finally {
+      this.isRunning = false;
     }
   }
 }

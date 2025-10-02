@@ -154,6 +154,19 @@ export class Transaction {
 
   @Prop()
   message: string; // Deduced from the response code
+
+  // If transaction is a subscription
+  @Prop()
+  planId: string; // Deduced from the response code
+
+  @Prop()
+  planAuthor: string; // Deduced from the response code
+
+  @Prop()
+  cycle: string; // Deduced from the response code      dayly | weekly |monthly | yearly
+
+  @Prop()
+  quantity: number; // Deduced from the response code
 }
 
 export const TransactionSchema = SchemaFactory.createForClass(Transaction);

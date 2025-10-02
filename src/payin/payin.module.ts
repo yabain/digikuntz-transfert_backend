@@ -4,7 +4,6 @@ import { PayinController } from './payin.controller';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Payin, PayinSchema } from './payin.schema';
 import { PayinCron } from './payin.cron';
-import { ScheduleModule } from '@nestjs/schedule';
 import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
 import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
@@ -39,7 +38,6 @@ import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
   imports: [
     ConfigModule,
     HttpModule,
-    ScheduleModule.forRoot(),
     MongooseModule.forFeature([
       { name: Payin.name, schema: PayinSchema },
       { name: Payout.name, schema: PayoutSchema },

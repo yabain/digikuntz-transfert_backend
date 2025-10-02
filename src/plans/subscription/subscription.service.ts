@@ -118,7 +118,9 @@ export class SubscriptionService {
       endDate,
     };
 
+    console.log('(subscription service: createSubscription) subscriptionWithDates: ', subscriptionWithDates);
     const res = await this.subscriptionModel.create(subscriptionWithDates);
+    console.log('(subscription service: createSubscription) res: ', res);
     return res;
   }
 

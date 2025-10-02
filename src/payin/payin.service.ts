@@ -428,11 +428,14 @@ export class PayinService {
       console.log(
         `Flutterwave response for ${idOrTxRef}: ${resp.data}`,
       );
-      console.log('resp.data: ', resp.data);
-      if (resp.data.data.status === 'successfull' || resp.data.data.status === 'pending') {
+      const respData = resp.data;
+      console.log('resp.data: ', respData);
+      if (respData.data.status === 'successful' || respData.data.status === 'pending') {
+        console.log('Rewrite payin: respData.data.status is successful or pending');
         return this.handleVerifyPayin(idOrTxRef, true, resp.data);
       }
 
+      console.log('Not Rewrite payin: respData.data.status is successful or pending');
       return this.handleVerifyPayin(idOrTxRef, saveLocal, resp.data);
     } catch (error: unknown) {
       const { fwData, message } = this.unwrapAxiosError(error);

@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { MongooseModule } from '@nestjs/mongoose';
-import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigModule } from '@nestjs/config';
 import { FlutterwaveService } from './flutterwave.service';
 import { FlutterwaveController } from './flutterwave.controller';
@@ -38,7 +37,6 @@ import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
   imports: [
     ConfigModule,
     HttpModule,
-    ScheduleModule.forRoot(),
     MongooseModule.forFeature([
       { name: Payin.name, schema: PayinSchema },
       { name: Payout.name, schema: PayoutSchema },

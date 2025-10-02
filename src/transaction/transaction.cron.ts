@@ -11,11 +11,20 @@ import { TransactionService } from './transaction.service';
 @Injectable()
 export class TransactionCron {
   private readonly logger = new Logger(TransactionCron.name);
+  private isRunning = false;
+
   constructor(private transactionService: TransactionService) {}
 
   @Cron(CronExpression.EVERY_MINUTE) // ou EVERY_MINUTES
   async handleCron() {
-    this.logger.debug('Cron check processing Payout');
+    if (this.isRunning) {
+      this.logger.debug('Transaction cron already running, skipping...');
+      return;
+    }
+    
+    this.isRunning = true;
+    try {
+      this.logger.debug('Cron check processing Transaction');
     const resPerPage = {
       resPerPage: 1000,
       page: 1,
@@ -23,14 +32,17 @@ export class TransactionCron {
     const pending: any =
       await this.transactionService.getPayoutPendingListByStatus(resPerPage);
     console.log('(Transaction Cron) Verify transaction: ', pending);
-    for (const t of pending) {
-      try {
-        await this.transactionService.verifyTransactionPayoutStatus(t);
-      } catch (err) {
-        this.logger.warn(
-          '(Transaction Cron) Error verifying transaction ' + t.reference + ' : ' + err.message,
-        );
+      for (const t of pending) {
+        try {
+          await this.transactionService.verifyTransactionPayoutStatus(t);
+        } catch (err) {
+          this.logger.warn(
+            '(Transaction Cron) Error verifying transaction ' + t.reference + ' : ' + err.message,
+          );
+        }
       }
+    } finally {
+      this.isRunning = false;
     }
   }
 }
