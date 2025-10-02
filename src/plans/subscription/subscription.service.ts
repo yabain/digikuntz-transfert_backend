@@ -30,17 +30,9 @@ export class SubscriptionService {
       subscriptionData.planId.toString(),
     );
 
-    if (subscriptionStatus) {
-      const subscription = await this.getSubscriptionByUserIdAndPlanId(
-        subscriptionData.userId.toString(),
-        subscriptionData.planId.toString(),
-      );
+    if (subscriptionStatus.existingSubscription) {
 
-      if (!subscription) {
-        throw new NotFoundException('subscription not found');
-      }
-
-      await this.upgrateSubscription(subscription, subscriptionData.quantity);
+      await this.upgrateSubscription(subscriptionStatus.id, subscriptionData.quantity);
     } else {
       if (subscriptionData) await this.createSubscription(subscriptionData);
     }
@@ -215,7 +207,7 @@ export class SubscriptionService {
     return subscriptionData;
   }
 
-  async verifySubscription(userId: string, planId: string): Promise<boolean> {
+  async verifySubscription(userId: string, planId: string): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new NotFoundException('Invalid user ID');
     }
@@ -227,7 +219,7 @@ export class SubscriptionService {
       planId: planId,
     });
     if (!subscription || !subscription.status) {
-      return false; // 'Subscription not found' or expired;
+      return {existingSubscription: false}; // 'Subscription not found' or expired;
     }
     const currentDate = new Date();
     if (currentDate > subscription.endDate) {
@@ -235,10 +227,10 @@ export class SubscriptionService {
       await this.subscriptionModel.findByIdAndUpdate(subscription._id, {
         status: false,
       });
-      return false; // 'Subscription expired';
+      return { existingSubscription: true, status: false, id: subscription._id }; // 'Subscription expired';
     }
 
-    return true;
+    return { existingSubscription: true, status: true, id: subscription._id };
   }
 
   async updateSubscription(
@@ -276,16 +268,24 @@ export class SubscriptionService {
     }
   }
 
-  async upgrateSubscription(subscriptionData: any, newQuantity: number) {
+  async upgrateSubscription(subscriptionId: any, newQuantity: number) {
+    const subscriptionData = await this.getSubscriptionById(subscriptionId);
+    if (!subscriptionData) {
+      throw new NotFoundException('Subscription not found');
+    }
+    const newEndDate = this.calculateEndDate(
+      subscriptionData.startDate,
+      subscriptionData.cycle,
+      newQuantity,
+    )
+    const newStatus: boolean = newEndDate > new Date();
+    
     const subscription = await this.subscriptionModel.findByIdAndUpdate(
       { _id: subscriptionData._id },
       {
         $inc: { quantity: newQuantity },
-        endDate: this.calculateEndDate(
-          subscriptionData.startDate,
-          subscriptionData.cycle,
-          newQuantity,
-        ),
+        endDate: newEndDate,
+        status: newStatus,
       },
       {
         new: true,
@@ -295,18 +295,7 @@ export class SubscriptionService {
     if(!subscription){
       throw new NotFoundException('Error to upgrate subscription');
     }
-
-    const currentData = new Date();
-    if (subscription.endDate < currentData) {
-      await this.updateStatus(subscription._id, false);
-    } else {
-      await this.updateStatus(subscription._id, true);
-    }
-
-    if (!subscription) {
-      throw new NotFoundException('Error to upgrate subscription');
-    }
-
+    
     return subscription;
   }
 

@@ -366,23 +366,31 @@ export class PayinService {
       .exec();
   }
 
-  isMoreThan15MinutesAhead(inputDate: string | Date): boolean {
+  hasExpiredInMinutes(inputDate: string | Date, duration: number = 15): boolean {
     const target = new Date(inputDate).getTime();
     const now = Date.now();
     const diff = now - target;
-    return diff > 60 * 60 * 1000; // true si plus de 60 min d'avance
+    return diff > duration * 60 * 1000;
   }
-  isMoreThan30MinutesAhead(inputDate: string | Date): boolean {
+
+  hasExpired60Minutes(inputDate: string | Date): boolean {
     const target = new Date(inputDate).getTime();
     const now = Date.now();
     const diff = now - target;
-    return diff > 30 * 60 * 1000; // true si plus de 15 min d'avance
-  }
-  isMoreThan60MinutesAhead(inputDate: string | Date): boolean {
-    const target = new Date(inputDate).getTime();
-    const now = Date.now();
-    const diff = now - target;
-    return diff > 60 * 60 * 1000; // true si plus de 15 min d'avance
+
+    console.log(
+      '[DEBUG hasExpired60Minutes]',
+      'input:',
+      inputDate,
+      'parsed:',
+      new Date(inputDate).toISOString(),
+      'now:',
+      new Date(now).toISOString(),
+      'diff (minutes):',
+      diff / 60000,
+    );
+
+    return diff > 60 * 60 * 1000;
   }
 
   async updatePayinStatus(txRef: string, status: string) {

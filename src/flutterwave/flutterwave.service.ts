@@ -266,6 +266,12 @@ export class FlutterwaveService {
         if (transaction.transactionType === this.transactionType.SUBSCRIPTION) {
           await this.handleSubscription(transaction);
         }
+        console.log('updating transaction data')
+        await this.transactionService.updateTransactionStatus(
+          String(payin.transactionId),
+          this.tStatus.PAYINSUCCESS,
+        );
+        return { message: 'Payin already successful', status: 'successful' };
       } catch (err) {
         console.log('(fw service: verifyAndClosePayin) Error: ', err);
         return {
@@ -273,18 +279,6 @@ export class FlutterwaveService {
           status: 'error',
         };
       }
-      if (
-        transaction.status === this.tStatus.INITIALIZED ||
-        transaction.status === this.tStatus.PAYINCLOSED ||
-        transaction.status === this.tStatus.PAYINPENDING ||
-        transaction.status === this.tStatus.PAYINERROR
-      ) {
-        await this.transactionService.updateTransactionStatus(
-          String(payin.transactionId),
-          this.tStatus.PAYINSUCCESS,
-        );
-      }
-      return { message: 'Payin already successful', status: 'successful' };
     } else {
       if (transaction.status !== this.tStatus.PAYINPENDING) {
         await this.transactionService.updateTransactionStatus(
@@ -320,34 +314,43 @@ export class FlutterwaveService {
       return { message: 'Payin already cancelled', status: 'cancelled' };
     }
 
-    if (
-      (payin.status === 'cancelled' &&
-        transaction.status === this.tStatus.PAYINERROR) ||
-      (payin.status === 'cancelled' &&
-        transaction.status === this.tStatus.INITIALIZED) ||
-      (payin.status === 'cancelled' &&
-        transaction.status === this.tStatus.PAYINPENDING)
-    ) {
+    if (payin.status === 'cancelled') {
       await this.transactionService.updateTransactionStatus(
         String(payin.transactionId),
         this.tStatus.PAYINCLOSED,
       );
+      await this.payinService.updatePayinStatus(txRef, 'cancelled');
       return { message: 'Payin cancelled', status: 'cancelled' };
     }
 
     if (payin.status === 'failed') {
-      await this.transactionService.updateTransactionStatus(
-        String(payin.transactionId),
-        this.tStatus.PAYINFAILED,
-      );
-      return { message: 'Payin failed', status: 'failed' };
+      try {
+        console.log('transaction to Updated: ', String(payin.transactionId));
+       const transactionUpdated = await this.transactionService.updateTransactionStatus(
+          String(payin.transactionId),
+          this.tStatus.PAYINERROR,
+          payin.raw,
+        );
+        console.log('transactionUpdated: ', transactionUpdated);
+        await this.payinService.updatePayinStatus(txRef, 'failed');
+        return { message: 'Payin failed', status: 'failed' };
+      } catch {
+        return { message: '(fw service: verifyAndClosePayin) error to handle failed payin', status: 'failed' };
+      }
     }
 
     if (payin.status === 'successful') {
       try {
+        console.log('(fw service: verifyPayin) in handle successful ');
         if (transaction.transactionType === this.transactionType.SUBSCRIPTION) {
           await this.handleSubscription(transaction);
         }
+        console.log('updating transaction data')
+        await this.transactionService.updateTransactionStatus(
+          String(payin.transactionId),
+          this.tStatus.PAYINSUCCESS,
+        );
+        return { message: 'Payin already successful', status: 'successful' };
       } catch (err) {
         console.log('(fw service: verifyAndClosePayin) Error: ', err);
         return {
@@ -355,68 +358,13 @@ export class FlutterwaveService {
           status: 'error',
         };
       }
-      if (
-        transaction.status === this.tStatus.INITIALIZED ||
-        transaction.status === this.tStatus.PAYINCLOSED ||
-        transaction.status === this.tStatus.PAYINPENDING ||
-        transaction.status === this.tStatus.PAYINERROR
-      ) {
-        try {
-          if (
-            transaction.transactionType === this.transactionType.SUBSCRIPTION
-          ) {
-            // Credit account
-            await this.balanceService.creditBalance(
-              transaction.receiverMobileAccountNumber,
-              Number(transaction.estimation),
-              transaction.senderCurrency,
-            );
-
-            const subscription = this.subscriptionService.subscribe(
-              this.parseTransactionToSubscription(transaction),
-            );
-
-            // Send email and whatsapp account credited
-          }
-
-          await this.transactionService.updateTransactionStatus(
-            String(payin.transactionId),
-            this.tStatus.PAYINSUCCESS,
-          );
-        } catch (err) {
-          console.log('(fw service) Error to subscribe', err);
-        }
-        return { message: 'Payin completed', status: 'successful' };
-        await this.transactionService.updateTransactionStatus(
-          String(payin.transactionId),
-          this.tStatus.PAYINSUCCESS,
-        );
-      }
-      return { message: 'Payin already successful', status: 'successful' };
     }
 
     if (
       payin.status === 'pending' &&
-      this.payinService.isMoreThan60MinutesAhead(payin.createdAt)
+      this.payinService.hasExpired60Minutes(payin.createdAt)
     ) {
       await this.payinService.updatePayinStatus(txRef, 'cancelled');
-
-      if (
-        transaction.status !== this.tStatus.PAYINPENDING &&
-        transaction.status !== this.tStatus.INITIALIZED &&
-        transaction.status !== this.tStatus.PAYINERROR &&
-        transaction.status !== this.tStatus.PAYINCLOSED
-      ) {
-        await this.transactionService.updateTransactionStatus(
-          String(payin.transactionId),
-          this.tStatus.PAYINCLOSED,
-        );
-        return {
-          message:
-            'Payin is on pending but transaction is on Payout' + payin.txRef,
-          status: 'error',
-        };
-      }
       await this.transactionService.updateTransactionStatus(
         String(payin.transactionId),
         this.tStatus.PAYINCLOSED,
@@ -426,48 +374,55 @@ export class FlutterwaveService {
         status: 'cancelled',
       };
     }
-    // Mark transaction as completed
-    // transaction.tStatus = 'COMPLETED';
-    // await transaction.save();
-    return { message: 'Payin already completed', status: 'successful' };
+
+    return { message: 'Unknow status', status: 'Unknow' };
   }
 
   async handleSubscription(transaction) {
-    // Credit account
-    const creditBalance = await this.balanceService.creditBalance(
-      transaction.planAuthor,
-      Number(transaction.estimation),
-      transaction.senderCurrency,
-    );
-    console.log(
-      '(fw service: handleSubscription) creditBalance: ',
-      creditBalance,
-    );
 
-    const subscriptionStatus =
-      await this.subscriptionService.verifySubscription(
-        transaction.userId, // Current user Id
-        transaction.planId, // Plan Id
+    try {
+      const subscriptionStatus =
+        await this.subscriptionService.verifySubscription(
+          transaction.userId,
+          transaction.planId,
+        );
+      console.log(
+        '(fw service: handleSubscription) subscriptionStatus check: ',
+        subscriptionStatus,
       );
 
-    if (subscriptionStatus) {
-      const subscription =
-        await this.subscriptionService.getSubscriptionByUserIdAndPlanId(
-          transaction.userId, // Current user Id
-          transaction.planId, // Plan Id
+      if (subscriptionStatus.existingSubscription) {
+        console.log(
+          '(fw service: handleSubscription) update subscriptionStatus: '
         );
 
-      if (!subscription) {
-        throw new NotFoundException('subscription not found');
+        await this.subscriptionService.upgrateSubscription(
+          subscriptionStatus.id,
+          Number(transaction.quantity),
+        );
+      } else {
+        await this.createSubscription(transaction);
       }
 
-      await this.subscriptionService.upgrateSubscription(
-        subscription,
-        Number(transaction.receiverCountryCode),
+      const creditBalance = await this.balanceService.creditBalance(
+        transaction.planAuthor,
+        Number(transaction.estimation),
+        transaction.senderCurrency,
       );
-    } else {
-      await this.createSubscription(transaction);
+      console.log(
+        '(fw service: handleSubscription) creditBalance: ',
+        creditBalance,
+      );
     }
+    catch (err) {
+      console.log('(fw service: handleSubscription) Error: ', err);
+      return {
+        message: '(fw service: handleSubscription) Error: ' + err,
+        status: 'error',
+      };
+    }
+
+
   }
 
   async createSubscription(transaction) {
