@@ -26,9 +26,9 @@ export class PayoutCron {
     
     this.isRunning = true;
     try {
-      this.logger.debug('Cron check processing Payout');
+      // this.logger.debug('Cron check processing Payout');
     const processings: any = await this.payoutService.findPending(1000);
-    console.log('(payout cron) Processings resp: ', processings);
+    // console.log('(payout cron) Processings resp: ', processings);
       for (const p of processings) {
         try {
             await this.payoutService.verifyPayout(p.reference);

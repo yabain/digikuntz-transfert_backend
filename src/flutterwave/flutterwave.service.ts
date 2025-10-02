@@ -75,7 +75,7 @@ export class FlutterwaveService {
 
   // ---------- Balance ----------
   async getBalance(countryWallet) {
-    console.log('Getting balance for wallet:', countryWallet);
+    // console.log('Getting balance for wallet:', countryWallet);
     // Wallet balances
     const url = `${this.fwBaseUrlV3}/balances`;
     let headers;
@@ -116,7 +116,7 @@ export class FlutterwaveService {
       periode?: number;
     },
   ) {
-    console.log('params: ', query?.periode);
+    // console.log('params: ', query?.periode);
     const defaultDate = this.getDateRangeLastMonth(query?.periode || 1);
 
     const params: any = {};
@@ -173,7 +173,7 @@ export class FlutterwaveService {
   }
 
   private getDateRangeLastMonth(periode: number = 1) {
-    console.log('Periode: ', periode);
+    // console.log('Periode: ', periode);
     const today = new Date();
 
     // "to" = aujourd’hui
@@ -232,7 +232,7 @@ export class FlutterwaveService {
       throw new NotFoundException('Transaction not found');
     }
 
-    console.log('(fw service: verifyPayin) resp payin data: ', payin);
+    // console.log('(fw service: verifyPayin) resp payin data: ', payin);
     if (payin.status === 'cancelled') {
       /* Keep the transaction "pending" because the user can
       relaunch new payment attempts on the flutterwave front
@@ -262,18 +262,18 @@ export class FlutterwaveService {
       return { message: 'Payin pending', status: 'pending' };
     } else if (payin.status === 'successful') {
       try {
-        console.log('(fw service: verifyPayin) in handle successful ');
+        // console.log('(fw service: verifyPayin) in handle successful ');
         if (transaction.transactionType === this.transactionType.SUBSCRIPTION) {
           await this.handleSubscription(transaction);
         }
-        console.log('updating transaction data')
+        // console.log('updating transaction data')
         await this.transactionService.updateTransactionStatus(
           String(payin.transactionId),
           this.tStatus.PAYINSUCCESS,
         );
         return { message: 'Payin already successful', status: 'successful' };
       } catch (err) {
-        console.log('(fw service: verifyAndClosePayin) Error: ', err);
+        // console.log('(fw service: verifyAndClosePayin) Error: ', err);
         return {
           message: '(fw service: verifyAndClosePayin) Error: ' + err,
           status: 'error',
@@ -325,13 +325,13 @@ export class FlutterwaveService {
 
     if (payin.status === 'failed') {
       try {
-        console.log('transaction to Updated: ', String(payin.transactionId));
+        // console.log('transaction to Updated: ', String(payin.transactionId));
        const transactionUpdated = await this.transactionService.updateTransactionStatus(
           String(payin.transactionId),
           this.tStatus.PAYINERROR,
           payin.raw,
         );
-        console.log('transactionUpdated: ', transactionUpdated);
+        // console.log('transactionUpdated: ', transactionUpdated);
         await this.payinService.updatePayinStatus(txRef, 'failed');
         return { message: 'Payin failed', status: 'failed' };
       } catch {
@@ -341,18 +341,18 @@ export class FlutterwaveService {
 
     if (payin.status === 'successful') {
       try {
-        console.log('(fw service: verifyPayin) in handle successful ');
+        // console.log('(fw service: verifyPayin) in handle successful ');
         if (transaction.transactionType === this.transactionType.SUBSCRIPTION) {
           await this.handleSubscription(transaction);
         }
-        console.log('updating transaction data')
+        // console.log('updating transaction data')
         await this.transactionService.updateTransactionStatus(
           String(payin.transactionId),
           this.tStatus.PAYINSUCCESS,
         );
         return { message: 'Payin already successful', status: 'successful' };
       } catch (err) {
-        console.log('(fw service: verifyAndClosePayin) Error: ', err);
+        // console.log('(fw service: verifyAndClosePayin) Error: ', err);
         return {
           message: '(fw service: verifyAndClosePayin) Error: ' + err,
           status: 'error',
@@ -386,15 +386,15 @@ export class FlutterwaveService {
           transaction.userId,
           transaction.planId,
         );
-      console.log(
-        '(fw service: handleSubscription) subscriptionStatus check: ',
-        subscriptionStatus,
-      );
+      // console.log(
+      //   '(fw service: handleSubscription) subscriptionStatus check: ',
+      //   subscriptionStatus,
+      // );
 
       if (subscriptionStatus.existingSubscription) {
-        console.log(
-          '(fw service: handleSubscription) update subscriptionStatus: '
-        );
+        // console.log(
+        //   '(fw service: handleSubscription) update subscriptionStatus: '
+        // );
 
         await this.subscriptionService.upgrateSubscription(
           subscriptionStatus.id,
@@ -409,13 +409,13 @@ export class FlutterwaveService {
         Number(transaction.estimation),
         transaction.senderCurrency,
       );
-      console.log(
-        '(fw service: handleSubscription) creditBalance: ',
-        creditBalance,
-      );
+      // console.log(
+      //   '(fw service: handleSubscription) creditBalance: ',
+      //   creditBalance,
+      // );
     }
     catch (err) {
-      console.log('(fw service: handleSubscription) Error: ', err);
+      // console.log('(fw service: handleSubscription) Error: ', err);
       return {
         message: '(fw service: handleSubscription) Error: ' + err,
         status: 'error',
@@ -444,7 +444,7 @@ export class FlutterwaveService {
 
   async openPayin(txRef: string, userId: string) {
     const payin: any = await this.payinService.getPayinByTxRef(txRef);
-    console.log('verify an open payin:', payin);
+    // console.log('verify an open payin:', payin);
     if (!payin) {
       throw new NotFoundException('Payin not found');
     }
@@ -470,7 +470,7 @@ export class FlutterwaveService {
         transaction.status === this.tStatus.PAYINERROR ||
         transaction.status === this.tStatus.PAYINPENDING
       ) {
-        console.log('In update status to pending');
+        // console.log('In update status to pending');
         await this.payinService.updatePayinStatus(txRef, 'pending');
         await this.transactionService.updateTransactionStatus(
           String(payin.transactionId),
@@ -512,7 +512,7 @@ export class FlutterwaveService {
       type: this.getreceiverAccountType(transaction), // 'bank' | 'mobile_money' | 'wallet'
     };
 
-    console.log('Payout creation: ', payloadPayout);
+    // console.log('Payout creation: ', payloadPayout);
     //     {
     //   "accountBankCode": "MTN",
     //   "accountNumber": "237672764405",
@@ -556,7 +556,7 @@ export class FlutterwaveService {
         ],
       };
 
-      console.log('payload for sending: ', payload);
+      // console.log('payload for sending: ', payload);
 
       const res = await firstValueFrom(
         this.http.post(`${this.fwBaseUrlV3}/transfers`, payload, {
@@ -564,7 +564,7 @@ export class FlutterwaveService {
         }),
       );
 
-      console.log('res of fw: ', res);
+      // console.log('res of fw: ', res);
 
       const status = this.normalizeStatus(res.data?.data?.status);
 
@@ -619,7 +619,7 @@ export class FlutterwaveService {
   }
 
   async getBanksList(country: string) {
-    console.log('getting balance');
+    // console.log('getting balance');
     // const iso2 = this.toIso2(country);
     const iso2 = country;
     const url = `${this.fwBaseUrlV3}/banks/${encodeURIComponent(iso2)}`;

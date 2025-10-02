@@ -31,7 +31,7 @@ export class TransactionCron {
     };
     const pending: any =
       await this.transactionService.getPayoutPendingListByStatus(resPerPage);
-    console.log('(Transaction Cron) Verify transaction: ', pending);
+    // console.log('(Transaction Cron) Verify transaction: ', pending);
       for (const t of pending) {
         try {
           await this.transactionService.verifyTransactionPayoutStatus(t);
