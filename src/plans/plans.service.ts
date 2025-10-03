@@ -161,8 +161,11 @@ export class PlansService {
       throw new NotFoundException('Plan not found');
     }
 
-    let planData: any = { ...plan };
-    planData = planData._doc;
+
+    const planOption = await this.optionsService.getAllOptionsOfPlans(
+      plan._id,
+    );
+    const planData = { ...plan.toObject(), options: planOption };
 
     return planData;
   }
