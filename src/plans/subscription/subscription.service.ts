@@ -227,10 +227,10 @@ export class SubscriptionService {
       await this.subscriptionModel.findByIdAndUpdate(subscription._id, {
         status: false,
       });
-      return { existingSubscription: true, status: false, id: subscription._id }; // 'Subscription expired';
+      return { existingSubscription: true, status: false, id: subscription._id, startDate: subscription.startDate, endDate: subscription.endDate  }; // 'Subscription expired';
     }
 
-    return { existingSubscription: true, status: true, id: subscription._id };
+    return { existingSubscription: true, status: true, id: subscription._id, startDate: subscription.startDate, endDate: subscription.endDate };
   }
 
   async updateSubscription(
