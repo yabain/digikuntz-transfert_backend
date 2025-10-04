@@ -123,8 +123,6 @@ export class PlansController {
     return this.plansService.updateStatus(planId, req.user);
   }
 
-
-  ///////// ------ //////
   @Get('get-data/:id')
   @ApiOperation({ summary: 'Get plans data by ID' })
   @ApiParam({ name: 'id', description: 'plans ID', type: String })
@@ -132,6 +130,9 @@ export class PlansController {
   async getPlans(@Param('id') plansId: string): Promise<any> {
     return this.plansService.getPlansById(plansId);
   }
+
+
+  ///////// ------ //////
 
   @Post('new')
   @ApiOperation({ summary: 'Create a new plan' })

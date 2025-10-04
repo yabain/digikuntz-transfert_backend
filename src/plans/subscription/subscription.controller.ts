@@ -829,10 +829,44 @@ export class SubscriptionController {
     return this.subscriptionService.getAllActiveSubscriptions(query);
   }
 
+
+  /**
+   * Upgrade subscription
+   * @param data - Subscription upgrade data
+   * @returns Upgraded subscription
+   */
   @Post('upgrade')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
   async upgrateSubscription(
     @Body() data: any,
+    @Req() req
   ): Promise<any> {
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unauthorized');
+    }
     return this.subscriptionService.upgradeSubscription(data.subscriptionId, data.quantity);
+  }
+
+
+  /**
+   * Get subscriber of plan (all subscription of plan)
+   */
+  @Get('get-subscribers/:planId')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async getSubscriptionsOfPlan(
+    @Param('planId') planId: any,
+  ): Promise<any> {
+    return this.subscriptionService.getSubscriptionsOfPlan(planId);
+  }
+
+  @Get('get-user-subscription/:userId')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async getSubscriptionsOfUser(
+    @Param('userId') planId: any,
+  ): Promise<any> {
+    return this.subscriptionService.getSubscriptionsOfUser(planId);
   }
 }

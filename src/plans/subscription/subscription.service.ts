@@ -551,4 +551,12 @@ export class SubscriptionService {
       status: true,
     };
   }
+
+  async getSubscriptionsOfPlan(planId: string): Promise<Subscription[]> {
+    return await this.subscriptionModel.find({ planId }).populate('userId');
+  }
+
+  async getSubscriptionsOfUser(userId: string): Promise<Subscription[]> {
+    return await this.subscriptionModel.find({ userId }).populate('planId');
+  }
 }
