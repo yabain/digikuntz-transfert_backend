@@ -15,6 +15,7 @@ import { CreatePlansDto } from './create-plans.dto';
 import { UpdatePlansDto } from './update-plans.dto';
 import { ItemService } from './item/item.service';
 import { Plans } from './plans.schema';
+import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
 
 @Injectable()
 export class PlansService {
@@ -23,6 +24,7 @@ export class PlansService {
     private plansModel: mongoose.Model<Plans>,
     private itemService: ItemService,
     private optionsService: OptionsService,
+    private fwService: FlutterwaveService
   ) {}
 
   private sanitizeUser(user: any): any {
@@ -182,6 +184,14 @@ export class PlansService {
         await this.optionsService.creatOptions(plan.options, res._id);
         created = res;
       });
+      // this.fwService.createPaymentPlan({
+      //   name: plan.title,
+      //   amount: plan.price,
+      //   currency: plan.currency,
+      //   interval: plan.cycle,
+      //   duration: 12,
+      //   description: plan.author.toString(),
+      // });
       return created!;
     } finally {
       session.endSession();

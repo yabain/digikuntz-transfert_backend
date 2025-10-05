@@ -15,6 +15,18 @@ import { OptionsService } from './options/options.service';
 import { EmailSchema, Email } from 'src/email/email.schema';
 import { SmtpService } from 'src/email/smtp/smtp.service';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
+import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
+import { HttpModule } from '@nestjs/axios';
+import { Payout, PayoutSchema } from 'src/payout/payout.schema';
+import { Payin, PayinSchema } from 'src/payin/payin.schema';
+import { PayinService } from 'src/payin/payin.service';
+import { PayoutService } from 'src/payout/payout.service';
+import { TransactionService } from 'src/transaction/transaction.service';
+import { BalanceService } from 'src/balance/balance.service';
+import { SubscriptionService } from './subscription/subscription.service';
+import { Transaction, TransactionSchema } from 'src/transaction/transaction.schema';
+import { Balance, BalanceSchema } from 'src/balance/balance.schema';
+import { Subscription, SubscriptionSchema } from './subscription/subscription.schema';
 
 @Module({
   imports: [
@@ -26,7 +38,13 @@ import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
       { name: Plans.name, schema: PlansSchema },
       { name: Email.name, schema: EmailSchema },
       { name: Smtp.name, schema: SmtpSchema },
+      { name: Payout.name, schema: PayoutSchema },
+      { name: Payin.name, schema: PayinSchema },
+      { name: Transaction.name, schema: TransactionSchema },
+      { name: Balance.name, schema: BalanceSchema },
+      { name: Subscription.name, schema: SubscriptionSchema },
     ]),
+    HttpModule,
   ],
   providers: [
     PlansService,
@@ -36,6 +54,12 @@ import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
     EmailService,
     DateService,
     SmtpService,
+    FlutterwaveService,
+    PayinService,
+    PayoutService,
+    TransactionService,
+    BalanceService,
+    SubscriptionService,
   ],
   controllers: [PlansController],
 })

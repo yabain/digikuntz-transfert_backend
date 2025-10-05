@@ -326,16 +326,21 @@ export class FlutterwaveService {
     if (payin.status === 'failed') {
       try {
         // console.log('transaction to Updated: ', String(payin.transactionId));
-       const transactionUpdated = await this.transactionService.updateTransactionStatus(
-          String(payin.transactionId),
-          this.tStatus.PAYINERROR,
-          payin.raw,
-        );
+        const transactionUpdated =
+          await this.transactionService.updateTransactionStatus(
+            String(payin.transactionId),
+            this.tStatus.PAYINERROR,
+            payin.raw,
+          );
         // console.log('transactionUpdated: ', transactionUpdated);
         await this.payinService.updatePayinStatus(txRef, 'failed');
         return { message: 'Payin failed', status: 'failed' };
       } catch {
-        return { message: '(fw service: verifyAndClosePayin) error to handle failed payin', status: 'failed' };
+        return {
+          message:
+            '(fw service: verifyAndClosePayin) error to handle failed payin',
+          status: 'failed',
+        };
       }
     }
 
@@ -379,7 +384,6 @@ export class FlutterwaveService {
   }
 
   async handleSubscription(transaction) {
-
     try {
       const subscriptionStatus =
         await this.subscriptionService.verifySubscription(
@@ -413,16 +417,13 @@ export class FlutterwaveService {
       //   '(fw service: handleSubscription) creditBalance: ',
       //   creditBalance,
       // );
-    }
-    catch (err) {
+    } catch (err) {
       // console.log('(fw service: handleSubscription) Error: ', err);
       return {
         message: '(fw service: handleSubscription) Error: ' + err,
         status: 'error',
       };
     }
-
-
   }
 
   async createSubscription(transaction) {
@@ -712,5 +713,289 @@ export class FlutterwaveService {
 
     // fallback : on renvoie tel quel (laissera FW répondre "invalid country")
     return input.toUpperCase();
+  }
+
+
+  // --- Payment Plans & Subscriptions (Flutterwave V3) ---
+
+  /**
+   * Create a payment plan on Flutterwave (POST /v3/payment-plans)
+   * planDto example:
+   * {
+   *   name: 'Monthly Plan Basic',
+   *   amount: 1000,           // integer (minor units depending on currency rules) — FW expects decimal/truncation per docs
+   *   currency: 'XAF',
+   *   interval: 'monthly',    // 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'biannually' | 'annually'
+   *   duration?: 12,          // optional number of cycles (null => indefinite)
+   *   description?: '...'     // optional
+   * }
+   */
+  async createPaymentPlan(planDto: {
+    name: string;
+    amount: number;
+    currency?: string;
+    interval: string;
+    duration?: number | null;
+    description?: string;
+  }) {
+    console.log('createPaymentPlan: ', planDto);
+    try {
+      const payload: any = {
+        name: String(planDto.name),
+        amount: planDto.amount,
+        interval: planDto.interval,
+        currency: planDto.currency || 'XAF',
+      };
+      if (planDto.duration != null) payload.duration = planDto.duration;
+      if (planDto.description) payload.description = planDto.description;
+
+      const res = await firstValueFrom(
+        this.http.post(`${this.fwBaseUrlV3}/payment-plans`, payload, {
+          headers: this.authHeader(),
+        }),
+      );
+
+      console.log('FW createPaymentPlan response: ', res.data);
+      return res.data; // direct FW response (status, message, data)
+    } catch (err: any) {
+      if (err.response) {
+        console.error(
+          'FW createPaymentPlan error: ' + JSON.stringify(err.response.data),
+        );
+        throw new HttpException(
+          err.response.data,
+          err.response?.status || HttpStatus.BAD_GATEWAY,
+        );
+      }
+      console.error('Unexpected createPaymentPlan error: ' + err?.message);
+      throw err;
+    }
+  }
+
+  /**
+   * List payment plans (GET /v3/payment-plans)
+   */
+  async getPaymentPlans(params?: { page?: number; perPage?: number }) {
+    try {
+      const url = `${this.fwBaseUrlV3}/payment-plans`;
+      const res = await firstValueFrom(
+        this.http.get(url, { headers: this.authHeader(), params }),
+      );
+      return res.data;
+    } catch (err: any) {
+      if (err.response) {
+        throw new HttpException(
+          err.response.data,
+          err.response?.status || HttpStatus.BAD_GATEWAY,
+        );
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Get a payment plan by id (GET /v3/payment-plans/{id})
+   */
+  async getPaymentPlan(planId: string) {
+    try {
+      const url = `${this.fwBaseUrlV3}/payment-plans/${encodeURIComponent(planId)}`;
+      const res = await firstValueFrom(
+        this.http.get(url, { headers: this.authHeader() }),
+      );
+      return res.data;
+    } catch (err: any) {
+      if (err.response) {
+        throw new HttpException(
+          err.response.data,
+          err.response?.status || HttpStatus.BAD_GATEWAY,
+        );
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Update a payment plan (PUT /v3/payment-plans/{id})
+   * payload is partial fields you want to update (name, amount, interval, duration...)
+   */
+  async updatePaymentPlan(planId: string, payload: Record<string, any>) {
+    try {
+      const url = `${this.fwBaseUrlV3}/payment-plans/${encodeURIComponent(planId)}`;
+      const res = await firstValueFrom(
+        this.http.put(url, payload, { headers: this.authHeader() }),
+      );
+      return res.data;
+    } catch (err: any) {
+      if (err.response) {
+        throw new HttpException(
+          err.response.data,
+          err.response?.status || HttpStatus.BAD_GATEWAY,
+        );
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Cancel a payment plan (PUT /v3/payment-plans/{id}/cancel)
+   */
+  async cancelPaymentPlan(planId: string) {
+    try {
+      const url = `${this.fwBaseUrlV3}/payment-plans/${encodeURIComponent(planId)}/cancel`;
+      const res = await firstValueFrom(
+        this.http.put(url, {}, { headers: this.authHeader() }),
+      );
+      return res.data;
+    } catch (err: any) {
+      if (err.response) {
+        throw new HttpException(
+          err.response.data,
+          err.response?.status || HttpStatus.BAD_GATEWAY,
+        );
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Create a subscription (subscribe a customer to a plan)
+   * This requires that the customer exists / you have a payment method (e.g. tokenized card) available.
+   *
+   * subscriptionDto example:
+   * {
+   *   plan: 'plan_id_from_fw',
+   *   customer: {
+   *     name: 'John Doe',
+   *     email: 'john@example.com',
+   *     phone_number: '237691224472'  // use the format expected by your FW account
+   *   },
+   *   // optional: start_date, authorization, // depends on FW support & your flow
+   * }
+   *
+   * Note: For card recurring, you typically need a token/authorization id from a prior charge or saved token.
+   */
+  async createFwSubscription(subscriptionDto: {
+    plan: string;
+    customer: {
+      name: string;
+      email?: string;
+      phone_number?: string;
+      customer_code?: string;
+    };
+    authorization?: any; // optional, if you have saved authorization/token
+    start_date?: string; // optional ISO date
+  }) {
+    try {
+      const payload: any = {
+        plan: subscriptionDto.plan,
+        customer: subscriptionDto.customer,
+      };
+      if (subscriptionDto.authorization)
+        payload.authorization = subscriptionDto.authorization;
+      if (subscriptionDto.start_date)
+        payload.start_date = subscriptionDto.start_date;
+
+      const res = await firstValueFrom(
+        this.http.post(`${this.fwBaseUrlV3}/subscriptions`, payload, {
+          headers: this.authHeader(),
+        }),
+      );
+      return res.data;
+    } catch (err: any) {
+      if (err.response) {
+        console.error(
+          'FW createSubscription error: ' + JSON.stringify(err.response.data),
+        );
+        throw new HttpException(
+          err.response.data,
+          err.response?.status || HttpStatus.BAD_GATEWAY,
+        );
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Get subscriptions (GET /v3/subscriptions)
+   */
+  async getSubscriptions(params?: Record<string, any>) {
+    try {
+      const url = `${this.fwBaseUrlV3}/subscriptions`;
+      const res = await firstValueFrom(
+        this.http.get(url, { headers: this.authHeader(), params }),
+      );
+      return res.data;
+    } catch (err: any) {
+      if (err.response) {
+        throw new HttpException(
+          err.response.data,
+          err.response?.status || HttpStatus.BAD_GATEWAY,
+        );
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Get a subscription by id (GET /v3/subscriptions/{id})
+   */
+  async getSubscription(subscriptionId: string) {
+    try {
+      const url = `${this.fwBaseUrlV3}/subscriptions/${encodeURIComponent(subscriptionId)}`;
+      const res = await firstValueFrom(
+        this.http.get(url, { headers: this.authHeader() }),
+      );
+      return res.data;
+    } catch (err: any) {
+      if (err.response) {
+        throw new HttpException(
+          err.response.data,
+          err.response?.status || HttpStatus.BAD_GATEWAY,
+        );
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Activate subscription (PUT /v3/subscriptions/{id}/activate)
+   */
+  async activateSubscription(subscriptionId: string) {
+    try {
+      const url = `${this.fwBaseUrlV3}/subscriptions/${encodeURIComponent(subscriptionId)}/activate`;
+      const res = await firstValueFrom(
+        this.http.put(url, {}, { headers: this.authHeader() }),
+      );
+      return res.data;
+    } catch (err: any) {
+      if (err.response) {
+        throw new HttpException(
+          err.response.data,
+          err.response?.status || HttpStatus.BAD_GATEWAY,
+        );
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Deactivate subscription (PUT /v3/subscriptions/{id}/deactivate)
+   */
+  async deactivateSubscription(subscriptionId: string) {
+    try {
+      const url = `${this.fwBaseUrlV3}/subscriptions/${encodeURIComponent(subscriptionId)}/deactivate`;
+      const res = await firstValueFrom(
+        this.http.put(url, {}, { headers: this.authHeader() }),
+      );
+      return res.data;
+    } catch (err: any) {
+      if (err.response) {
+        throw new HttpException(
+          err.response.data,
+          err.response?.status || HttpStatus.BAD_GATEWAY,
+        );
+      }
+      throw err;
+    }
   }
 }
