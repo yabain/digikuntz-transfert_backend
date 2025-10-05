@@ -1,0 +1,10 @@
+<VirtualHost *:80>
+    ServerName app.digikuntz.com
+
+    ProxyPreserveHost On
+    ProxyPass / http://127.0.0.1:3000/
+    ProxyPassReverse / http://127.0.0.1:3000/
+
+    ErrorLog ${APACHE_LOG_DIR}/app_error.log
+    CustomLog ${APACHE_LOG_DIR}/app_access.log combined
+</VirtualHost>

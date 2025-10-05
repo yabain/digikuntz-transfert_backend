@@ -140,7 +140,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(process.env.PORT ?? 3001, '0.0.0.0'); // Sstart Backend on port 3001 because 3000 is already used on server
   console.log(
     `Digikuntz Payments backend Application is running on: ${await app.getUrl()}`,
   );
