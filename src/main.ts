@@ -9,7 +9,12 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import * as crypto from 'crypto';
 
+// Patch pour crypto manquant dans cPanel
+if (!(global as any).crypto) {
+  (global as any).crypto = crypto;
+}
 async function bootstrap() {
   const assetsPath =
     process.env.NODE_ENV === 'production'
