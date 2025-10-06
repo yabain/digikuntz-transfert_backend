@@ -191,6 +191,39 @@ export class FlutterwaveService {
     };
   }
 
+  async withdrawal(transactionData: any, userId) {
+    transactionData.userId = userId;
+    const raw = {
+      ...transactionData,
+      userId,
+      status: 'transaction_payin_success',
+    };
+
+    try {
+      const balance = await this.balanceService.debitBalance(
+        userId,
+        transactionData.paymentWithTaxes,
+        transactionData.senderCurrency,
+      );
+
+      const savedTransaction =
+        await this.transactionService.createTransaction(raw);
+      if (!savedTransaction) {
+        throw new NotFoundException('Error to save transaction details');
+      }
+
+      return { status: 'pending' };
+    } catch (error) {
+      throw new HttpException(
+        {
+          status: HttpStatus.BAD_REQUEST,
+          error: error.message,
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
   // ---------- Pay-In (Hosted Payment) ----------
   async createPayin(transactionData: any, userId) {
     transactionData.userId = userId;
@@ -199,21 +232,32 @@ export class FlutterwaveService {
       userId,
       // transactionType: 'transfer',
     };
-    const savedTransaction =
-      await this.transactionService.createTransaction(raw);
-    if (!savedTransaction) {
-      throw new NotFoundException('Error to save transaction details');
-    }
 
-    return this.payinService.createPayin({
-      amount: savedTransaction.paymentWithTaxes,
-      transactionId: savedTransaction._id,
-      currency: savedTransaction.senderCurrency,
-      customerEmail: savedTransaction.senderEmail,
-      customerName: savedTransaction.senderName,
-      status: 'pending',
-      userId,
-    });
+    try {
+      const savedTransaction =
+        await this.transactionService.createTransaction(raw);
+      if (!savedTransaction) {
+        throw new NotFoundException('Error to save transaction details');
+      }
+
+      return this.payinService.createPayin({
+        amount: savedTransaction.paymentWithTaxes,
+        transactionId: savedTransaction._id,
+        currency: savedTransaction.senderCurrency,
+        customerEmail: savedTransaction.senderEmail,
+        customerName: savedTransaction.senderName,
+        status: 'pending',
+        userId,
+      });
+    } catch (error) {
+      throw new HttpException(
+        {
+          status: HttpStatus.BAD_REQUEST,
+          error: error.message,
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
   }
 
   parseTransactionToSubscription(transaction) {
@@ -265,6 +309,9 @@ export class FlutterwaveService {
         // console.log('(fw service: verifyPayin) in handle successful ');
         if (transaction.transactionType === this.transactionType.SUBSCRIPTION) {
           await this.handleSubscription(transaction);
+        }
+        if (transaction.transactionType === this.transactionType.WITHDRAWAL) {
+          // await this.handleWithdrawal(transaction);
         }
         // console.log('updating transaction data')
         await this.transactionService.updateTransactionStatus(
@@ -390,16 +437,9 @@ export class FlutterwaveService {
           transaction.userId,
           transaction.planId,
         );
-      // console.log(
-      //   '(fw service: handleSubscription) subscriptionStatus check: ',
-      //   subscriptionStatus,
-      // );
 
+      // update existing suscription
       if (subscriptionStatus.existingSubscription) {
-        // console.log(
-        //   '(fw service: handleSubscription) update subscriptionStatus: '
-        // );
-
         await this.subscriptionService.upgradeSubscription(
           subscriptionStatus.id,
           Number(transaction.quantity),
@@ -413,10 +453,8 @@ export class FlutterwaveService {
         Number(transaction.estimation),
         transaction.senderCurrency,
       );
-      // console.log(
-      //   '(fw service: handleSubscription) creditBalance: ',
-      //   creditBalance,
-      // );
+
+      // Send notification
     } catch (err) {
       // console.log('(fw service: handleSubscription) Error: ', err);
       return {
@@ -425,6 +463,19 @@ export class FlutterwaveService {
       };
     }
   }
+
+  // async handleWithdrawal(transaction) {
+  //   try {
+  //     // Send notification to user
+  //     console.log('(fw service: handleWithdrawal) handleWithdrawal');
+  //   } catch (err) {
+  //     // console.log('(fw service: handleWithdrawal) Error: ', err);
+  //     return {
+  //       message: '(fw service: handleWithdrawal) Error: ' + err,
+  //       status: 'error',
+  //     };
+  //   }
+  // }
 
   async createSubscription(transaction) {
     await this.subscriptionService.createSubscription({
@@ -502,12 +553,12 @@ export class FlutterwaveService {
 
     const payloadPayout = {
       accountBankCode: transaction.bankCode,
-      accountNumber: transaction.receiverMobileAccountNumber,
+      accountNumber: transaction.bankAccountNumber,
       amount: transaction.receiverAmount,
       destinationCurrency: transaction.receiverCurrency,
       sourceCurrency: transaction.receiverCurrency,
-      reference: transaction._id,
-      transactionId: transaction._id,
+      reference: String(transaction._id),
+      transactionId: String(transaction._id),
       narration: transaction.raisonForTransfer,
       userId: userId,
       type: this.getreceiverAccountType(transaction), // 'bank' | 'mobile_money' | 'wallet'
@@ -540,7 +591,7 @@ export class FlutterwaveService {
       const payload = {
         account_bank: payloadPayout.accountBankCode, // bank or MoMo operator
         account_number: payloadPayout.accountNumber, // account number or MSISDN
-        amount: payloadPayout.amount,
+        amount: Number(payloadPayout.amount),
         currency: payloadPayout.destinationCurrency,
         reference: payloadPayout.reference,
         narration: payloadPayout.narration,
@@ -557,7 +608,7 @@ export class FlutterwaveService {
         ],
       };
 
-      // console.log('payload for sending: ', payload);
+      console.log('payload for sending: ', payload);
 
       const res = await firstValueFrom(
         this.http.post(`${this.fwBaseUrlV3}/transfers`, payload, {
@@ -714,7 +765,6 @@ export class FlutterwaveService {
     // fallback : on renvoie tel quel (laissera FW répondre "invalid country")
     return input.toUpperCase();
   }
-
 
   // --- Payment Plans & Subscriptions (Flutterwave V3) ---
 

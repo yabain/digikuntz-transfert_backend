@@ -98,6 +98,28 @@ export class TransactionService {
                   $in: [
                     'transaction_payin_success',
                     'transaction_payout_pending',
+                    // 'transaction_payout_error',
+                  ],
+                },
+              },
+              { transactionType: { $in: ['transfer', 'withdrawal'] } },
+            ],
+          },
+        },
+        { $skip: skip },
+        { $limit: resPerPage },
+      ]);
+      console.log('result of ' + status, res.length);
+    } else if (status == 'error') {
+      res = await this.transactionModel.aggregate([
+        {
+          $match: {
+            $and: [
+              {
+                status: {
+                  $in: [
+                    // 'transaction_payin_success',
+                    // 'transaction_payout_pending',
                     'transaction_payout_error',
                   ],
                 },
@@ -193,18 +215,18 @@ export class TransactionService {
         transactionType: 'withdrawal',
       });
 
-    // const errorTransferTransaction = await this.transactionModel.countDocuments(
-    //   {
-    //     status: 'transaction_payin_error',
-    //     transactionType: 'transfer',
-    //   },
-    // );
+    const errorTransferTransaction = await this.transactionModel.countDocuments(
+      {
+        status: 'transaction_payout_error',
+        transactionType: 'transfer',
+      },
+    );
 
-    // const errorWithdrawalTransaction =
-    //   await this.transactionModel.countDocuments({
-    //     status: 'transaction_payin_error',
-    //     transactionType: 'withdrawal',
-    //   });
+    const errorWithdrawalTransaction =
+      await this.transactionModel.countDocuments({
+        status: 'transaction_payout_error',
+        transactionType: 'withdrawal',
+      });
 
     const rejectedTransferTransaction =
       await this.transactionModel.countDocuments({
@@ -234,6 +256,9 @@ export class TransactionService {
     const totalTransaction =
       totalTransferTransaction + totalWithdrawalTransaction;
 
+    const errorTransaction =
+      errorTransferTransaction + errorWithdrawalTransaction;
+
     const rejectedTransaction =
       rejectedTransferTransaction + rejectedWithdrawalTransaction;
 
@@ -248,6 +273,7 @@ export class TransactionService {
       rejectedTransaction,
       pendingTransaction,
       endedTransaction,
+      errorTransaction,
     };
   }
 

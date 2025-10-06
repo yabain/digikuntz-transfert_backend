@@ -75,6 +75,14 @@ export class FlutterwaveController {
     return this.fw.createPayin(transactionData, req.user._id);
   }
 
+  @Post('withdrawal')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  withdrawal(@Body() transactionData: any, @Req() req) {
+    console.log('(fw controller) withdrawal: ', transactionData);
+    return this.fw.withdrawal(transactionData, req.user._id);
+  }
+
   @Get('verify-payin/:txRef')
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
