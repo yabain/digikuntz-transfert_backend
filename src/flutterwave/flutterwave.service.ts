@@ -464,18 +464,18 @@ export class FlutterwaveService {
     }
   }
 
-  // async handleWithdrawal(transaction) {
-  //   try {
-  //     // Send notification to user
-  //     console.log('(fw service: handleWithdrawal) handleWithdrawal');
-  //   } catch (err) {
-  //     // console.log('(fw service: handleWithdrawal) Error: ', err);
-  //     return {
-  //       message: '(fw service: handleWithdrawal) Error: ' + err,
-  //       status: 'error',
-  //     };
-  //   }
-  // }
+  handleWithdrawal() {
+    try {
+      // Send notification to user
+      console.log('(fw service: handleWithdrawal) handleWithdrawal');
+    } catch (err) {
+      // console.log('(fw service: handleWithdrawal) Error: ', err);
+      return {
+        message: '(fw service: handleWithdrawal) Error: ' + err,
+        status: 'error',
+      };
+    }
+  }
 
   async createSubscription(transaction) {
     await this.subscriptionService.createSubscription({
