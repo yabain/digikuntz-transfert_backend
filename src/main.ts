@@ -85,7 +85,12 @@ async function bootstrap() {
     preflightContinue: false,
     optionsSuccessStatus: 204,
   });
-
+  app.use((req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    next();
+  });
   // Gestion spécifique des requêtes OPTIONS
   app.use((req, res, next) => {
     if (req.method === 'OPTIONS') {

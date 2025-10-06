@@ -1,10 +1,11 @@
-<VirtualHost *:80>
-    ServerName app.digikuntz.com
+<IfModule mod_headers.c>
+Header always set Access-Control-Allow-Origin "https://payments.digikuntz.com"
+Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+Header always set Access-Control-Allow-Headers "Authorization,Content-Type,Accept,Origin,X-Requested-With"
+Header always set Access-Control-Allow-Credentials "true"
+</IfModule>
 
-    ProxyPreserveHost On
-    ProxyPass / http://127.0.0.1:3000/
-    ProxyPassReverse / http://127.0.0.1:3000/
-
-    ErrorLog ${APACHE_LOG_DIR}/app_error.log
-    CustomLog ${APACHE_LOG_DIR}/app_access.log combined
-</VirtualHost>
+# Gérer le prévol
+RewriteEngine On
+RewriteCond %{REQUEST_METHOD} OPTIONS
+RewriteRule ^(.*)$ $1 [R=204,L]
