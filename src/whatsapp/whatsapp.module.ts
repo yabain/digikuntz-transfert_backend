@@ -10,6 +10,8 @@ import { User, UserSchema } from 'src/user/user.schema';
 import { Email, EmailSchema } from 'src/email/email.schema';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
 import { SmtpService } from 'src/email/smtp/smtp.service';
+import { SystemService } from 'src/system/system.service';
+import { System, SystemSchema } from 'src/system/system.schema';
 
 @Module({
   imports: [
@@ -18,9 +20,16 @@ import { SmtpService } from 'src/email/smtp/smtp.service';
       { name: User.name, schema: UserSchema },
       { name: Email.name, schema: EmailSchema },
       { name: Smtp.name, schema: SmtpSchema },
+      { name: System.name, schema: SystemSchema },
     ]),
   ],
-  providers: [WhatsappService, EmailService, DateService, SmtpService],
+  providers: [
+    WhatsappService,
+    EmailService,
+    DateService,
+    SmtpService,
+    SystemService,
+  ],
   exports: [WhatsappService],
   controllers: [WhatsappController],
 })

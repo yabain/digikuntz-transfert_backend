@@ -725,6 +725,23 @@ export class WhatsappService implements OnModuleInit {
     return { status: true };
   }
 
+  async getWhatsappClientStatus(): Promise<{
+    status: boolean;
+    state?: string;
+  }> {
+    try {
+      const state =
+        this.client && (await (this.client as any).getState?.())
+          ? await (this.client as any).getState()
+          : this.client
+            ? 'INITIALIZING_OR_NO_STATE'
+            : 'NO_CLIENT';
+      return { status: this.isReady, state };
+    } catch {
+      return { status: this.isReady, state: 'UNKNOWN' };
+    }
+  }
+
   showName(user: User): string {
     return (user as any).name || `${user.firstName} ${user.lastName}`;
   }
@@ -749,7 +766,7 @@ export class WhatsappService implements OnModuleInit {
       );
   }
 
-  private buildTransetMessageForReceiver(
+  private buildMessageForReceiverTransfer(
     transaction: any,
     language: string,
   ): string {
@@ -774,23 +791,6 @@ export class WhatsappService implements OnModuleInit {
         `https://payments.digikuntz.com` +
         `\n\n\n> This is an automatic message from Digikuntz Payments.`
       );
-  }
-
-  async getWhatsappClientStatus(): Promise<{
-    status: boolean;
-    state?: string;
-  }> {
-    try {
-      const state =
-        this.client && (await (this.client as any).getState?.())
-          ? await (this.client as any).getState()
-          : this.client
-            ? 'INITIALIZING_OR_NO_STATE'
-            : 'NO_CLIENT';
-      return { status: this.isReady, state };
-    } catch {
-      return { status: this.isReady, state: 'UNKNOWN' };
-    }
   }
 }
 

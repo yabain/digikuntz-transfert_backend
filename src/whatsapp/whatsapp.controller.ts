@@ -112,18 +112,6 @@ export class WhatsappController {
   }
 
   @Post('welcome-message')
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Send a WhatsApp welcome message to the authenticated user',
-  })
-  @ApiResponse({ status: 201, description: 'Welcome message sent.' })
-  @UseGuards(AuthGuard('jwt'))
-  @UsePipes(ValidationPipe)
-  async welcomeMessage(@Req() req) {
-    return this.whatsappService.welcomeMessage(req.user._id, false);
-  }
-
-  @Post('welcome-message0')
   @ApiOperation({
     summary: 'Send a WhatsApp welcome message to a user by ID (dev only)',
   })
@@ -135,8 +123,8 @@ export class WhatsappController {
     },
   })
   @ApiResponse({ status: 201, description: 'Welcome message sent.' })
-  async welcomeMessage0(@Body() body: { userId: string }) {
-    return this.whatsappService.welcomeMessage(body.userId, false);
+  async welcomeMessage0(@Body() userData: any) {
+    return this.whatsappService.welcomeMessage(userData);
   }
 
   @Put('update-contact')
