@@ -23,6 +23,7 @@ import { EmailService } from 'src/email/email.service';
 import { User } from 'src/user/user.schema';
 import { SmtpService } from 'src/email/smtp/smtp.service';
 import * as fs from 'fs';
+import { SystemService } from 'src/system/system.service';
 
 /** File-scoped types (inchangés côté interface publique) */
 interface QueuedMessage {
@@ -105,11 +106,18 @@ export class WhatsappService implements OnModuleInit {
     private configService: ConfigService,
     private emailService: EmailService,
     private smtpService: SmtpService,
+    private systemService: SystemService,
   ) {
     this.frontUrl =
       this.configService.get<string>('FRONT_URL') ||
       'https://payments.digikuntz.com';
+    this.getSystemData();
     this.getSmtpData();
+  }
+
+  async getSystemData() {
+    const system = await this.systemService.getSystemData();
+    this.alertEmail = system.alertEmail || 'flambel55@gmail.com';
   }
 
   async getSmtpData() {
@@ -465,93 +473,6 @@ export class WhatsappService implements OnModuleInit {
     );
   }
 
-  private async sendMassFailureAlert(errMessage?: string): Promise<void> {
-    try {
-      const subject =
-        `🚨 🚨 WhatsApp ${errMessage} Alert - Digikuntz Payments ` +
-        new Date().toISOString();
-      const message = `
-        <h2>WhatsApp ${errMessage}</h2>
-        <p><strong>Time:</strong> ${new Date().toISOString()}</p>
-        <p><strong>Failed Messages:</strong> ${this.currentFailNumber}/${this.maxFailNumber}</p>
-        <p><strong>Client Status:</strong> ${this.isReady ? 'Ready' : 'Not Ready'}</p>
-        <p><strong>Reconnection Attempts:</strong> ${this.reconnectAttempts}/${this.maxReconnectAttempts}</p>`;
-      await this.emailService.sendEmail(this.alertEmail, subject, message);
-      this.logger.warn(`Mass failure alert sent to ${this.alertEmail}`);
-    } catch (error: any) {
-      this.logger.error(`Failed to send mass failure alert: ${error.message}`);
-    }
-  }
-
-  private async sendConnexionFailureAlert(info?: string): Promise<void> {
-    const now = Date.now();
-    if (this.alertSent) return;
-    if (this.lastConnAlertAt && now - this.lastConnAlertAt < 30 * 60 * 1000)
-      return;
-    this.lastConnAlertAt = now;
-
-    const subject =
-      `🚨🚨🚨 WhatsApp Connexion Failure Alert - Digikuntz Payments ` +
-      new Date().toISOString();
-    const message = `
-      <h2>WhatsApp messaging service: ${info ?? 'Connexion Failure Alert'}</h2>
-      <p>The system is unable to connect to the WhatsApp account.</p>
-      <p><strong>Time:</strong> ${new Date().toISOString()}</p>
-      <p><strong>Client Status:</strong> ${this.isReady ? 'Ready' : 'Not Ready'}</p>
-      <p><strong>Reconnection Attempts:</strong> ${this.reconnectAttempts}/${this.maxReconnectAttempts}</p>`;
-    try {
-      await this.emailService.sendEmail(this.alertEmail, subject, message);
-    } catch (e: any) {
-      this.logger.error(
-        `Failed to send connexion failure alert: ${e?.message}`,
-      );
-    }
-  }
-
-  private async sendQrCodeFailureAlert(info?: string): Promise<void> {
-    const subject =
-      `🚨 Error saving WhatsApp QR-code alert - Digikuntz Payments ` +
-      new Date().toISOString();
-    const message = `
-      <h2>${info ?? 'Error saving WhatsApp QR-code alert'}</h2>
-      <p><strong>Time:</strong> ${new Date().toISOString()}</p>`;
-    try {
-      await this.emailService.sendEmail(this.alertEmail, subject, message);
-    } catch (e: any) {
-      this.logger.error(`Failed to send QR-code failure alert: ${e?.message}`);
-    }
-  }
-
-  private async sendQrNeedToScanAlert(info?: string): Promise<void> {
-    const subject =
-      `🚨 WhatsApp QR-code Need to scan - Digikuntz Payments ` +
-      new Date().toISOString();
-    const message = `
-      <h2>${info ?? 'WhatsApp QR-code Need to scan'}</h2>
-      <p><strong>Time:</strong> ${new Date().toISOString()}</p>`;
-    try {
-      await this.emailService.sendEmail(this.alertEmail, subject, message);
-    } catch (e: any) {
-      this.logger.error(`Failed to send need-to-scan alert: ${e?.message}`);
-    }
-  }
-
-  private async sendWhatsappConnectedNotification(
-    info?: string,
-  ): Promise<void> {
-    const subject =
-      `✅ ✅ WhatsApp Service is ready - Digikuntz Payments ` +
-      new Date().toISOString();
-    const message = `
-      <h2>${info ?? '✅ ✅ WhatsApp Service is ready'}</h2>
-      <p><strong>Time:</strong> ${new Date().toISOString()}</p>`;
-    try {
-      await this.emailService.sendEmail(this.alertEmail, subject, message);
-    } catch (e: any) {
-      this.logger.error(`Failed to send connected notif: ${e?.message}`);
-    }
-  }
-
   /** --------- Reconnexion/backoff --------- */
   private async handleDisconnect(): Promise<void> {
     this.logger.warn('handleDisconnect');
@@ -646,21 +567,108 @@ export class WhatsappService implements OnModuleInit {
     return qr;
   }
 
-  async welcomeMessage(data: any, isUser: boolean): Promise<any> {
-    const user = isUser ? data : await this.getUser(data);
-    const formattedMessage =
-      user.language === 'fr'
-        ? this.buildFrenchWelcomeMessage(user)
-        : this.buildEnglishWelcomeMessage(user);
-    return this.sendMessage(user.phone, formattedMessage, user.countryId.code);
+  private async sendMassFailureAlert(errMessage?: string): Promise<void> {
+    try {
+      const subject =
+        `🚨 🚨 WhatsApp ${errMessage} Alert - Digikuntz Payments ` +
+        new Date().toISOString();
+      const message = `
+        <h2>WhatsApp ${errMessage}</h2>
+        <p><strong>Time:</strong> ${new Date().toISOString()}</p>
+        <p><strong>Failed Messages:</strong> ${this.currentFailNumber}/${this.maxFailNumber}</p>
+        <p><strong>Client Status:</strong> ${this.isReady ? 'Ready' : 'Not Ready'}</p>
+        <p><strong>Reconnection Attempts:</strong> ${this.reconnectAttempts}/${this.maxReconnectAttempts}</p>`;
+      await this.emailService.sendEmail(this.alertEmail, subject, message);
+      this.logger.warn(`Mass failure alert sent to ${this.alertEmail}`);
+    } catch (error: any) {
+      this.logger.error(`Failed to send mass failure alert: ${error.message}`);
+    }
   }
 
-  async participateToEventMessage(userId: string, event: any) {
-    const user = await this.getUser(userId);
-    const formattedMessage =
-      user.language === 'fr'
-        ? this.buildFrenchEventMessage(user, event)
-        : this.buildEnglishEventMessage(user, event);
+  private async sendConnexionFailureAlert(info?: string): Promise<void> {
+    const now = Date.now();
+    if (this.alertSent) return;
+    if (this.lastConnAlertAt && now - this.lastConnAlertAt < 30 * 60 * 1000)
+      return;
+    this.lastConnAlertAt = now;
+
+    const subject =
+      `🚨🚨🚨 WhatsApp Connexion Failure Alert - Digikuntz Payments ` +
+      new Date().toISOString();
+    const message = `
+      <h2>WhatsApp messaging service: ${info ?? 'Connexion Failure Alert'}</h2>
+      <p>The system is unable to connect to the WhatsApp account.</p>
+      <p><strong>Time:</strong> ${new Date().toISOString()}</p>
+      <p><strong>Client Status:</strong> ${this.isReady ? 'Ready' : 'Not Ready'}</p>
+      <p><strong>Reconnection Attempts:</strong> ${this.reconnectAttempts}/${this.maxReconnectAttempts}</p>`;
+    try {
+      await this.emailService.sendEmail(this.alertEmail, subject, message);
+    } catch (e: any) {
+      this.logger.error(
+        `Failed to send connexion failure alert: ${e?.message}`,
+      );
+    }
+  }
+
+  private async sendQrCodeFailureAlert(info?: string): Promise<void> {
+    const subject =
+      `🚨 Error saving WhatsApp QR-code alert - Digikuntz Payments ` +
+      new Date().toISOString();
+    const message = `
+      <h2>${info ?? 'Error saving WhatsApp QR-code alert'}</h2>
+      <p><strong>Time:</strong> ${new Date().toISOString()}</p>`;
+    try {
+      await this.emailService.sendEmail(this.alertEmail, subject, message);
+    } catch (e: any) {
+      this.logger.error(`Failed to send QR-code failure alert: ${e?.message}`);
+    }
+  }
+
+  private async sendQrNeedToScanAlert(info?: string): Promise<void> {
+    const subject =
+      `🚨 WhatsApp QR-code Need to scan - Digikuntz Payments ` +
+      new Date().toISOString();
+    const message = `
+      <h2>${info ?? 'WhatsApp QR-code Need to scan'}</h2>
+      <p><strong>Time:</strong> ${new Date().toISOString()}</p>`;
+    try {
+      await this.emailService.sendEmail(this.alertEmail, subject, message);
+    } catch (e: any) {
+      this.logger.error(`Failed to send need-to-scan alert: ${e?.message}`);
+    }
+  }
+
+  private async sendWhatsappConnectedNotification(
+    info?: string,
+  ): Promise<void> {
+    const subject =
+      `✅ ✅ WhatsApp Service is ready - Digikuntz Payments ` +
+      new Date().toISOString();
+    const message = `
+      <h2>${info ?? '✅ ✅ WhatsApp Service is ready'}</h2>
+      <p><strong>Time:</strong> ${new Date().toISOString()}</p>`;
+    try {
+      await this.emailService.sendEmail(this.alertEmail, subject, message);
+    } catch (e: any) {
+      this.logger.error(`Failed to send connected notif: ${e?.message}`);
+    }
+  }
+
+  async welcomeMessage(userData): Promise<any> {
+    const formattedMessage = this.buildWelcomeMessage(userData);
+    return this.sendMessage(
+      userData.phone,
+      formattedMessage,
+      userData.countryId.code,
+    );
+  }
+
+  async buildTransetMessageForReceiver(transactionData: any, user: any) {
+    const formattedMessage = this.buildTransetMessageForReceiver(
+      transactionData,
+      user.language,
+    );
+
     return this.sendMessage(user.phone, formattedMessage, user.countryId.code);
   }
 
@@ -717,56 +725,55 @@ export class WhatsappService implements OnModuleInit {
     return { status: true };
   }
 
-  private buildFrenchWelcomeMessage(user: User): string {
-    const userName = (user as any).name || `${user.firstName} ${user.lastName}`;
-    return (
-      `Hello *${userName} !!*\n\n` +
-      `Nous sommes ravis de vous accueillir sur *Digikuntz Payments*\n` +
-      `Votre solution intelligente tout-en-un pour la gestion d'événements.\n\n` +
-      `🔗 _Rendez-vous sur_ :\n${this.frontUrl}` +
-      `\n\n\n> Ceci est un message automatique du service WhatsApp de Digikuntz Payments.`
-    );
+  showName(user: User): string {
+    return (user as any).name || `${user.firstName} ${user.lastName}`;
   }
 
-  private buildEnglishWelcomeMessage(user: User): string {
-    const userName = (user as any).name || `${user.firstName} ${user.lastName}`;
-    return (
-      `Hello *${userName} !!*\n\n` +
-      `We are thrilled to welcome you to *Digikuntz Payments*\n` +
-      `Your smart all-in-one solution for event management.\n\n` +
-      `🔗 _Visit us at:_\n${this.frontUrl}` +
-      `\n\n\n> This is an automatic message from the Digikuntz Payments WhatsApp service.`
-    );
+  private buildWelcomeMessage(user: User): string {
+    const userName = this.showName(user);
+    if (user.language === 'fr ')
+      return (
+        `Hello *${userName} !!*\n\n` +
+        `Nous sommes ravis de vous accueillir sur *Digikuntz Payments*\n` +
+        `Votre solution intelligente tout-en-un pour la gestion d'événements.\n\n` +
+        `🔗 _Rendez-vous sur_ :\n${this.frontUrl}` +
+        `\n\n\n> Ceci est un message automatique du service WhatsApp de Digikuntz Payments.`
+      );
+    else
+      return (
+        `Hello *${userName} !!*\n\n` +
+        `We are thrilled to welcome you to *Digikuntz Payments*\n` +
+        `Your smart all-in-one solution for event management.\n\n` +
+        `🔗 _Visit us at:_\n${this.frontUrl}` +
+        `\n\n\n> This is an automatic message from the Digikuntz Payments WhatsApp service.`
+      );
   }
 
-  private buildFrenchEventMessage(user: User, event: any): string {
-    const userName = (user as any).name || `${user.firstName} ${user.lastName}`;
-    return (
-      `*Votre place est assurée !*\n\n` +
-      `Hello ${userName}\n` +
-      `Nous avons réservé votre place pour *${event.event_title}*\n` +
-      `* Début : ${event.event_start}\n` +
-      `* Fin : ${event.event_end}\n` +
-      `* Lieu : ${event.event_country}, ${event.event_city},\n` +
-      `${event.event_location}\n\n` +
-      `🔗 _A propos de l'event :_ ${event.event_url}` +
-      `\n\n\n> Ceci est un message automatique du service WhatsApp de Digikuntz Payments.`
-    );
-  }
-
-  private buildEnglishEventMessage(user: User, event: any): string {
-    const userName = (user as any).name || `${user.firstName} ${user.lastName}`;
-    return (
-      `*Your seat is reserved !*\n\n` +
-      `Hello ${userName}\n` +
-      `We have reserved your seat for *${event.event_title}*\n` +
-      `* Start : ${event.event_start}\n` +
-      `* End : ${event.event_end}\n` +
-      `* Location : ${event.event_country}, ${event.event_city},\n` +
-      `${event.event_location}\n\n` +
-      `🔗 _About event :_ ${event.event_url}` +
-      `\n\n\n> This is an automatic message from the Digikuntz Payments WhatsApp service.`
-    );
+  private buildTransetMessageForReceiver(
+    transaction: any,
+    language: string,
+  ): string {
+    const userName = transaction.receiverName;
+    if (language === 'fr')
+      return (
+        `*Nouveau paiement reçu !*\n\n` +
+        `Hello ${userName}\n` +
+        `Vous avez reçu un paiment de *${transaction.receiverAmount} ${transaction.receiverCurrency}* de la part de *${transaction.senderName}*\n` +
+        `\n` +
+        `Merci de faire confiance à Digikuntz Payments. \n` +
+        `https://payments.digikuntz.com` +
+        `\n\n\n> Ceci est un message automatique de Digikuntz Payments.`
+      );
+    else
+      return (
+        `*New payment received !*\n\n` +
+        `Hello ${userName}\n` +
+        `You received a payment of *${transaction.receiverAmount} ${transaction.receiverCurrency}* from *${transaction.senderName}*\n` +
+        `\n` +
+        `Thank you for trusting Digikuntz Payments.` +
+        `https://payments.digikuntz.com` +
+        `\n\n\n> This is an automatic message from Digikuntz Payments.`
+      );
   }
 
   async getWhatsappClientStatus(): Promise<{
@@ -786,3 +793,10 @@ export class WhatsappService implements OnModuleInit {
     }
   }
 }
+
+// Account creation message
+// Balance credited
+// Balance debited
+// Money sended successful
+// New subscriber of plan
+// Need vadation payment (for admin)

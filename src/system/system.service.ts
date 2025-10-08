@@ -34,4 +34,10 @@ export class SystemService {
       throw new ConflictException(error);
     }
   }
+
+  async getSystemData(): Promise<any> {
+    const res = await this.systemModel.findOne();
+    return res;
+  }
+
 }

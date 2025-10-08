@@ -19,6 +19,12 @@ export class System extends Document {
 
   @Prop()
   racineLink: string;
+
+  @Prop()
+  EmailToAlert: string;
+
+  @Prop()
+  WhatsappToAlert: string;
 }
 
 export const SystemSchema = SchemaFactory.createForClass(System);
