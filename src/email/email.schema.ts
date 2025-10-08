@@ -13,6 +13,9 @@ export class Email extends Document {
   subject: string;
 
   @Prop()
+  body: string;
+
+  @Prop()
   status: boolean;
 }
 

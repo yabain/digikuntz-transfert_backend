@@ -98,11 +98,11 @@ export class EmailService {
         subject,
         html: message,
       });
-      this.saveMail({ to, subject, from, status: true });
+      this.saveMail({ to, subject, from, status: true, body: message });
       return true;
     } catch (error) {
       console.error("Erreur lors de l'envoi du mail :", error);
-      this.saveMail({ to, subject, from, status: false });
+      this.saveMail({ to, subject, from, status: false, body: message });
       throw error;
     }
   }
@@ -214,7 +214,7 @@ export class EmailService {
 
       const html = template(context);
 
-      this.saveMail({ to: toEmail, subject, from, status: true });
+      this.saveMail({ to: toEmail, subject, from, status: true, body: String(html) });
       await this.transporter.sendMail({
         from,
         to: toEmail,
@@ -228,7 +228,7 @@ export class EmailService {
         "Erreur lors de l'envoi du mail de réinitialisation :",
         error,
       );
-      this.saveMail({ to: toEmail, subject, from, status: true });
+      this.saveMail({ to: toEmail, subject, from, status: true, body: '' });
       return false;
     }
   }
@@ -325,6 +325,7 @@ export class EmailService {
       to: data.to,
       subject: data.subject,
       status: data.status,
+      body: data.body || '',
     });
     console.log('saving email: ', okay);
     return okay;
