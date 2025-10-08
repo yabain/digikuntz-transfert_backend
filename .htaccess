@@ -1,19 +1,30 @@
 # ============================================================
+# Force HTTPS pour tout le sous-domaine
+# ============================================================
+RewriteEngine On
+RewriteCond %{HTTPS} !=on
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# ============================================================
 # Autoriser le CORS pour ton frontend
 # ============================================================
 <IfModule mod_headers.c>
-Header always set Access-Control-Allow-Origin "https://payments.digikuntz.com"
-Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, PATCH, OPTIONS"
-Header always set Access-Control-Allow-Headers "Authorization,Content-Type,Accept,Origin,X-Requested-With"
-Header always set Access-Control-Allow-Credentials "true"
+    Header always set Access-Control-Allow-Origin "https://payments.digikuntz.com"
+    Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+    Header always set Access-Control-Allow-Headers "Authorization,Content-Type,Accept,Origin,X-Requested-With"
+    Header always set Access-Control-Allow-Credentials "true"
 </IfModule>
 
 # ============================================================
-# Rediriger toutes les requêtes vers le backend Node.js
+# Gestion des requêtes OPTIONS (prévol CORS)
 # ============================================================
-RewriteEngine On
+RewriteCond %{REQUEST_METHOD} OPTIONS
+RewriteRule ^(.*)$ $1 [R=204,L]
 
-# WebSocket support (si nécessaire)
+# ============================================================
+# Redirection vers le backend Node.js
+# ============================================================
+# WebSocket support
 RewriteCond %{HTTP:Upgrade} =websocket [OR]
 RewriteCond %{HTTP:Connection} upgrade [NC]
 RewriteRule /(.*) ws://127.0.0.1:3002/$1 [P,L]
@@ -24,12 +35,12 @@ RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^(.*)$ http://127.0.0.1:3002/$1 [P,L]
 
 # ============================================================
-# Désactiver le listing des fichiers
-# ============================================================
-Options -Indexes
-
-# ============================================================
 # Proxy configuration
 # ============================================================
 ProxyPreserveHost On
 ProxyRequests Off
+
+# ============================================================
+# Désactiver le listing des fichiers
+# ============================================================
+Options -Indexes
