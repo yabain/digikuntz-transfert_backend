@@ -7,6 +7,6 @@ import { Injectable } from '@nestjs/common';
 export class AppService {
   getHello(res: any): string {
     // return res.redirect('https://payments.digikuntz.com');
-    return 'Hello digikuntz-payment!';
+    return 'H ello digikuntz-payment!';
   }
 }
