@@ -16,3 +16,4 @@ git pull origin main
 /opt/cpanel/ea-nodejs18/bin/npm run build
 /opt/cpanel/ea-nodejs18/bin/pm2 start dist/main.js --interpreter /opt/cpanel/ea-nodejs18/bin/node --name digikuntz-backend
 pm2 save
+pm2 restart digikuntz-backend --update-env
