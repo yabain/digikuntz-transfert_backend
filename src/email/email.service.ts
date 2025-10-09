@@ -21,6 +21,7 @@ import { Query } from 'express-serve-static-core';
 @Injectable()
 export class EmailService {
   private transporter: nodemailer.Transporter;
+  private readonly frontUrl: string = 'https://payments.digikuntz.com';
 
   private readonly templateFolder = path.join(
     __dirname,
@@ -125,7 +126,7 @@ export class EmailService {
     );
 
     const context = {
-      frontUrl: this.configService.get<string>('FRONT_URL'),
+      frontUrl: this.configService.get<string>('FRONT_URL') || this.frontUrl,
       userName,
     };
 
@@ -156,7 +157,7 @@ export class EmailService {
     );
 
     const context = {
-      frontUrl: this.configService.get<string>('FRONT_URL'),
+      frontUrl: this.configService.get<string>('FRONT_URL') || this.frontUrl,
       userName,
     };
 
@@ -203,13 +204,14 @@ export class EmailService {
         this.templateFolder,
         `${templateName}_${language}.hbs`,
       );
+      const front = this.configService.get<string>('FRONT_URL') || this.frontUrl;
 
       const templateSource = fs.readFileSync(templatePath, 'utf8');
       const template = handlebars.compile(templateSource);
 
       const context = {
         userName,
-        resetPwdUrl: `${this.configService.get<string>('FRONT_URL')}/auth/new-password/${token}`,
+        resetPwdUrl: `${front}/auth/new-password/${token}`,
       };
 
       const html = template(context);
@@ -248,6 +250,7 @@ export class EmailService {
 
     const templateSource = fs.readFileSync(templatePath, 'utf8');
     const template = handlebars.compile(templateSource);
+    const front = this.configService.get<string>('FRONT_URL') || this.frontUrl;
 
     const context = {
       userName,
@@ -256,7 +259,7 @@ export class EmailService {
       plans_subTitle: plansData.subTitle,
       plans_cycle: plansData.cycle,
       plans_description: this.cleanString(plansData.description),
-      plans_url: `${this.configService.get<string>('FRONT_URL')}/plans/${plansData._id}_shared`,
+      plans_url: `${front}/plans/${plansData._id}_shared`,
     };
 
     const html = template(context);
@@ -283,6 +286,7 @@ export class EmailService {
   private generateIcsFile(
     event: any,
   ): Promise<{ filename: string; content: Buffer }> {
+    const front = this.configService.get<string>('FRONT_URL') || this.frontUrl;
     return new Promise((resolve, reject) => {
       const eventDetails = {
         start: this.dateService.convertToIcsDate(event.eventData.dateStart),
@@ -290,7 +294,7 @@ export class EmailService {
         title: event.eventData.title,
         description: this.cleanString(event.eventData.description),
         location: event.eventData.location,
-        url: `${this.configService.get<string>('FRONT_URL')}/tabs/events/${event.eventData._id}_shared`,
+        url: `${front}/tabs/events/${event.eventData._id}_shared`,
         organizer: {
           name: 'Digikuntz Payment',
           email: this.configService.get<string>('SMTP_USER'),
