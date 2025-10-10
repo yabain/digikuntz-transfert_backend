@@ -19,20 +19,10 @@ import { InjectModel } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
 import { ConfigService } from '@nestjs/config';
 import * as qrcode from 'qrcode-terminal';
+import * as fs from 'fs';
+
 import { EmailService } from 'src/email/email.service';
 import { User } from 'src/user/user.schema';
-import { SmtpService } from 'src/email/smtp/smtp.service';
-import * as fs from 'fs';
-import { SystemService } from 'src/system/system.service';
-
-/** File-scoped types (inchangés côté interface publique) */
-interface QueuedMessage {
-  id: string;
-  to: string;
-  message: string;
-  timestamp: Date;
-  retries: number;
-}
 
 type HealthEstimation = 'immediate' | 'when_ready' | 'retry';
 
@@ -40,150 +30,93 @@ type HealthEstimation = 'immediate' | 'when_ready' | 'retry';
 export class WhatsappService implements OnModuleInit {
   private readonly logger = new Logger(WhatsappService.name);
 
-  /** WhatsApp Web client instance (non persistée) */
   private client: Client | null = null;
-
-  /** Indique si le client est prêt à envoyer des messages */
   private isReady = false;
-
-  /** Indique si un scan QR est requis maintenant */
   private needToScan = true;
 
-  /** Compteurs d’échecs d’envoi pour alerte “mass failure” */
   private currentFailNumber = 0;
-  private maxFailNumber = 5;
+  private readonly maxFailNumber = 5;
 
-  /** Reconnexion (exponential backoff) */
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private baseReconnectDelay = 1000;
-  private maxReconnectDelay = 30000;
+  private readonly maxReconnectAttempts = 5;
+  private readonly baseReconnectDelay = 1000;
+  private readonly maxReconnectDelay = 30000;
   private reconnectTimeout: NodeJS.Timeout | null = null;
 
-  /** Health monitoring */
   private healthCheckInterval: NodeJS.Timeout | null = null;
-  private readonly healthCheckDelay = 60 * 1000;
+  private readonly healthCheckDelay = 60_000;
   private healthCheckStarted = false;
 
-  /** Handlers attachés une seule fois */
   private handlersBound = false;
-
-  /** Gestion d’alertes */
-  private alertSent = false;
-  private lastConnAlertAt: number | null = null;
-
-  /** Fenêtre de “warmup” post-auth/load */
-  private lastAuthAt: number | null = null;
-  private lastLoadingPercent = 0;
-  private lastLoadingAt: number | null = null;
-  private readonly authWarmupMs = 2 * 60 * 1000;
-  private readyProbeTimer: NodeJS.Timeout | null = null;
-
-  /** Boot state */
   private initializing = false;
 
-  /** Front URL & alert email */
-  private frontUrl = '';
-  private alertEmail = 'flambel55@gmail.com';
+  private readyProbeTimer: NodeJS.Timeout | null = null;
+  private lastAuthAt: number | null = null;
+  private lastLoadingAt: number | null = null;
+  private readonly authWarmupMs = 2 * 60_000;
 
-  /** --------- Mémoire locale (remplace Mongo) --------- */
-  private memoryStatus: { status: boolean; message: string } = {
-    status: false,
-    message: 'Not initialized',
-  };
+  private frontUrl = '';
+  private alertEmail = 'alerts@example.com';
+
   private memoryQr: {
     qr: string | null;
     status: boolean;
     message: string;
     code?: string;
     phone?: string;
-  } = { qr: null, status: false, message: 'No QR yet' };
+  } = {
+    qr: null,
+    status: false,
+    message: 'No QR yet',
+  };
+  private memoryStatus: { status: boolean; message: string } = {
+    status: false,
+    message: 'Not initialized',
+  };
 
   constructor(
-    // On garde userModel (ton appli peut en avoir besoin pour les templates)
-    @InjectModel(User.name)
-    private userModel: mongoose.Model<User>,
-    private configService: ConfigService,
-    private emailService: EmailService,
-    private smtpService: SmtpService,
-    private systemService: SystemService,
+    @InjectModel(User.name) private userModel: mongoose.Model<User>,
+    private config: ConfigService,
+    private email: EmailService,
   ) {
     this.frontUrl =
-      this.configService.get<string>('FRONT_URL') ||
-      'https://payments.digikuntz.com';
-    this.getSystemData();
-    this.getSmtpData();
+      this.config.get<string>('FRONT_URL') || 'https://example.com';
+    this.alertEmail = this.config.get<string>('ALERT_EMAIL') || this.alertEmail;
   }
 
-  async getSystemData() {
-    const system = await this.systemService.getSystemData();
-    this.alertEmail = system.alertEmail || 'flambel55@gmail.com';
-  }
-
-  async getSmtpData() {
-    const smtp = await this.smtpService.getSmtpData();
-    if (smtp) this.alertEmail = smtp.smtpUser;
-  }
+  //#region Init / destroy
 
   onModuleInit() {
     this.logger.log('Whatsapp module initiated');
     this.initWhatsapp().catch((err) => {
-      const message =
-        'Error during WhatsApp init (non-blocking): ' + err?.message;
-      this.logger.error(message);
-      this.sendConnexionFailureAlert(message);
+      const msg = 'Error during WhatsApp init: ' + (err?.message ?? err);
+      this.logger.error(msg);
+      this.sendConnexionFailureAlert(msg).catch(() => {});
     });
   }
 
-  /** --------- Init/Destroy sans persistance --------- */
-  async initWhatsapp(): Promise<any> {
-    this.logger.log('initWhatsapp (stateless)');
-
-    if (this.initializing) {
-      this.logger.warn('initWhatsapp: already initializing, skip');
+  async initWhatsapp(): Promise<{ status: boolean; message: string }> {
+    if (this.initializing)
       return { status: false, message: 'Already initializing' };
-    }
     this.initializing = true;
 
     try {
-      // détruire l’ancien client si présent
       if (this.client) {
-        if (this.isReady) {
-          return { status: true, message: 'WhatsApp already initialized' };
-        }
         await this.safeDestroyClient();
         this.client = null;
         this.handlersBound = false;
       }
 
-      // Chromium: flags Linux
-      const isLinux = process.platform === 'linux';
-      const args = isLinux
-        ? [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-          ]
-        : [];
-
-      // Optionnel: chemin Chrome si Puppeteer n’a pas Chromium
       const chromePath =
         process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)
           ? process.env.CHROME_PATH
           : undefined;
 
-      // ⚠️ Aucune authStrategy → pas de persistance, QR à chaque démarrage
       this.client = new Client({
-        // ⚠️ pas d'authStrategy ici -> pas de persistance de session (QR à chaque démarrage)
-        webVersion: '2.3000.1025302125-alpha',
-        webVersionCache: {
-          type: 'remote',
-          // WPPConnect maintient l’index des HTML de WhatsApp Web
-          // {version} sera remplacé par la valeur de webVersion ci-dessus
-          remotePath:
-            'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/{version}.html',
-          strict: false, // si la version épinglée n’est pas dispo, prendre la dernière connue
-        },
+        authStrategy: new LocalAuth({
+          dataPath: '.wwebjs_session',
+          clientId: 'digikuntz',
+        }),
         puppeteer: {
           headless: true,
           args:
@@ -199,19 +132,17 @@ export class WhatsappService implements OnModuleInit {
               ? process.env.CHROME_PATH
               : undefined,
         },
-        authStrategy: new LocalAuth(),
+        // ✅ cache JSON “last.json” maintenu (pas d’HTML ici)
+        webVersionCache: {
+          type: 'remote',
+          remotePath:
+            'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/last.json',
+        },
+        restartOnAuthFail: true,
       });
 
       this.setupEventHandlers();
-
-      try {
-        await this.client.initialize();
-        const state = await (this.client as any).getState?.();
-        this.logger.log(`Initial WA state: ${state ?? 'UNKNOWN'}`);
-      } catch {
-        this.logger.warn('Cannot read initial WA state');
-      }
-
+      await this.client.initialize();
       return { status: true, message: 'Initializing WhatsApp client' };
     } catch (err: any) {
       const message = `Error initializing WhatsApp client: ${err?.message ?? err}`;
@@ -231,13 +162,14 @@ export class WhatsappService implements OnModuleInit {
         await this.client!.destroy();
       }
     } catch (e: any) {
-      this.logger.warn(
-        `safeDestroyClient: ignore destroy error: ${e?.message}`,
-      );
+      this.logger.warn(`safeDestroyClient: ${e?.message}`);
     }
   }
 
-  /** --------- Envoi de message --------- */
+  //#endregion
+
+  //#region Send message
+
   async sendMessage(
     to: string,
     message: string,
@@ -249,10 +181,7 @@ export class WhatsappService implements OnModuleInit {
   }> {
     this.logger.debug('sendMessage → isReady=' + this.isReady);
 
-    let formatted = to;
-    if (code && !to.startsWith(code)) formatted = code + to;
-
-    if (!this.isReady || !this.client) {
+    if (!this.client || !this.isReady) {
       this.currentFailNumber++;
       await this.checkForMassFailure();
       return {
@@ -261,84 +190,114 @@ export class WhatsappService implements OnModuleInit {
         estimatedDelivery: 'when_ready',
       };
     }
-    // ... après les checks this.isReady / this.client
-    const phoneDigits = (code && !to.startsWith(code) ? code + to : to).replace(
-      /\D/g,
-      '',
-    );
 
-    // 1) Résoudre l'ID WhatsApp (vérifie aussi que le numéro est réellement sur WhatsApp)
+    // normaliser numéro
+    let formatted = to;
+    if (code && !to.startsWith(code)) formatted = code + to;
+    const phoneDigits = formatted.replace(/\D/g, '');
+
+    // injection prête avant d’envoyer
+    if (!(await this.ensureInjectionReady(20_000))) {
+      this.currentFailNumber++;
+      await this.checkForMassFailure();
+      return {
+        success: false,
+        error: 'Injection not ready',
+        estimatedDelivery: 'retry',
+      };
+    }
+
     try {
       const wid = await this.client.getNumberId(phoneDigits);
-      if (!wid) {
+      if (!wid?._serialized) {
         return {
           success: false,
           error: 'Recipient is not a WhatsApp account',
           estimatedDelivery: 'retry',
         };
       }
+      const chatId = wid._serialized;
 
-      await this.client.sendMessage(wid._serialized, message);
-      return { success: true, estimatedDelivery: 'immediate' };
+      const trySend = async () => this.client!.sendMessage(chatId, message);
+
+      try {
+        await trySend();
+        return { success: true, estimatedDelivery: 'immediate' };
+      } catch (err1: any) {
+        const msg1 = String(err1?.message ?? err1);
+        if (/getChat|Evaluation failed|Store\./i.test(msg1)) {
+          this.logger.warn(`Injection shaky: ${msg1}. Retrying…`);
+          for (const wait of [1200, 2500, 4000]) {
+            await this.delay(wait);
+            if (!(await this.ensureInjectionReady(10_000))) continue;
+            try {
+              await trySend();
+              return { success: true, estimatedDelivery: 'immediate' };
+            } catch {}
+          }
+        }
+        throw err1;
+      }
     } catch (err: any) {
-      // Petit retry si l’injection n’est pas tout à fait prête
       const msg = String(err?.message ?? err);
-      // if (msg.includes('getChat') || msg.includes('Evaluation failed')) {
-      //   await new Promise((res) => setTimeout(res, 1200));
-      //   try {
-      //     await this.client.sendMessage(wid._serialized, message);
-      //     this.logger.log(`Message sent on retry → ${wid._serialized}`);
-      //     return { success: true, estimatedDelivery: 'immediate' };
-      //   } catch (err2: any) {
-      //     this.currentFailNumber++;
-      //     await this.checkForMassFailure();
-      //     return {
-      //       success: false,
-      //       error: String(err2?.message ?? err2),
-      //       estimatedDelivery: 'retry',
-      //     };
-      //   }
-      // }
-
       this.currentFailNumber++;
       await this.checkForMassFailure();
-      return {
-        success: false,
-        error: msg,
-        estimatedDelivery: 'retry',
-      };
+      return { success: false, error: msg, estimatedDelivery: 'retry' };
     }
   }
 
-  /** --------- Events / Health --------- */
+  private async ensureInjectionReady(timeoutMs = 10_000): Promise<boolean> {
+    const start = Date.now();
+    let lastErr: any;
+    while (Date.now() - start < timeoutMs) {
+      try {
+        await this.client!.getChats(); // échoue tant que l’injection n’est pas prête
+        return true;
+      } catch (e) {
+        lastErr = e;
+        await this.delay(400);
+      }
+    }
+    this.logger.error(
+      'ensureInjectionReady timeout: ' + (lastErr?.message ?? lastErr),
+    );
+    return false;
+  }
+
+  private async delay(ms: number) {
+    return new Promise((res) => setTimeout(res, ms));
+  }
+
+  //#endregion
+
+  //#region Events / health
+
   private setupEventHandlers() {
-    this.logger.debug('setupEventHandlers');
-    if (!this.client) {
-      this.logger.error('setupEventHandlers: client is null');
-      return;
-    }
-    if (!this.handlersBound) {
-      this.client.on('qr', (qr) => this.handleQrCode(qr));
-      this.client.on('ready', () => this.handleReady());
-      this.client.on('authenticated', () => this.handleAuthenticated());
-      this.client.on('change_state', (state) => this.handleChangeState(state));
-      this.client.on('loading_screen', (percent, message) =>
-        this.handleLoadingScreen(Number(percent), message),
-      );
-      this.client.on('auth_failure', (msg) => this.handleAuthFailure(msg));
-      this.client.on('disconnected', (reason) =>
-        this.handleDisconnected(reason),
-      );
-      this.handlersBound = true;
-    }
+    if (!this.client || this.handlersBound) return;
+
+    this.client.on('qr', (qr) => this.handleQr(qr));
+    this.client.on('authenticated', () => this.handleAuthenticated());
+    this.client.on('ready', () => this.handleReady());
+    this.client.on('change_state', (s) => this.handleChangeState(s));
+    this.client.on('loading_screen', (p, msg) =>
+      this.handleLoading(Number(p), msg),
+    );
+    this.client.on('auth_failure', (msg) => this.handleAuthFailure(msg));
+    this.client.on('disconnected', (reason) => this.handleDisconnected(reason));
+
+    this.handlersBound = true;
     this.startHealthCheck();
   }
 
-  private handleLoadingScreen(percent: number, message: string) {
-    this.logger.debug(`loading_screen ${percent}% - ${message}`);
-    this.lastLoadingPercent = percent;
-    this.lastLoadingAt = Date.now();
-    if (percent >= 99) this.scheduleReadyProbe(0);
+  private async handleQr(qr: string) {
+    this.logger.warn('Received QR — scan with your phone', qr);
+    qrcode.generate(qr, { small: true });
+    this.needToScan = true;
+    this.memoryQr = {
+      qr,
+      status: false,
+      message: 'Awaiting QR scan',
+    };
   }
 
   private async handleAuthenticated() {
@@ -349,10 +308,15 @@ export class WhatsappService implements OnModuleInit {
     this.scheduleReadyProbe(3000);
   }
 
+  private async handleReady() {
+    this.logger.log('Client ready');
+    await this.markReady('Client ready');
+  }
+
   private async handleChangeState(state: string) {
     this.logger.warn(`WA state changed → ${state}`);
     if (state === 'CONNECTED') {
-      await this.markReadyAndClearQr('Client connected');
+      await this.markReady('Client connected');
     } else if (state === 'UNPAIRED') {
       this.isReady = false;
       this.needToScan = true;
@@ -362,79 +326,10 @@ export class WhatsappService implements OnModuleInit {
     }
   }
 
-  private scheduleReadyProbe(delayMs = 5000) {
-    if (this.readyProbeTimer) clearTimeout(this.readyProbeTimer);
-    this.readyProbeTimer = setTimeout(() => this.tryMarkReady(), delayMs);
-  }
-
-  private async tryMarkReady() {
-    if (!this.client) return;
-    try {
-      const state = await (this.client as any).getState?.();
-      this.logger.log(`Probe WA state: ${state ?? 'UNKNOWN'}`);
-      if (state === 'CONNECTED') {
-        await this.markReadyAndClearQr('Client ready (probe)');
-        return;
-      }
-      if (this.inWarmupWindow()) this.scheduleReadyProbe(5000);
-    } catch {
-      if (this.inWarmupWindow()) this.scheduleReadyProbe(5000);
-    }
-  }
-
-  private inWarmupWindow(): boolean {
-    const now = Date.now();
-    if (this.lastAuthAt && now - this.lastAuthAt < this.authWarmupMs)
-      return true;
-    if (this.lastLoadingAt && now - this.lastLoadingAt < 60_000) return true;
-    return false;
-  }
-
-  private async markReadyAndClearQr(message: string) {
-    this.needToScan = false;
-    this.reconnectAttempts = 0;
-
-    // maj in-memory (plus de DB)
-    this.memoryQr.qr = null;
-    this.memoryQr.status = true;
-    this.memoryQr.message = message;
-    await this.updateQrStatus(true, message);
-
-    // ping “service ready” si tu veux garder le comportement
-    const phoneToPing = this.memoryQr.phone || '91224472';
-    const code = this.memoryQr.code || '237';
-    if (!this.isReady) {
-      await this.sendMessage(
-        phoneToPing,
-        '✅ ✅ *WhatsApp Service is ready*',
-        code,
-      );
-      await this.sendWhatsappConnectedNotification();
-    }
-    this.isReady = true;
-  }
-
-  private async clearQrAndMarkReady(message: string) {
-    this.memoryQr.qr = null;
-    this.memoryQr.status = true;
-    this.memoryQr.message = message;
-    await this.updateQrStatus(true, message);
-  }
-
-  private async handleQrCode(qr: string) {
-    this.logger.warn('Received QR — scan with your phone');
-    qrcode.generate(qr, { small: true });
-    this.needToScan = true;
-
-    // stocke le QR en mémoire (plus de DB)
-    this.memoryQr.qr = qr;
-    this.memoryQr.status = false;
-    this.memoryQr.message = 'Awaiting QR scan';
-  }
-
-  private async handleReady() {
-    this.logger.log('Client ready');
-    await this.markReadyAndClearQr('Client ready');
+  private handleLoading(percent: number, message: string) {
+    this.logger.debug(`loading_screen ${percent}% - ${message}`);
+    this.lastLoadingAt = Date.now();
+    if (percent >= 99) this.scheduleReadyProbe(0);
   }
 
   private async handleAuthFailure(msg: string) {
@@ -457,78 +352,64 @@ export class WhatsappService implements OnModuleInit {
     await this.handleDisconnect();
   }
 
-  /** --------- Mass failure --------- */
-  private async checkForMassFailure() {
-    if (this.currentFailNumber <= this.maxFailNumber || this.alertSent) return;
-    const errMessage = `MASS FAILURE DETECTED (${this.currentFailNumber}/${this.maxFailNumber} messages failed)`;
-    this.logger.error(errMessage);
-    await this.sendMassFailureAlert(errMessage);
-    this.alertSent = true;
-    this.currentFailNumber = 0;
-    setTimeout(
-      () => {
-        this.alertSent = false;
-        this.currentFailNumber = 0;
-      },
-      15 * 60 * 1000,
-    );
+  private scheduleReadyProbe(delayMs = 5000) {
+    if (this.readyProbeTimer) clearTimeout(this.readyProbeTimer);
+    this.readyProbeTimer = setTimeout(() => this.tryMarkReady(), delayMs);
   }
 
-  /** --------- Reconnexion/backoff --------- */
-  private async handleDisconnect(): Promise<void> {
-    this.logger.warn('handleDisconnect');
-    if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      const message = `Max reconnection attempts (${this.maxReconnectAttempts}) reached.`;
-      this.logger.error(message);
-      await this.updateQrStatus(false, message);
-      await this.sendConnexionFailureAlert(message);
-      await this.disconnect();
-      return;
+  private inWarmupWindow(): boolean {
+    const now = Date.now();
+    if (this.lastAuthAt && now - this.lastAuthAt < this.authWarmupMs)
+      return true;
+    if (this.lastLoadingAt && now - this.lastLoadingAt < 60_000) return true;
+    return false;
+  }
+
+  private async tryMarkReady() {
+    if (!this.client) return;
+    try {
+      const state = await (this.client as any).getState?.();
+      if (state === 'CONNECTED') {
+        if (await this.ensureInjectionReady(5000)) {
+          await this.markReady('Client ready (probe)');
+          return;
+        }
+      }
+      if (this.inWarmupWindow()) this.scheduleReadyProbe(5000);
+    } catch {
+      if (this.inWarmupWindow()) this.scheduleReadyProbe(5000);
     }
-    this.reconnectAttempts++;
-    const delay = Math.min(
-      this.baseReconnectDelay * Math.pow(2, this.reconnectAttempts - 1),
-      this.maxReconnectDelay,
-    );
-    this.logger.warn(
-      `Reconnecting in ${delay}ms (Attempt ${this.reconnectAttempts})`,
-    );
-    this.reconnectTimeout = setTimeout(() => this.initWhatsapp(), delay);
   }
 
-  /** --------- Helpers “statut” (remplacent la DB) --------- */
-  private async updateQrStatus(
-    status: boolean,
-    message: string,
-  ): Promise<void> {
-    this.memoryStatus = { status, message };
+  private async markReady(message: string) {
+    this.isReady = true;
+    this.needToScan = false;
+    this.memoryQr.qr = null;
+    this.memoryQr.status = true;
+    this.memoryQr.message = message;
+    await this.updateQrStatus(true, message);
+    // pas d’envoi automatique ici
   }
 
-  private startHealthCheck(): void {
+  private startHealthCheck() {
     if (this.healthCheckStarted) return;
     this.healthCheckInterval = setInterval(
       () => this.performHealthCheck(),
       this.healthCheckDelay,
     );
     this.healthCheckStarted = true;
-    this.logger.log(`Health check started (every ${this.healthCheckDelay}ms)`);
   }
 
-  private stopHealthCheck(): void {
-    if (this.healthCheckInterval) {
-      clearInterval(this.healthCheckInterval);
-      this.logger.log('Health check stopped');
-    }
+  private stopHealthCheck() {
+    if (this.healthCheckInterval) clearInterval(this.healthCheckInterval);
     this.healthCheckStarted = false;
   }
 
-  private async performHealthCheck(): Promise<void> {
+  private async performHealthCheck() {
     if (!this.client) {
       await this.updateQrStatus(false, 'No client instance');
       return;
     }
-
     try {
       const state = await (this.client as any).getState?.();
       if (state !== 'CONNECTED') {
@@ -558,104 +439,48 @@ export class WhatsappService implements OnModuleInit {
     }
   }
 
-  /** --------- API publiques (signatures inchangées) --------- */
-  public async refreshQr() {
-    if (this.isReady) {
-      return { message: 'Whatsapp service working good !', status: true };
-    }
-    const qr = await this.getCurrentQr();
-    if (qr?.qr) qrcode.generate(qr.qr, { small: true });
-    return qr;
-  }
+  //#endregion
+  /** --------- Reconnexion avec backoff exponentiel --------- */
+  private async handleDisconnect(): Promise<void> {
+    this.logger.warn('handleDisconnect');
+    if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
 
-  private async sendMassFailureAlert(errMessage?: string): Promise<void> {
-    try {
-      const subject =
-        `🚨 🚨 WhatsApp ${errMessage} Alert - digiKUNTZ Payments ` +
-        new Date().toISOString();
-      const message = `
-        <h2>WhatsApp ${errMessage}</h2>
-        <p><strong>Time:</strong> ${new Date().toISOString()}</p>
-        <p><strong>Failed Messages:</strong> ${this.currentFailNumber}/${this.maxFailNumber}</p>
-        <p><strong>Client Status:</strong> ${this.isReady ? 'Ready' : 'Not Ready'}</p>
-        <p><strong>Reconnection Attempts:</strong> ${this.reconnectAttempts}/${this.maxReconnectAttempts}</p>`;
-      await this.emailService.sendEmail(this.alertEmail, subject, message);
-      this.logger.warn(`Mass failure alert sent to ${this.alertEmail}`);
-    } catch (error: any) {
-      this.logger.error(`Failed to send mass failure alert: ${error.message}`);
-    }
-  }
-
-  private async sendConnexionFailureAlert(info?: string): Promise<void> {
-    const now = Date.now();
-    if (this.alertSent) return;
-    if (this.lastConnAlertAt && now - this.lastConnAlertAt < 30 * 60 * 1000)
+    // Si on a déjà dépassé le nombre maximal de tentatives
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      const message = `Max reconnection attempts (${this.maxReconnectAttempts}) reached.`;
+      this.logger.error(message);
+      await this.updateQrStatus(false, message);
+      await this.sendConnexionFailureAlert(message);
+      await this.disconnect();
       return;
-    this.lastConnAlertAt = now;
-
-    const subject =
-      `🚨🚨🚨 WhatsApp Connexion Failure Alert - digiKUNTZ Payments ` +
-      new Date().toISOString();
-    const message = `
-      <h2>WhatsApp messaging service: ${info ?? 'Connexion Failure Alert'}</h2>
-      <p>The system is unable to connect to the WhatsApp account.</p>
-      <p><strong>Time:</strong> ${new Date().toISOString()}</p>
-      <p><strong>Client Status:</strong> ${this.isReady ? 'Ready' : 'Not Ready'}</p>
-      <p><strong>Reconnection Attempts:</strong> ${this.reconnectAttempts}/${this.maxReconnectAttempts}</p>`;
-    try {
-      await this.emailService.sendEmail(this.alertEmail, subject, message);
-    } catch (e: any) {
-      this.logger.error(
-        `Failed to send connexion failure alert: ${e?.message}`,
-      );
     }
+
+    // Sinon, calcul du délai exponentiel avant la prochaine tentative
+    this.reconnectAttempts++;
+    const delay = Math.min(
+      this.baseReconnectDelay * Math.pow(2, this.reconnectAttempts - 1),
+      this.maxReconnectDelay,
+    );
+
+    this.logger.warn(
+      `Reconnecting in ${delay} ms (Attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`,
+    );
+
+    // Planifie la reconnexion
+    this.reconnectTimeout = setTimeout(() => this.initWhatsapp(), delay);
   }
 
-  private async sendQrCodeFailureAlert(info?: string): Promise<void> {
-    const subject =
-      `🚨 Error saving WhatsApp QR-code alert - digiKUNTZ Payments ` +
-      new Date().toISOString();
-    const message = `
-      <h2>${info ?? 'Error saving WhatsApp QR-code alert'}</h2>
-      <p><strong>Time:</strong> ${new Date().toISOString()}</p>`;
-    try {
-      await this.emailService.sendEmail(this.alertEmail, subject, message);
-    } catch (e: any) {
-      this.logger.error(`Failed to send QR-code failure alert: ${e?.message}`);
-    }
+  public async updateSystemContact(body: {
+    code: string;
+    contact: string;
+  }): Promise<{ status: boolean }> {
+    // on stocke en mémoire (plus de DB)
+    this.memoryQr.code = body.code;
+    this.memoryQr.phone = body.contact;
+    return { status: true };
   }
 
-  private async sendQrNeedToScanAlert(info?: string): Promise<void> {
-    const subject =
-      `🚨 WhatsApp QR-code Need to scan - digiKUNTZ Payments ` +
-      new Date().toISOString();
-    const message = `
-      <h2>${info ?? 'WhatsApp QR-code Need to scan'}</h2>
-      <p><strong>Time:</strong> ${new Date().toISOString()}</p>`;
-    try {
-      await this.emailService.sendEmail(this.alertEmail, subject, message);
-    } catch (e: any) {
-      this.logger.error(`Failed to send need-to-scan alert: ${e?.message}`);
-    }
-  }
-
-  private async sendWhatsappConnectedNotification(
-    info?: string,
-  ): Promise<void> {
-    const subject =
-      `✅ ✅ WhatsApp Service is ready - digiKUNTZ Payments ` +
-      new Date().toISOString();
-    const message = `
-      <h2>${info ?? '✅ ✅ WhatsApp Service is ready'}</h2>
-      <p><strong>Time:</strong> ${new Date().toISOString()}</p>`;
-    try {
-      await this.emailService.sendEmail(this.alertEmail, subject, message);
-    } catch (e: any) {
-      this.logger.error(`Failed to send connected notif: ${e?.message}`);
-    }
-  }
-
-  async welcomeMessage(userData): Promise<any> {
+  async welcomeMessage(userData: any): Promise<any> {
     const formattedMessage = this.buildAccountCreationMessage(userData);
     return this.sendMessage(
       userData.phone,
@@ -664,27 +489,17 @@ export class WhatsappService implements OnModuleInit {
     );
   }
 
-  async buildTransetMessageForReceiver(transactionData: any, user: any) {
-    const formattedMessage = this.buildTransetMessageForReceiver(
-      transactionData,
-      user.language,
-    );
+  //#region Public API / utils
 
-    return this.sendMessage(user.phone, formattedMessage, user.countryId.code);
+  public async refreshQr() {
+    if (this.isReady)
+      return { message: 'Whatsapp service working good !', status: true };
+    const qr = await this.getCurrentQr();
+    if (qr?.qr) qrcode.generate(qr.qr, { small: true });
+    return qr;
   }
 
-  private async getUser(userId: string): Promise<User> {
-    // ⚠️ Ici on conserve ta logique app (User en DB). Ce n’est PAS la persistance WhatsApp.
-    const user = await this.userModel.findById(userId).populate('countryId');
-    if (!user) throw new NotFoundException('User not found');
-    // nettoyage facultatif
-    (user as any).password = '';
-    (user as any).resetPasswordToken = '';
-    return user;
-  }
-
-  async getCurrentQr(): Promise<any> {
-    // même forme de retour que ton ancienne méthode (qr/status/message)
+  async getCurrentQr() {
     if (!this.memoryQr.qr) {
       this.logger.warn('No QR in memory');
       return {
@@ -716,16 +531,6 @@ export class WhatsappService implements OnModuleInit {
     return { status: true, message };
   }
 
-  public async updateSystemContact(body: {
-    code: string;
-    contact: string;
-  }): Promise<{ status: boolean }> {
-    // on stocke en mémoire (plus de DB)
-    this.memoryQr.code = body.code;
-    this.memoryQr.phone = body.contact;
-    return { status: true };
-  }
-
   async getWhatsappClientStatus(): Promise<{
     status: boolean;
     state?: string;
@@ -742,6 +547,36 @@ export class WhatsappService implements OnModuleInit {
       return { status: this.isReady, state: 'UNKNOWN' };
     }
   }
+
+  private async sendConnexionFailureAlert(info?: string) {
+    try {
+      await this.email.sendEmail(
+        this.alertEmail,
+        'WhatsApp Connexion Failure',
+        info ?? 'Connexion failed',
+      );
+    } catch (e) {
+      this.logger.error('Failed to send connexion failure alert');
+    }
+  }
+
+  private async checkForMassFailure() {
+    if (this.currentFailNumber <= this.maxFailNumber) return;
+    try {
+      await this.email.sendEmail(
+        this.alertEmail,
+        'WhatsApp Mass Failure',
+        `Failed ${this.currentFailNumber}/${this.maxFailNumber}`,
+      );
+    } catch {}
+    this.currentFailNumber = 0;
+  }
+
+  private async updateQrStatus(status: boolean, message: string) {
+    this.memoryStatus = { status, message };
+  }
+
+  //#endregion
 
   showName(user: User): string {
     return (user as any).name || `${user.firstName} ${user.lastName}`;
@@ -894,6 +729,33 @@ export class WhatsappService implements OnModuleInit {
       return (
         `*New subscription activated!*\n\n` +
         `Hello ${this.showName(user)},\n` +
+        `You have successfully subscribed to *${plan.title}*.\n` +
+        `Thank you for using digiKUNTZ Payments.\n` +
+        `\n _Access your account: ${this.frontUrl}` +
+        `\n\n> This is an automatic message from digiKUNTZ Payments.`
+      );
+  }
+
+  // NEW SUBSCRIBER OF PLAN (By plan maker to subscriber)
+  private buildNewSubscriberMessageFromPlanMaker(
+    plan: any,
+    subscriber: User, // Subscriber
+    subscribtion: User, // Subscriber
+    language,
+  ): string {
+    if (language === 'fr')
+      return (
+        `*Nouvel abonnement actif !*\n\n` +
+        `Hello ${this.showName(subscriber)},\n` +
+        `Vous avez été affilié à *${plan.title}: * ${plan.subTitle}.\n` +
+        `Merci d'utiliser digiKUNTZ Payments.\n` +
+        `\n _Access your account: ${this.frontUrl}\n` +
+        `\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
+      );
+    else
+      return (
+        `*New subscription activated!*\n\n` +
+        `Hello ${this.showName(subscriber)},\n` +
         `You have successfully subscribed to *${plan.title}*.\n` +
         `Thank you for using digiKUNTZ Payments.\n` +
         `\n _Access your account: ${this.frontUrl}` +

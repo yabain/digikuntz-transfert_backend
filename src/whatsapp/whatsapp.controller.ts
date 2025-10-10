@@ -59,6 +59,7 @@ export class WhatsappController {
     if (!qr) {
       throw new NotFoundException('QR code not found');
     }
+    console.log('le qrcode: ', qr);
     return qr;
   }
 

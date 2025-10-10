@@ -27,7 +27,7 @@ import { PayinModule } from './payin/payin.module';
 import { PayoutModule } from './payout/payout.module';
 import { FlutterwaveModule } from './flutterwave/flutterwave.module';
 import { SmtpModule } from './email/smtp/smtp.module';
-import { WhatsappModule } from './whatsapp/whatsapp.module';
+import { WhatsappModule } from './wa/whatsapp.module';
 
 @Module({
   imports: [
