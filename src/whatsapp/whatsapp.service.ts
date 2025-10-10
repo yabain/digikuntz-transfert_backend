@@ -14,7 +14,7 @@ import {
   OnModuleInit,
   NotFoundException,
 } from '@nestjs/common';
-import { Client } from 'whatsapp-web.js';
+import { Client, LocalAuth } from 'whatsapp-web.js';
 import { InjectModel } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
 import { ConfigService } from '@nestjs/config';
@@ -199,6 +199,7 @@ export class WhatsappService implements OnModuleInit {
               ? process.env.CHROME_PATH
               : undefined,
         },
+        authStrategy: new LocalAuth(),
       });
 
       this.setupEventHandlers();
@@ -570,7 +571,7 @@ export class WhatsappService implements OnModuleInit {
   private async sendMassFailureAlert(errMessage?: string): Promise<void> {
     try {
       const subject =
-        `🚨 🚨 WhatsApp ${errMessage} Alert - Digikuntz Payments ` +
+        `🚨 🚨 WhatsApp ${errMessage} Alert - digiKUNTZ Payments ` +
         new Date().toISOString();
       const message = `
         <h2>WhatsApp ${errMessage}</h2>
@@ -593,7 +594,7 @@ export class WhatsappService implements OnModuleInit {
     this.lastConnAlertAt = now;
 
     const subject =
-      `🚨🚨🚨 WhatsApp Connexion Failure Alert - Digikuntz Payments ` +
+      `🚨🚨🚨 WhatsApp Connexion Failure Alert - digiKUNTZ Payments ` +
       new Date().toISOString();
     const message = `
       <h2>WhatsApp messaging service: ${info ?? 'Connexion Failure Alert'}</h2>
@@ -612,7 +613,7 @@ export class WhatsappService implements OnModuleInit {
 
   private async sendQrCodeFailureAlert(info?: string): Promise<void> {
     const subject =
-      `🚨 Error saving WhatsApp QR-code alert - Digikuntz Payments ` +
+      `🚨 Error saving WhatsApp QR-code alert - digiKUNTZ Payments ` +
       new Date().toISOString();
     const message = `
       <h2>${info ?? 'Error saving WhatsApp QR-code alert'}</h2>
@@ -626,7 +627,7 @@ export class WhatsappService implements OnModuleInit {
 
   private async sendQrNeedToScanAlert(info?: string): Promise<void> {
     const subject =
-      `🚨 WhatsApp QR-code Need to scan - Digikuntz Payments ` +
+      `🚨 WhatsApp QR-code Need to scan - digiKUNTZ Payments ` +
       new Date().toISOString();
     const message = `
       <h2>${info ?? 'WhatsApp QR-code Need to scan'}</h2>
@@ -642,7 +643,7 @@ export class WhatsappService implements OnModuleInit {
     info?: string,
   ): Promise<void> {
     const subject =
-      `✅ ✅ WhatsApp Service is ready - Digikuntz Payments ` +
+      `✅ ✅ WhatsApp Service is ready - digiKUNTZ Payments ` +
       new Date().toISOString();
     const message = `
       <h2>${info ?? '✅ ✅ WhatsApp Service is ready'}</h2>
@@ -655,7 +656,7 @@ export class WhatsappService implements OnModuleInit {
   }
 
   async welcomeMessage(userData): Promise<any> {
-    const formattedMessage = this.buildWelcomeMessage(userData);
+    const formattedMessage = this.buildAccountCreationMessage(userData);
     return this.sendMessage(
       userData.phone,
       formattedMessage,
@@ -746,57 +747,213 @@ export class WhatsappService implements OnModuleInit {
     return (user as any).name || `${user.firstName} ${user.lastName}`;
   }
 
-  private buildWelcomeMessage(user: User): string {
-    const userName = this.showName(user);
-    if (user.language === 'fr ')
-      return (
-        `Hello *${userName} !!*\n\n` +
-        `Nous sommes ravis de vous accueillir sur *Digikuntz Payments*\n` +
-        `Votre solution intelligente tout-en-un pour la gestion d'événements.\n\n` +
-        `🔗 _Rendez-vous sur_ :\n${this.frontUrl}` +
-        `\n\n\n> Ceci est un message automatique du service WhatsApp de Digikuntz Payments.`
-      );
-    else
-      return (
-        `Hello *${userName} !!*\n\n` +
-        `We are thrilled to welcome you to *Digikuntz Payments*\n` +
-        `Your smart all-in-one solution for event management.\n\n` +
-        `🔗 _Visit us at:_\n${this.frontUrl}` +
-        `\n\n\n> This is an automatic message from the Digikuntz Payments WhatsApp service.`
-      );
-  }
-
-  private buildMessageForReceiverTransfer(
+  // MONEY SENT SUCCESSFULLY (Msg for receiver)
+  private buildMessageForTransferReceiver(
     transaction: any,
     language: string,
   ): string {
-    const userName = transaction.receiverName;
     if (language === 'fr')
       return (
         `*Nouveau paiement reçu !*\n\n` +
-        `Hello ${userName}\n` +
-        `Vous avez reçu un paiment de *${transaction.receiverAmount} ${transaction.receiverCurrency}* de la part de *${transaction.senderName}*\n` +
-        `\n` +
-        `Merci de faire confiance à Digikuntz Payments. \n` +
-        `https://payments.digikuntz.com` +
-        `\n\n\n> Ceci est un message automatique de Digikuntz Payments.`
+        `Hello ${transaction.receiverName}\n` +
+        `Vous avez reçu un paiment de *${transaction.estimation} ${transaction.receiverCurrency}* de la part de *${transaction.senderName}*\n` +
+        `Référence de la transaction : ${transaction._id}\n` +
+        `Merci de faire confiance à digiKUNTZ Payments. \n` +
+        `\n _Accédez à votre compte: ${this.frontUrl} \n` +
+        `\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
       );
     else
       return (
         `*New payment received !*\n\n` +
-        `Hello ${userName}\n` +
-        `You received a payment of *${transaction.receiverAmount} ${transaction.receiverCurrency}* from *${transaction.senderName}*\n` +
-        `\n` +
-        `Thank you for trusting Digikuntz Payments.` +
-        `https://payments.digikuntz.com` +
-        `\n\n\n> This is an automatic message from Digikuntz Payments.`
+        `Hello ${transaction.receiverName}\n` +
+        `You received a payment of *${transaction.estimation} ${transaction.receiverCurrency}* from *${transaction.senderName}*\n` +
+        `Transaction reference: ${transaction._id}\n` +
+        `Thank you for trusting digiKUNTZ Payments. \n` +
+        `\n _Access your account: ${this.frontUrl}` +
+        `\n\n> This is an automatic message from digiKUNTZ Payments.`
       );
   }
-}
 
-// Account creation message
-// Balance credited
-// Balance debited
-// Money sended successful
-// New subscriber of plan
-// Need vadation payment (for admin)
+  // MONEY SENT SUCCESSFULLY (Msg for sender)
+  private buildMessageForTransferSender(
+    transaction: any,
+    language: string,
+  ): string {
+    if (language === 'fr')
+      return (
+        `*Envoi effectué avec succès !*\n\n` +
+        `Hello ${transaction.senderName}\n` +
+        `Vous avez envoyé *${transaction.estimation} ${transaction.senderCurrency}* à *${transaction.receiverName}*\n` +
+        `Référence de la transaction : ${transaction._id}\n` +
+        `Merci de faire confiance à digiKUNTZ Payments. \n` +
+        `\n _Accédez à votre compte: ${this.frontUrl} \n` +
+        `\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
+      );
+    else
+      return (
+        `*New payment made !*\n\n` +
+        `Hello ${transaction.senderName}\n` +
+        `You sent *${transaction.estimation} ${transaction.senderCurrency}* to *${transaction.receiverName}*\n` +
+        `Transaction reference: ${transaction._id}\n` +
+        `Thank you for trusting digiKUNTZ Payments.\n` +
+        `\n _Access your account: ${this.frontUrl}` +
+        `\n\n> This is an automatic message from digiKUNTZ Payments.`
+      );
+  }
+
+  // ACCOUNT CREATION MESSAGE
+  private buildAccountCreationMessage(user: User): string {
+    if (user.language === 'fr')
+      return (
+        `*Bienvenue ${this.showName(user)} !*\n\n` +
+        `Votre compte *digiKUNTZ Payments* a été créé avec succès.\n` +
+        `Nous sommes ravis de vous accueillir chez-nous chez-vous.\n` +
+        `Votre solution intelligente tout-en-un pour la gestion de vos paiements.\n` +
+        `Vous pouvez dès à présent effectuer vos transactions et gérer vos abonnements facilement.\n` +
+        `\n _Accédez à votre compte: ${this.frontUrl} \n` +
+        `\n\n> Ceci est un message automatique du service WhatsApp de digiKUNTZ Payments.`
+      );
+    else
+      return (
+        `*Welcome ${this.showName(user)} !*\n\n` +
+        `Your *digiKUNTZ Payments* account has been successfully created.\n` +
+        `We are delighted to welcome you to our platform.*\n` +
+        `Your smart all-in-one solution for payments management.\n` +
+        `You can now make payments and manage your plans easily.\n` +
+        `\n _Access your account: ${this.frontUrl}` +
+        `\n\n> This is an automatic message from the digiKUNTZ Payments WhatsApp service.`
+      );
+  }
+
+  // BALANCE CREDITED
+  private buildBalanceCreditedMessage(
+    transaction: any,
+    language: string,
+  ): string {
+    if (language === 'fr')
+      return (
+        `*Crédit de solde !*\n\n` +
+        `Hello *${transaction.receiverName}*\n` +
+        `Votre compte a été crédité de *${transaction.estimation} ${transaction.receiverCurrency}*.\n` +
+        `Motif : ${transaction.raisonForTransfer || ''}\n\n` +
+        `Merci d’utiliser digiKUNTZ Payments.\n` +
+        `\n _Accédez à votre compte: ${this.frontUrl} \n` +
+        `\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
+      );
+    else
+      return (
+        `*Balance credited!*\n\n` +
+        `Hello *${transaction.receiverName}*\n` +
+        `Your account has been credited with *${transaction.estimation} ${transaction.receiverCurrency}*.\n` +
+        `Reason: ${transaction.raisonForTransfer || 'Account credit'}\n\n` +
+        `Thank you for using digiKUNTZ Payments.\n` +
+        `\n _Access your account: ${this.frontUrl}` +
+        `\n\n> This is an automatic message from digiKUNTZ Payments.`
+      );
+  }
+
+  // BALANCE DEBITED
+  private buildBalanceDebitedMessage(
+    transaction: any,
+    language: string,
+  ): string {
+    if (language === 'fr')
+      return (
+        `*Débit de solde !*\n\n` +
+        `Hello *${transaction.senderName}*\n` +
+        `Votre compte a été débité de *${transaction.paymentWithTaxes} ${transaction.senderCountry}*.\n` +
+        `Motif : ${transaction.raisonForTransfer || 'Débit de compte'}\n\n` +
+        `Merci d'utiliser digiKUNTZ Payments.\n` +
+        `\n _Access your account: ${this.frontUrl}\n` +
+        `\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
+      );
+    else
+      return (
+        `*Balance debited!*\n\n` +
+        `Hello *${transaction.senderName}*\n` +
+        `Your account has been debited by *${transaction.paymentWithTaxes} ${transaction.senderCountry}*.\n` +
+        `Reason: ${transaction.raisonForTransfer || 'Account debit'}\n\n` +
+        `Thank you for using digiKUNTZ Payments.\n` +
+        `\n _Access your account: ${this.frontUrl}` +
+        `\n\n> This is an automatic message from digiKUNTZ Payments.`
+      );
+  }
+
+  // NEW SUBSCRIBER OF PLAN
+  private buildNewSubscriberMessage(plan: any, user: User): string {
+    if (user.language === 'fr')
+      return (
+        `*Nouvel abonnement actif !*\n\n` +
+        `Hello ${this.showName(user)},\n` +
+        `Vous venez de souscrire à *${plan.title}*.\n` +
+        `Merci d'utiliser digiKUNTZ Payments.\n` +
+        `\n _Access your account: ${this.frontUrl}\n` +
+        `\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
+      );
+    else
+      return (
+        `*New subscription activated!*\n\n` +
+        `Hello ${this.showName(user)},\n` +
+        `You have successfully subscribed to *${plan.title}*.\n` +
+        `Thank you for using digiKUNTZ Payments.\n` +
+        `\n _Access your account: ${this.frontUrl}` +
+        `\n\n> This is an automatic message from digiKUNTZ Payments.`
+      );
+  }
+
+  // NEED VALIDATION PAYMENT (ADMIN)
+  private buildNeedValidationMessage(
+    transaction: any,
+    language: string,
+  ): string {
+    if (transaction.transactionType === 'transfer') {
+      if (language === 'fr')
+        return (
+          `*Paiement en attente de validation !*\n\n` +
+          `Un nouveau transfert nécessite votre validation.\n\n` +
+          `Expéditeur : ${transaction.senderName}\n` +
+          `Bénéficiaire : ${transaction.receiverName}\n` +
+          `Montant : *${transaction.estimation} ${transaction.receiverCurrency}*\n` +
+          `Référence : ${transaction._id}\n\n` +
+          `Veuillez vous connecter à l’espace administrateur pour vérifier et valider la transaction.` +
+          `\n${this.frontUrl}/login` +
+          `\n\n> Ceci est une alerte automatique du service WhatsApp de digiKUNTZ Payments.`
+        );
+      else
+        return (
+          `*Payment pending validation!*\n\n` +
+          `A new transfer requires your approval.\n\n` +
+          `Sender : ${transaction.senderName}\n` +
+          `Receiver : ${transaction.receiverName}\n` +
+          `Amount: *${transaction.estimation} ${transaction.receiverCurrency}*\n` +
+          `Reference: ${transaction._id}\n\n` +
+          `Please log in to the admin dashboard to review and validate the transaction.` +
+          `\n${this.frontUrl}/login` +
+          `\n\n> This is an automatic alert from the digiKUNTZ Payments WhatsApp service.`
+        );
+    } else {
+      if (language === 'fr')
+        return (
+          `*Paiement en attente de validation !*\n\n` +
+          `Un nouveau retrait nécessite votre validation.\n\n` +
+          `Client : ${transaction.senderName}\n` +
+          `Montant : *${transaction.estimation} ${transaction.senderCurrency}*\n` +
+          `Référence : ${transaction._id}\n\n` +
+          `Veuillez vous connecter à l’espace administrateur pour vérifier et valider la transaction.` +
+          `\n${this.frontUrl}/login` +
+          `\n\n> Ceci est une alerte automatique du service WhatsApp de digiKUNTZ Payments.`
+        );
+      else
+        return (
+          `*Payment pending validation!*\n\n` +
+          `A new payment requires your approval.\n\n` +
+          `Customer: ${transaction.senderName}\n` +
+          `Amount: *${transaction.estimation} ${transaction.senderCurrency}*\n` +
+          `Reference: ${transaction._id}\n\n` +
+          `Please log in to the admin dashboard to review and validate the transaction.` +
+          `\n${this.frontUrl}/login` +
+          `\n\n> This is an automatic alert from the digiKUNTZ Payments WhatsApp service.`
+        );
+    }
+  }
+}

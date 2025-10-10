@@ -137,17 +137,17 @@ async function bootstrap() {
 
   // Configuration Swagger
   const config = new DocumentBuilder()
-    .setTitle('Digikuntz Payments API')
-    .setDescription('Digikuntz Payments API Documentation')
+    .setTitle('digiKUNTZ Payments API')
+    .setDescription('digiKUNTZ Payments API Documentation')
     .setVersion('1.0')
     .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  await app.listen(process.env.PORT ?? 3002, '0.0.0.0'); // Sstart Backend on port 3001 because 3000 is already used on server
+  await app.listen(process.env.PORT ?? 3002, '0.0.0.0'); // Sstart Backend on port 3002 because 3000 is already used on server
   console.log(
-    `Digikuntz Payments backend Application is running on: ${await app.getUrl()}`,
+    `digiKUNTZ Payments backend Application is running on: ${await app.getUrl()}`,
   );
 }
 

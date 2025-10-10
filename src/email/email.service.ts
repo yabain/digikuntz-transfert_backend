@@ -11,7 +11,6 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as handlebars from 'handlebars';
 import { DateService } from './date.service';
-import { createEvent } from 'ics';
 import { InjectModel } from '@nestjs/mongoose';
 import { Email } from './email.schema';
 import mongoose from 'mongoose';
@@ -117,8 +116,8 @@ export class EmailService {
     const templateName = 'welcome-email';
     const subject =
       language === 'fr'
-        ? 'Bienvenue sur Digikuntz Payments'
-        : 'Welcome to Digikuntz Payments';
+        ? 'Bienvenue sur digiKUNTZ Payments'
+        : 'Welcome to digiKUNTZ Payments';
 
     const templatePath = path.join(
       this.templateFolder,
@@ -148,8 +147,8 @@ export class EmailService {
     const templateName = 'newsletter-subscription';
     const subject =
       language === 'fr'
-        ? 'Digikuntz Payments: Souscription à la boite aux lettres'
-        : 'Digikuntz Payments: Mailbox Subscription';
+        ? 'digiKUNTZ Payments: Souscription à la boite aux lettres'
+        : 'digiKUNTZ Payments: Mailbox Subscription';
 
     const templatePath = path.join(
       this.templateFolder,
@@ -208,15 +207,21 @@ export class EmailService {
 
       const templateSource = fs.readFileSync(templatePath, 'utf8');
       const template = handlebars.compile(templateSource);
+      const resetPwdUrl = `${front}/auth/new-password/${token}`;
 
       const context = {
         userName,
-        resetPwdUrl: `${front}/auth/new-password/${token}`,
+        resetPwdUrl,
       };
 
       const html = template(context);
 
-      this.saveMail({ to: toEmail, subject, from, status: true, body: String(html) });
+      this.saveMail({
+        to: toEmail,
+        subject,
+        from,
+        status: true,
+        body: `<h3>Reset pasword link</h3><br><a href="${resetPwdUrl}" target="_blank">${resetPwdUrl}</a>` });
       await this.transporter.sendMail({
         from,
         to: toEmail,
@@ -263,7 +268,6 @@ export class EmailService {
     };
 
     const html = template(context);
-    const icsAttachment = await this.generateIcsFile(event);
 
     // this.transporter = await this.getTransporterData();
     await this.transporter.sendMail({
@@ -271,47 +275,9 @@ export class EmailService {
       to: user.email,
       subject,
       html,
-      attachments: [
-        {
-          filename: icsAttachment.filename,
-          content: icsAttachment.content,
-          contentType: 'text/calendar',
-        },
-      ],
     });
 
     return true;
-  }
-
-  private generateIcsFile(
-    event: any,
-  ): Promise<{ filename: string; content: Buffer }> {
-    const front = this.configService.get<string>('FRONT_URL') || this.frontUrl;
-    return new Promise((resolve, reject) => {
-      const eventDetails = {
-        start: this.dateService.convertToIcsDate(event.eventData.dateStart),
-        end: this.dateService.convertToIcsDate(event.eventData.dateEnd),
-        title: event.eventData.title,
-        description: this.cleanString(event.eventData.description),
-        location: event.eventData.location,
-        url: `${front}/tabs/events/${event.eventData._id}_shared`,
-        organizer: {
-          name: 'Digikuntz Payment',
-          email: this.configService.get<string>('SMTP_USER'),
-        },
-      };
-
-      createEvent(eventDetails, (error, value) => {
-        if (error) {
-          reject(error);
-        } else {
-          resolve({
-            filename: 'digikuntz-payment.ics',
-            content: Buffer.from(value),
-          });
-        }
-      });
-    });
   }
 
   cleanString(input: string): string {
