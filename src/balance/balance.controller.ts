@@ -33,7 +33,6 @@ export class BalanceController {
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getBalance(@Req() req): Promise<any> {
-    console.log('balance')
     return this.balanceService.getBalanceByUserId(req.user._id);
   }
 
@@ -54,15 +53,14 @@ export class BalanceController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Credit balance of user' })
   @ApiResponse({ status: 200, description: 'Balance of user returned.' })
-  // @UseGuards(AuthGuard('jwt'))
-  // @UsePipes(ValidationPipe)
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
   async creditBalance(
     @Req() req,
     @Body() body: any,): Promise<any> {
-    console.log('balance');
-    // if (!req.user.isAdmin) {
-    //   throw new NotFoundException('Unautorised');
-    // }
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unautorised');
+    }
     return this.balanceService.creditBalance(body.userId, body.amount, body.currency);
   }
 
@@ -70,15 +68,14 @@ export class BalanceController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Debit balance of user' })
   @ApiResponse({ status: 200, description: 'Balance of user returned.' })
-  // @UseGuards(AuthGuard('jwt'))
-  // @UsePipes(ValidationPipe)
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
   async debitBalance(
     @Req() req,
     @Body() body: any,): Promise<any> {
-    console.log('balance');
-    // if (!req.user.isAdmin) {
-    //   throw new NotFoundException('Unautorised');
-    // }
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unautorised');
+    }
     return this.balanceService.debitBalance(body.userId, body.amount, body.currency);
   }
 }

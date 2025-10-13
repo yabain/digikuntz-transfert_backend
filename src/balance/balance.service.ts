@@ -50,7 +50,6 @@ export class BalanceService {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new NotFoundException('Invalid user');
     }
-    console.log('les datas: ', userId, amount, senderCurrency);
     const user = await this.userService.getUserById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
@@ -59,9 +58,7 @@ export class BalanceService {
       throw new BadRequestException('Currency mismatch');
     }
 
-    console.log('(creditBalance) user 000: ', user);
     const userBalance = await this.getBalanceByUserId(userId);
-    console.log('(getBalanceByUserId) userBalance: ', userBalance);
 
     // Update user balance in the database
     const resp = await this.balanceModel.findOneAndUpdate(
@@ -73,7 +70,6 @@ export class BalanceService {
     if (!resp) {
       throw new NotFoundException('User not found');
     }
-    console.log('(creditBalance) user 000: ', resp);
 
     return resp;
   }

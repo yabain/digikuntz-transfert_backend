@@ -552,7 +552,7 @@ export class WhatsappService implements OnModuleInit {
     try {
       await this.email.sendEmail(
         this.alertEmail,
-        'WhatsApp Connexion Failure',
+        '🚨🚨 WhatsApp Connexion Failure',
         info ?? 'Connexion failed',
       );
     } catch (e) {
@@ -565,11 +565,23 @@ export class WhatsappService implements OnModuleInit {
     try {
       await this.email.sendEmail(
         this.alertEmail,
-        'WhatsApp Mass Failure',
+        '⚠️⚠️ WhatsApp Mass Failure',
         `Failed ${this.currentFailNumber}/${this.maxFailNumber}`,
       );
     } catch {}
     this.currentFailNumber = 0;
+  }
+
+  private async sendMailWatsappserviceReady() {
+    try {
+      await this.email.sendEmail(
+        this.alertEmail,
+        '✅✅ WhatsApp Service Ready',
+        `WhatsApp service is ready`,
+      );
+    } catch (e) {
+      this.logger.error('Failed to send mail watsappservice ready');
+    }
   }
 
   private async updateQrStatus(status: boolean, message: string) {
@@ -740,7 +752,6 @@ export class WhatsappService implements OnModuleInit {
   private buildNewSubscriberMessageFromPlanMaker(
     plan: any,
     subscriber: User, // Subscriber
-    subscribtion: User, // Subscriber
     language,
   ): string {
     if (language === 'fr')

@@ -121,9 +121,7 @@ export class WhatsappService implements OnModuleInit {
 
       // ★ Au démarrage SANS session, on notifie qu'une (re)connexion est requise.
       if (!hadPrevSession) {
-        void this.sendConnexionFailureAlert(
-          'Aucune session précédente détectée. Veuillez scanner le QR pour connecter WhatsApp.',
-        );
+        void this.sendConnexionFailureAlert();
       }
     });
 
@@ -156,7 +154,7 @@ export class WhatsappService implements OnModuleInit {
       this.lastQr = null;
 
       // ★ Alerte échec d’authentification
-      void this.sendConnexionFailureAlert(`Authentication failure: ${msg}`);
+      void this.sendConnexionFailureAlert();
     });
 
     this.client.on('disconnected', (reason) => {
@@ -166,7 +164,7 @@ export class WhatsappService implements OnModuleInit {
       this.lastQr = null;
 
       // ★ Alerte déconnexion
-      void this.sendConnexionFailureAlert(`Disconnected: ${reason}`);
+      void this.sendConnexionFailureAlert();
 
       // relance douce
       setTimeout(() => this.reinitialize().catch(() => {}), 1500);
@@ -175,9 +173,7 @@ export class WhatsappService implements OnModuleInit {
     if (!hadPrevSession) {
       // ★ Dès le boot, s'il n'y a pas de session, on prévient immédiatement
       // (utile si on n’attend pas l’event 'qr' pour informer).
-      void this.sendConnexionFailureAlert(
-        'Aucune session WhatsApp active au démarrage du backend. Un scan du QR sera nécessaire.',
-      );
+      void this.sendConnexionFailureAlert();
     }
 
     await this.client.initialize();
@@ -337,12 +333,12 @@ export class WhatsappService implements OnModuleInit {
   }
 
   // ---------- Emails / Notifications ----------
-  private async sendConnexionFailureAlert(info?: string) {
+  private async sendConnexionFailureAlert() {
     try {
-      await this.email.sendEmail(
+      await this.email.sendWhatsappAlert(
         this.alertEmail,
-        '🚨🚨 WhatsApp Connexion Failure',
-        info ?? 'Connexion failed',
+        '🚨 WhatsApp Connexion Failure 🚨',
+        'whatsapp_off',
       );
     } catch (e) {
       this.logger.error('Failed to send connexion failure alert');
@@ -352,10 +348,10 @@ export class WhatsappService implements OnModuleInit {
   private async checkForMassFailure() {
     if (this.currentFailNumber >= this.maxFailNumber) {
       try {
-        await this.email.sendEmail(
+        await this.email.sendWhatsappAlert(
           this.alertEmail,
-          '⚠️⚠️ WhatsApp Mass Failure',
-          `Message send failed ${this.currentFailNumber}/${this.maxFailNumber} times consecutively.`,
+          '⚠️ WhatsApp Mass Failure ⚠️',
+          `whatsapp_mass_fail`,
         );
       } catch {
         // ignore
@@ -368,10 +364,10 @@ export class WhatsappService implements OnModuleInit {
 
   private async sendMailWatsappserviceReady() {
     try {
-      await this.email.sendEmail(
+      await this.email.sendWhatsappAlert(
         this.alertEmail,
-        '✅✅ WhatsApp Service Ready',
-        `WhatsApp service is now READY`,
+        '✅ WhatsApp Service Ready ✅',
+        `whatsapp_on`,
       );
     } catch (e) {
       this.logger.error('Failed to send mail watsappservice ready');
@@ -395,7 +391,7 @@ export class WhatsappService implements OnModuleInit {
         `Vous avez reçu un paiment de *${transaction.estimation} ${transaction.receiverCurrency}* de la part de *${transaction.senderName}*\n` +
         `Référence de la transaction : ${transaction._id}\n` +
         `Merci de faire confiance à digiKUNTZ Payments. \n` +
-        `\n _Accédez à votre compte: ${this.frontUrl} \n` +
+        `\n _Accédez à votre compte_ : ${this.frontUrl} \n` +
         `\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
       );
     else
@@ -405,7 +401,7 @@ export class WhatsappService implements OnModuleInit {
         `You received a payment of *${transaction.estimation} ${transaction.receiverCurrency}* from *${transaction.senderName}*\n` +
         `Transaction reference: ${transaction._id}\n` +
         `Thank you for trusting digiKUNTZ Payments. \n` +
-        `\n _Access your account: ${this.frontUrl}` +
+        `\n _Access your account_ : ${this.frontUrl}` +
         `\n\n> This is an automatic message from digiKUNTZ Payments.`
       );
   }
@@ -422,7 +418,7 @@ export class WhatsappService implements OnModuleInit {
         `Vous avez envoyé *${transaction.estimation} ${transaction.senderCurrency}* à *${transaction.receiverName}*\n` +
         `Référence de la transaction : ${transaction._id}\n` +
         `Merci de faire confiance à digiKUNTZ Payments. \n` +
-        `\n _Accédez à votre compte: ${this.frontUrl} \n` +
+        `\n _Accédez à votre compte_ : ${this.frontUrl} \n` +
         `\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
       );
     else
@@ -432,7 +428,7 @@ export class WhatsappService implements OnModuleInit {
         `You sent *${transaction.estimation} ${transaction.senderCurrency}* to *${transaction.receiverName}*\n` +
         `Transaction reference: ${transaction._id}\n` +
         `Thank you for trusting digiKUNTZ Payments.\n` +
-        `\n _Access your account: ${this.frontUrl}` +
+        `\n _Access your account_ : ${this.frontUrl}` +
         `\n\n> This is an automatic message from digiKUNTZ Payments.`
       );
   }
@@ -446,7 +442,7 @@ export class WhatsappService implements OnModuleInit {
         `Nous sommes ravis de vous accueillir chez-nous chez-vous.\n` +
         `Votre solution intelligente tout-en-un pour la gestion de vos paiements.\n` +
         `Vous pouvez dès à présent effectuer vos transactions et gérer vos abonnements facilement.\n` +
-        `\n _Accédez à votre compte: ${this.frontUrl} \n` +
+        `\n _Accédez à votre compte_ : ${this.frontUrl} \n` +
         `\n\n> Ceci est un message automatique du service WhatsApp de digiKUNTZ Payments.`
       );
     else
@@ -456,7 +452,7 @@ export class WhatsappService implements OnModuleInit {
         `We are delighted to welcome you to our platform.*\n` +
         `Your smart all-in-one solution for payments management.\n` +
         `You can now make payments and manage your plans easily.\n` +
-        `\n _Access your account: ${this.frontUrl}` +
+        `\n _Access your account_ : ${this.frontUrl}` +
         `\n\n> This is an automatic message from the digiKUNTZ Payments WhatsApp service.`
       );
   }
@@ -473,7 +469,7 @@ export class WhatsappService implements OnModuleInit {
         `Votre compte a été crédité de *${transaction.estimation} ${transaction.receiverCurrency}*.\n` +
         `Motif : ${transaction.raisonForTransfer || ''}\n\n` +
         `Merci d’utiliser digiKUNTZ Payments.\n` +
-        `\n _Accédez à votre compte: ${this.frontUrl} \n` +
+        `\n _Accédez à votre compte_ : ${this.frontUrl} \n` +
         `\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
       );
     else
@@ -483,7 +479,7 @@ export class WhatsappService implements OnModuleInit {
         `Your account has been credited with *${transaction.estimation} ${transaction.receiverCurrency}*.\n` +
         `Reason: ${transaction.raisonForTransfer || 'Account credit'}\n\n` +
         `Thank you for using digiKUNTZ Payments.\n` +
-        `\n _Access your account: ${this.frontUrl}` +
+        `\n _Access your account_ : ${this.frontUrl}` +
         `\n\n> This is an automatic message from digiKUNTZ Payments.`
       );
   }
@@ -500,7 +496,7 @@ export class WhatsappService implements OnModuleInit {
         `Votre compte a été débité de *${transaction.paymentWithTaxes} ${transaction.senderCountry}*.\n` +
         `Motif : ${transaction.raisonForTransfer || 'Débit de compte'}\n\n` +
         `Merci d'utiliser digiKUNTZ Payments.\n` +
-        `\n _Access your account: ${this.frontUrl}\n` +
+        `\n _Access your account_ : ${this.frontUrl}\n` +
         `\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
       );
     else
@@ -510,7 +506,7 @@ export class WhatsappService implements OnModuleInit {
         `Your account has been debited by *${transaction.paymentWithTaxes} ${transaction.senderCountry}*.\n` +
         `Reason: ${transaction.raisonForTransfer || 'Account debit'}\n\n` +
         `Thank you for using digiKUNTZ Payments.\n` +
-        `\n _Access your account: ${this.frontUrl}` +
+        `\n _Access your account_ : ${this.frontUrl}` +
         `\n\n> This is an automatic message from digiKUNTZ Payments.`
       );
   }
@@ -523,7 +519,7 @@ export class WhatsappService implements OnModuleInit {
         `Hello ${this.showName(user)},\n` +
         `Vous venez de souscrire à *${plan.title}*.\n` +
         `Merci d'utiliser digiKUNTZ Payments.\n` +
-        `\n _Access your account: ${this.frontUrl}\n` +
+        `\n _Access your account_ : ${this.frontUrl}\n` +
         `\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
       );
     else
@@ -532,7 +528,7 @@ export class WhatsappService implements OnModuleInit {
         `Hello ${this.showName(user)},\n` +
         `You have successfully subscribed to *${plan.title}*.\n` +
         `Thank you for using digiKUNTZ Payments.\n` +
-        `\n _Access your account: ${this.frontUrl}` +
+        `\n _Access your account_ : ${this.frontUrl}` +
         `\n\n> This is an automatic message from digiKUNTZ Payments.`
       );
   }
@@ -549,7 +545,7 @@ export class WhatsappService implements OnModuleInit {
         `Hello ${this.showName(subscriber)},\n` +
         `Vous avez été affilié à *${plan.title}: * ${plan.subTitle}.\n` +
         `Merci d'utiliser digiKUNTZ Payments.\n` +
-        `\n _Access your account: ${this.frontUrl}\n` +
+        `\n _Access your account_ : ${this.frontUrl}\n` +
         `\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
       );
     else
@@ -558,7 +554,7 @@ export class WhatsappService implements OnModuleInit {
         `Hello ${this.showName(subscriber)},\n` +
         `You have successfully subscribed to *${plan.title}*.\n` +
         `Thank you for using digiKUNTZ Payments.\n` +
-        `\n _Access your account: ${this.frontUrl}` +
+        `\n _Access your account_ : ${this.frontUrl}` +
         `\n\n> This is an automatic message from digiKUNTZ Payments.`
       );
   }

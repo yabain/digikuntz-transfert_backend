@@ -109,7 +109,7 @@ export class TransactionService {
         { $skip: skip },
         { $limit: resPerPage },
       ]);
-      console.log('result of ' + status, res.length);
+      // console.log('result of ' + status, res.length);
     } else if (status == 'error') {
       res = await this.transactionModel.aggregate([
         {

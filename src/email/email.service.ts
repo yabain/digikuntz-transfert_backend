@@ -88,23 +88,7 @@ export class EmailService {
 
   async sendEmail(to: string, subject: string, message: string): Promise<any> {
     console.log('to email: ', to);
-    if (!this.isEmailValide(to)) return;
-    const from = this.configService.get<string>('SMTP_USER');
-    try {
-      console.log('Sending email');
-      await this.transporter.sendMail({
-        from,
-        to,
-        subject,
-        html: message,
-      });
-      this.saveMail({ to, subject, from, status: true, body: message });
-      return true;
-    } catch (error) {
-      console.error("Erreur lors de l'envoi du mail :", error);
-      this.saveMail({ to, subject, from, status: false, body: message });
-      throw error;
-    }
+    return await this.proceedToSendEmail(to, subject, message);
   }
 
   async sendWelcomeEmailAccountCreation(
@@ -160,30 +144,29 @@ export class EmailService {
       userName,
     };
 
-    console.log('Sending 00', templatePath, context);
     const templateSource = fs.readFileSync(templatePath, 'utf8');
     const template = handlebars.compile(templateSource);
     const html = template(context);
-
-    console.log('Sending 11');
     await this.proceedToSendEmail(toEmail, subject, html);
   }
 
-  async proceedToSendEmail(to, subject, html): Promise<any> {
-    if (!this.isEmailValide(to)) return;
-    console.log(
-      'Proceeding to send email',
-      this.configService.get<string>('SMTP_USER'),
-      to,
-      subject,
-    );
-    // this.transporter = await this.getTransporterData();
-    await this.transporter.sendMail({
-      from: this.configService.get<string>('SMTP_USER'),
-      to,
-      subject,
-      html,
-    });
+  async proceedToSendEmail(to, subject, html): Promise<boolean> {
+    if (!this.isEmailValide(to)) return false;
+    const from = this.configService.get<string>('SMTP_USER');
+    try {
+      await this.transporter.sendMail({
+        from,
+        to,
+        subject,
+        html,
+      });
+      this.saveMail({ to, subject, from, status: true, body: html });
+      return true;
+    } catch (error) {
+      console.error("Erreur lors de l'envoi du mail :", error);
+      this.saveMail({ to, subject, from, status: false, body: html });
+      throw error;
+    }
   }
 
   async sendResetPwd(
@@ -203,7 +186,8 @@ export class EmailService {
         this.templateFolder,
         `${templateName}_${language}.hbs`,
       );
-      const front = this.configService.get<string>('FRONT_URL') || this.frontUrl;
+      const front =
+        this.configService.get<string>('FRONT_URL') || this.frontUrl;
 
       const templateSource = fs.readFileSync(templatePath, 'utf8');
       const template = handlebars.compile(templateSource);
@@ -215,21 +199,7 @@ export class EmailService {
       };
 
       const html = template(context);
-
-      this.saveMail({
-        to: toEmail,
-        subject,
-        from,
-        status: true,
-        body: `<h3>Reset pasword link</h3><br><a href="${resetPwdUrl}" target="_blank">${resetPwdUrl}</a>` });
-      await this.transporter.sendMail({
-        from,
-        to: toEmail,
-        subject,
-        html,
-      });
-
-      return true;
+      return await this.proceedToSendEmail(toEmail, subject, html);
     } catch (error) {
       console.error(
         "Erreur lors de l'envoi du mail de réinitialisation :",
@@ -269,15 +239,27 @@ export class EmailService {
 
     const html = template(context);
 
-    // this.transporter = await this.getTransporterData();
-    await this.transporter.sendMail({
-      from: this.configService.get<string>('SMTP_USER'),
-      to: user.email,
-      subject,
-      html,
-    });
+    return await this.proceedToSendEmail(user.email, subject, html);
+  }
 
-    return true;
+  async sendWhatsappAlert(
+    toEmail: string,
+    subject: string,
+    templateName: string,
+  ): Promise<any> {
+    if (!this.isEmailValide(toEmail)) return;
+
+    const templatePath = path.join(this.templateFolder, `${templateName}.hbs`);
+
+    const context = {
+      frontUrl: this.configService.get<string>('FRONT_URL') || this.frontUrl,
+    };
+
+    const templateSource = fs.readFileSync(templatePath, 'utf8');
+    const template = handlebars.compile(templateSource);
+    const html = template(context);
+
+    return await this.proceedToSendEmail(toEmail, subject, html);
   }
 
   cleanString(input: string): string {
@@ -290,15 +272,13 @@ export class EmailService {
   }
 
   async saveMail(data) {
-    const okay = await this.emailModel.create({
+    return await this.emailModel.create({
       from: data.from,
       to: data.to,
       subject: data.subject,
       status: data.status,
       body: data.body || '',
     });
-    console.log('saving email: ', okay);
-    return okay;
   }
 
   async findAllEmail(query): Promise<any[]> {

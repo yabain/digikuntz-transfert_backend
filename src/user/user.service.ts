@@ -138,8 +138,6 @@ export class UserService {
     // Enrich user data with follower and following counts
     let userData: any = { ...user };
     userData = userData._doc;
-    console.error('(getUserById) User data:', this.sanitizeUser(userData))
-
     return this.sanitizeUser(userData);
   }
 

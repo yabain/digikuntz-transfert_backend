@@ -13,13 +13,14 @@ import { HttpModule } from '@nestjs/axios';
 import { RevokedTokenSchema } from '../revoked-token/revoked-token.schema';
 import { EmailService } from 'src/email/email.service';
 import { DateService } from 'src/email/date.service';
-import { WhatsappService } from 'src/whatsapp/whatsapp.service';
-import { WhatsappQr, WhatsappQrSchema } from 'src/whatsapp/whatsapp-qr.schema';
+// import { WhatsappService } from 'src/whatsapp/whatsapp.service';
+// import { WhatsappQr, WhatsappQrSchema } from 'src/whatsapp/whatsapp-qr.schema';
 import { Email, EmailSchema } from 'src/email/email.schema';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
 import { SmtpService } from 'src/email/smtp/smtp.service';
 import { SystemService } from 'src/system/system.service';
 import { System, SystemSchema } from 'src/system/system.schema';
+import { WhatsappModule } from 'src/wa/whatsapp.module';
 
 @Module({
   imports: [
@@ -38,11 +39,12 @@ import { System, SystemSchema } from 'src/system/system.schema';
     MongooseModule.forFeature([
       { name: 'User', schema: UserSchema },
       { name: Email.name, schema: EmailSchema },
-      { name: WhatsappQr.name, schema: WhatsappQrSchema },
+      // { name: WhatsappQr.name, schema: WhatsappQrSchema },
       { name: 'RevokedToken', schema: RevokedTokenSchema },
       { name: Smtp.name, schema: SmtpSchema },
       { name: System.name, schema: SystemSchema },
     ]),
+    WhatsappModule,
   ],
   controllers: [AuthController],
   providers: [
@@ -51,7 +53,7 @@ import { System, SystemSchema } from 'src/system/system.schema';
     EmailService,
     DateService,
     SmtpService,
-    WhatsappService,
+    // WhatsappService,
     SystemService,
   ],
   exports: [JwtStrategy, PassportModule],

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-floating-promises */
 /* eslint-disable @typescript-eslint/no-unused-vars */
@@ -19,8 +20,7 @@ import { CreateUserDto } from 'src/user/create-user.dto';
 import { JwtService } from '@nestjs/jwt';
 import { RevokedToken } from 'src/revoked-token/revoked-token.schema';
 import { EmailService } from 'src/email/email.service';
-import { WhatsappService } from 'src/whatsapp/whatsapp.service';
-import { WhatsappQr } from 'src/whatsapp/whatsapp-qr.schema';
+import { WhatsappService } from 'src/wa/whatsapp.service';
 
 @Injectable()
 export class AuthService {
@@ -67,7 +67,7 @@ export class AuthService {
       });
 
       // Fetch the newly created user with populated fields (cityId and countryId)
-      const user = await this.userModel
+      let user: any = await this.userModel
         .findById(create._id)
         .populate('cityId')
         .populate('countryId');
@@ -76,8 +76,7 @@ export class AuthService {
         throw new UnauthorizedException('Email or password invalid'); // Handle case where user creation fails
       }
 
-      user.password = '';
-      user.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
+      user = this.sanitizeUser(user); // Remove the resetPasswordToken from the response for security
 
       const userName = user.name ? user.name : user.firstName + ' ' + user.lastName;;
 
@@ -87,7 +86,7 @@ export class AuthService {
         userName,
       );
 
-      this.whatsappService.welcomeMessage(user);
+      this.whatsappService.sendWelcomeMessage(user, user.countryId.code);
 
       // Return the user data and a JWT token for authentication
       return { userData: user, token: this.jwtService.sign({ id: user._id }) };
@@ -232,5 +231,14 @@ export class AuthService {
     }
 
     return { userId };
+  }
+
+  private sanitizeUser(user: any): any {
+    if (!user) return user;
+    const obj = user.toObject ? user.toObject() : user; // convert mongoose doc en objet si besoin
+    delete obj.password;
+    delete obj.resetPasswordToken;
+    delete obj.balance;
+    return obj;
   }
 }
