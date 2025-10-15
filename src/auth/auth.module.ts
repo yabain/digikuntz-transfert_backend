@@ -4,13 +4,16 @@ import { Module } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { MongooseModule } from '@nestjs/mongoose';
-import { UserSchema } from 'src/user/user.schema';
+import { User, UserSchema } from 'src/user/user.schema';
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './jwt.strategy';
 import { HttpModule } from '@nestjs/axios';
-import { RevokedTokenSchema } from '../revoked-token/revoked-token.schema';
+import {
+  RevokedToken,
+  RevokedTokenSchema,
+} from '../revoked-token/revoked-token.schema';
 import { EmailService } from 'src/email/email.service';
 import { DateService } from 'src/email/date.service';
 // import { WhatsappService } from 'src/whatsapp/whatsapp.service';
@@ -37,10 +40,10 @@ import { WhatsappModule } from 'src/wa/whatsapp.module';
       }),
     }),
     MongooseModule.forFeature([
-      { name: 'User', schema: UserSchema },
+      { name: User.name, schema: UserSchema },
       { name: Email.name, schema: EmailSchema },
       // { name: WhatsappQr.name, schema: WhatsappQrSchema },
-      { name: 'RevokedToken', schema: RevokedTokenSchema },
+      { name: RevokedToken.name, schema: RevokedTokenSchema },
       { name: Smtp.name, schema: SmtpSchema },
       { name: System.name, schema: SystemSchema },
     ]),

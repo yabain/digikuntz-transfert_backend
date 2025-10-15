@@ -235,7 +235,7 @@ export class AuthService {
 
   private sanitizeUser(user: any): any {
     if (!user) return user;
-    const obj = user.toObject ? user.toObject() : user; // convert mongoose doc en objet si besoin
+    const obj = user.toObject ? user.toObject() : user; // convert mongoose doc to object if needed
     delete obj.password;
     delete obj.resetPasswordToken;
     delete obj.balance;

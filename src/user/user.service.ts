@@ -29,7 +29,7 @@ export class UserService {
 
   private sanitizeUser(user: any): any {
     if (!user) return user;
-    const obj = user.toObject ? user.toObject() : user; // convert mongoose doc en objet si besoin
+    const obj = user.toObject ? user.toObject() : user; // convert mongoose doc to object if needed
     delete obj.password;
     delete obj.resetPasswordToken;
     delete obj.balance;
@@ -117,7 +117,8 @@ export class UserService {
    * @returns The user data with follower and following counts.
    * @throws NotFoundException if the user ID is invalid or the user is not found.
    */
-  async getUserById(userId: any): Promise<any> {
+  async getUserById(userId: string): Promise<any> {
+    console.log('getUserById', userId)
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new NotFoundException('Invalid user ID');
     }

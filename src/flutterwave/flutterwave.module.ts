@@ -32,11 +32,13 @@ import { Email, EmailSchema } from 'src/email/email.schema';
 import { DateService } from 'src/email/date.service';
 import { SmtpService } from 'src/email/smtp/smtp.service';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
+import { WhatsappModule } from 'src/wa/whatsapp.module';
 
 @Module({
   imports: [
     ConfigModule,
     HttpModule,
+    WhatsappModule,
     MongooseModule.forFeature([
       { name: Payin.name, schema: PayinSchema },
       { name: Payout.name, schema: PayoutSchema },

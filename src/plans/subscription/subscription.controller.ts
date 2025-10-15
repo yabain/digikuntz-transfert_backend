@@ -296,6 +296,39 @@ export class SubscriptionController {
     return this.subscriptionService.verifySubscription(req.user._id, planId);
   }
 
+  @Get('verify-with-user/:planId')
+  @ApiBearerAuth()
+  @ApiOperation({ 
+    summary: 'Verify subscription to plan',
+    description: 'Check if the authenticated user has a subscription to the specified plan.',
+    tags: ['User']
+  })
+  @ApiParam({ 
+    name: 'planId', 
+    description: 'Plan ID', 
+    type: String,
+    example: '507f1f77bcf86cd799439011'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Subscription verification completed.',
+    schema: {
+      type: 'object',
+      properties: {
+        hasSubscription: { type: 'boolean', description: 'Whether user has subscription to the plan' }
+      }
+    }
+  })
+  @ApiResponse({ 
+    status: 401, 
+    description: 'Unauthorized - Authentication required.' 
+  })
+  @UsePipes(ValidationPipe)
+  async verifySubscriptionWithUserId(@Param('planId') allId: string): Promise<any> {
+    const [userId, planId] = allId.split('AAA');
+    return this.subscriptionService.verifySubscription(userId, planId);
+  }
+
   /**
    * Check if user has access to a plan
    * @param planId - ID of the plan to check access for

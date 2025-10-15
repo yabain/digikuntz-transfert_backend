@@ -17,10 +17,12 @@ import { Plans, PlansSchema } from '../plans.schema';
 import { EmailSchema, Email } from 'src/email/email.schema';
 import { SmtpService } from 'src/email/smtp/smtp.service';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
+import { WhatsappModule } from 'src/wa/whatsapp.module';
 
 @Module({
   imports: [
     AuthModule,
+    WhatsappModule,
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: Options.name, schema: OptionsSchema },

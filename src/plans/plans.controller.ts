@@ -131,18 +131,29 @@ export class PlansController {
     return this.plansService.getPlansById(plansId);
   }
 
-
-  ///////// ------ //////
-
   @Post('new')
   @ApiOperation({ summary: 'Create a new plan' })
   @ApiBody({ type: CreatePlansDto })
   @ApiResponse({ status: 201, description: 'plan created.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async createPlanss(@Body() plans: any, @Req() req): Promise<any> {
+  async createPlans(@Body() plans: any, @Req() req): Promise<any> {
     return this.plansService.creatPlans(plans, req.user);
   }
+
+  @Post('add-subscriber')
+  @ApiOperation({ summary: 'Create a new user and add to plan as subscriber' })
+  @ApiBody({ type: CreatePlansDto })
+  @ApiResponse({ status: 201, description: 'plan created.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async addSubscriber(@Body() data: any): Promise<any> {
+    console.log('data: ', data)
+    return this.plansService.addSubscriber(data);
+  }
+
+
+  ///////// ------ //////
 
   @Put('update-plans/:id')
   @ApiBearerAuth()

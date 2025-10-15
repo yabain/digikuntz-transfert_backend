@@ -31,11 +31,12 @@ import { OptionsService } from 'src/plans/options/options.service';
 import { Item, ItemSchema } from 'src/plans/item/item.shema';
 import { Plans, PlansSchema } from 'src/plans/plans.schema';
 import { Options, OptionsSchema } from 'src/plans/options/options.shema';
-// import { WhatsappModule } from 'src/whatsapp/whatsapp.module';
+import { WhatsappModule } from 'src/wa/whatsapp.module';
 
 @Module({
   imports: [
     HttpModule,
+    WhatsappModule,
     MongooseModule.forFeature([
       { name: 'Transaction', schema: TransactionSchema },
     ]),

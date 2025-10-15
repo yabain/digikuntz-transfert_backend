@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-floating-promises */
 /* eslint-disable @typescript-eslint/no-base-to-string */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
@@ -14,6 +15,8 @@ import { OptionsService } from '../options/options.service';
 import { CreateSubscriptionDto } from './create-subscription.dto';
 import { UpdateSubscriptionDto } from './update-subscription.dto';
 import { ItemService } from '../item/item.service';
+import { WhatsappService } from 'src/wa/whatsapp.service';
+import { UserService } from 'src/user/user.service';
 
 @Injectable()
 export class SubscriptionService {
@@ -22,6 +25,8 @@ export class SubscriptionService {
     private subscriptionModel: mongoose.Model<Subscription>,
     private itemService: ItemService,
     private optionsService: OptionsService,
+    private whatsappService: WhatsappService,
+    private userService: UserService,
   ) {}
 
   async subscribe(subscriptionData: CreateSubscriptionDto) {
@@ -31,8 +36,10 @@ export class SubscriptionService {
     );
 
     if (subscriptionStatus.existingSubscription) {
-
-      await this.upgradeSubscription(subscriptionStatus.id, subscriptionData.quantity);
+      await this.upgradeSubscription(
+        subscriptionStatus.id,
+        subscriptionData.quantity,
+      );
     } else {
       if (subscriptionData) await this.createSubscription(subscriptionData);
     }
@@ -103,16 +110,32 @@ export class SubscriptionService {
       subscriptionData.quantity,
     );
 
-    // Créer l'abonnement avec les dates calculées
+    // Construct subscription with calculeted data
     const subscriptionWithDates = {
       ...subscriptionData,
       startDate,
       endDate,
     };
 
-    console.log('(subscription service: createSubscription) subscriptionWithDates: ', subscriptionWithDates);
     const res = await this.subscriptionModel.create(subscriptionWithDates);
-    console.log('(subscription service: createSubscription) res: ', res);
+    // console.log('(subscription service: createSubscription) res: ', res);
+    if (!res) {
+      throw new NotFoundException('Subscription not created');
+    }
+    const subscription = await this.subscriptionModel
+      .findById(res._id)
+      .populate('userId')
+      .populate('planAuthor')
+      .populate('planId');
+      if (!subscription) {
+        throw new NotFoundException('Subscription not found');
+      }
+
+    this.whatsappService.sendNewSubscriberMessageForPlanAuthor(
+      subscription.planId,
+      subscription.planAuthor,
+    );
+
     return res;
   }
 
@@ -219,7 +242,7 @@ export class SubscriptionService {
       planId: planId,
     });
     if (!subscription || !subscription.status) {
-      return {existingSubscription: false}; // 'Subscription not found' or expired;
+      return { existingSubscription: false }; // 'Subscription not found' or expired;
     }
     const currentDate = new Date();
     if (currentDate > subscription.endDate) {
@@ -227,10 +250,22 @@ export class SubscriptionService {
       await this.subscriptionModel.findByIdAndUpdate(subscription._id, {
         status: false,
       });
-      return { existingSubscription: true, status: false, id: subscription._id, startDate: subscription.startDate, endDate: subscription.endDate  }; // 'Subscription expired';
+      return {
+        existingSubscription: true,
+        status: false,
+        id: subscription._id,
+        startDate: subscription.startDate,
+        endDate: subscription.endDate,
+      }; // 'Subscription expired';
     }
 
-    return { existingSubscription: true, status: true, id: subscription._id, startDate: subscription.startDate, endDate: subscription.endDate };
+    return {
+      existingSubscription: true,
+      status: true,
+      id: subscription._id,
+      startDate: subscription.startDate,
+      endDate: subscription.endDate,
+    };
   }
 
   async updateSubscription(
@@ -272,29 +307,31 @@ export class SubscriptionService {
     if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {
       throw new NotFoundException('Invalid subscription ID');
     }
-  
+
     if (typeof additionalQuantity !== 'number' || additionalQuantity <= 0) {
       throw new NotFoundException('Invalid quantity to add');
     }
-  
+
     // Récupérer la souscription
-    const subscriptionData: any = await this.subscriptionModel.findById(subscriptionId);
+    const subscriptionData: any =
+      await this.subscriptionModel.findById(subscriptionId);
     if (!subscriptionData) {
       throw new NotFoundException('Subscription not found');
     }
-  
+
     // Nouveau total de cycles
-    const newQuantityTotal = (subscriptionData.quantity || 0) + additionalQuantity;
-  
+    const newQuantityTotal =
+      (subscriptionData.quantity || 0) + additionalQuantity;
+
     // Nouvelle endDate calculée à partir de startDate et du total de cycles
     const newEndDate = this.calculateEndDate(
       new Date(subscriptionData.startDate),
       subscriptionData.cycle,
       newQuantityTotal,
     );
-  
+
     const newStatus: boolean = newEndDate.getTime() > Date.now();
-  
+
     const updated = await this.subscriptionModel.findByIdAndUpdate(
       subscriptionData._id,
       {
@@ -304,14 +341,13 @@ export class SubscriptionService {
       },
       { new: true, runValidators: true },
     );
-  
+
     if (!updated) {
       throw new NotFoundException('Error upgrading subscription');
     }
-  
+
     return updated;
   }
-  
 
   async updateStatus(subscriptionId: any, status): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {
@@ -322,12 +358,11 @@ export class SubscriptionService {
     if (!subscription) {
       throw new NotFoundException('User not found');
     }
-    const updatedSubscription = await this.subscriptionModel
-      .findByIdAndUpdate(
-        subscriptionId,
-        { status: status },
-        { new: true, runValidators: true },
-      )
+    const updatedSubscription = await this.subscriptionModel.findByIdAndUpdate(
+      subscriptionId,
+      { status: status },
+      { new: true, runValidators: true },
+    );
 
     if (!updatedSubscription) {
       throw new NotFoundException('User not found');

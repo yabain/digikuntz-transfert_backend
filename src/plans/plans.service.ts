@@ -16,6 +16,10 @@ import { UpdatePlansDto } from './update-plans.dto';
 import { ItemService } from './item/item.service';
 import { Plans } from './plans.schema';
 import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
+import { AuthService } from 'src/auth/auth.service';
+import { SubscriptionService } from './subscription/subscription.service';
+import { WhatsappService } from 'src/wa/whatsapp.service';
+import { UserService } from 'src/user/user.service';
 
 @Injectable()
 export class PlansService {
@@ -24,18 +28,22 @@ export class PlansService {
     private plansModel: mongoose.Model<Plans>,
     private itemService: ItemService,
     private optionsService: OptionsService,
-    private fwService: FlutterwaveService
+    private fwService: FlutterwaveService,
+    private authService: AuthService,
+    private subscriptionService: SubscriptionService,
+    private waService: WhatsappService,
+    private userService: UserService,
   ) {}
 
   private sanitizeUser(user: any): any {
     if (!user) return user;
-    const obj = user.toObject ? user.toObject() : user; // convert mongoose doc en objet si besoin
+    const obj = user.toObject ? user.toObject() : user; // convert mongoose doc to object if needed
     delete obj.password;
     delete obj.resetPasswordToken;
     delete obj.balance;
     return obj;
   }
-  
+
   async getAllPlans(query: Query): Promise<Plans[]> {
     const resPerPage = 50;
     const currentPage = Number(query.page) || 1;
@@ -49,10 +57,11 @@ export class PlansService {
           },
         }
       : {};
-    const plansList = await this.plansModel.find({ ...keyword })
-    .populate('author')
-    .limit(resPerPage)
-    .skip(skip);
+    const plansList = await this.plansModel
+      .find({ ...keyword })
+      .populate('author')
+      .limit(resPerPage)
+      .skip(skip);
 
     const resp: any = [];
     for (const plan of plansList) {
@@ -72,8 +81,9 @@ export class PlansService {
 
     let idUser = '';
     idUser = reqUser.isAdmin ? userId : reqUser._id;
-    const plansList = await this.plansModel.find({ author: idUser })
-    .populate('author');
+    const plansList = await this.plansModel
+      .find({ author: idUser })
+      .populate('author');
     if (!plansList) {
       return [];
     }
@@ -122,7 +132,7 @@ export class PlansService {
   }
 
   async getMyPlansStatistics(userId, long?: number): Promise<any> {
-    const totalPlans = await this.plansModel.countDocuments({author: userId});
+    const totalPlans = await this.plansModel.countDocuments({ author: userId });
 
     const duration = long ?? 7;
     const sinceDate = new Date();
@@ -154,6 +164,7 @@ export class PlansService {
   }
 
   async getPlansById(planId: any): Promise<any> {
+    console.log('planId: ', planId);
     if (!mongoose.Types.ObjectId.isValid(planId)) {
       throw new NotFoundException('Invalid plan ID');
     }
@@ -163,10 +174,7 @@ export class PlansService {
       throw new NotFoundException('Plan not found');
     }
 
-
-    const planOption = await this.optionsService.getAllOptionsOfPlans(
-      plan._id,
-    );
+    const planOption = await this.optionsService.getAllOptionsOfPlans(plan._id);
     const planData = { ...plan.toObject(), options: planOption };
 
     return planData;
@@ -198,6 +206,57 @@ export class PlansService {
     }
   }
 
+  async addSubscriber(data: any): Promise<any> {
+    const dataBackup = structuredClone(data);
+    const user: any = this.sanitizeForUser(data);
+    try {
+      data = await this.authService.signUp(user);
+      if (!data) {
+        throw new NotFoundException('Unable to add this user');
+      }
+      console.log('new user: ', data);
+
+      const plan = await this.getPlansById(dataBackup.planId);
+      if (!plan) {
+        throw new NotFoundException('Plan not found');
+      }
+      // if (plan.author != currentUser._id && currentUser.isAdmin != true) {
+      //   throw new NotFoundException('Unauthorized');
+      // }
+
+      const userWithCountryDetails = await this.userService.getUserById(data.userData._id.toString());
+
+      const subscription = await this.subscriptionService.createSubscription({
+        userId: userWithCountryDetails._id,
+        planAuthor: plan.author,
+        planId: plan._id,
+        quantity: 0,
+        cycle: plan.cycle,
+        startDate: dataBackup.subscriptionStartDate,
+        endDate: dataBackup.subscriptionStartDate,
+        status: false,
+      });
+      if (!subscription) {
+        throw new NotFoundException('Unable to add this subscription');
+      }
+      
+      // Récupérer les informations complètes de l'utilisateur avec les détails du pays
+      await this.waService.sendNewSubscriberMessageFromPlanAuthor(plan, userWithCountryDetails);
+
+      return subscription;
+    } catch (err) {
+      console.log(err);
+      throw new NotFoundException('Error: ' + err);
+    }
+  }
+
+  private sanitizeForUser(data: any): any {
+    const obj = data.toObject ? data.toObject() : data; // convert mongoose doc to object if needed
+    delete obj.planId;
+    delete obj.subscriptionStartDate;
+    return obj;
+  }
+
   async updateStatus(planId: any, userData): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(planId)) {
       throw new NotFoundException('Invalid plan ID');
@@ -213,7 +272,7 @@ export class PlansService {
       throw new NotFoundException('Unauthorized');
     }
 
-    const status = plan.isActive === false ? false : true
+    const status = plan.isActive === false ? false : true;
     const updatedPlan = await this.plansModel.findByIdAndUpdate(
       planId,
       { isActive: !status },
@@ -226,7 +285,6 @@ export class PlansService {
     return true;
   }
 
-
   async deletePlans(planId: string, userData): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(planId)) {
       throw new NotFoundException('Invalid plan ID');
@@ -235,14 +293,15 @@ export class PlansService {
     if (!plan) {
       throw new NotFoundException('Plan not found');
     }
-    if (plan.author.toString() != userData._id.toString() && !userData.isAdmin) {
+    if (
+      plan.author.toString() != userData._id.toString() &&
+      !userData.isAdmin
+    ) {
       throw new NotFoundException('Unauthorized');
     }
     await this.optionsService.deleteOptionsOfPlan(plan._id);
     return await this.plansModel.findByIdAndDelete(planId);
   }
-
-
 
   async updatePlans(user: any, planId, planData: UpdatePlansDto): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(planId)) {

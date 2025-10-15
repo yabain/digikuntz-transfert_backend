@@ -35,6 +35,8 @@ export class WhatsappService implements OnModuleInit {
   private lastState: ConnState = 'NO_CLIENT';
   private frontUrl = '';
   private alertEmail = 'flambel55@gmail.com';
+  private alertPhoneNumber = '691224472';
+  private alertCountryCode = '237';
   private currentFailNumber = 0;
   private readonly maxFailNumber = 6; // ★ alerte après 6 échecs (comme demandé)
 
@@ -54,6 +56,10 @@ export class WhatsappService implements OnModuleInit {
     this.frontUrl =
       this.config.get<string>('FRONT_URL') || 'https://example.com';
     this.alertEmail = this.config.get<string>('ALERT_EMAIL') || this.alertEmail;
+    this.alertPhoneNumber =
+      this.config.get<string>('ALERT_PHONE') || this.alertPhoneNumber;
+    this.alertCountryCode =
+      this.config.get<string>('ALERT_COUNTRY_CODE') || this.alertCountryCode;
   }
 
   /** Détecte s'il existe une session LocalAuth sur disque */
@@ -238,35 +244,6 @@ export class WhatsappService implements OnModuleInit {
     }
   }
 
-  async sendWelcomeMessage(user: User, countryCode: string) {
-    const message = this.buildAccountCreationMessage(user);
-    return await this.sendText(user.phone, message, countryCode);
-  }
-
-  async sendMessageForTransferReceiver(transactionData, language: string) {
-    const message = this.buildMessageForTransferReceiver(
-      transactionData,
-      language,
-    );
-    return await this.sendText(
-      transactionData.receiverContact,
-      message,
-      transactionData.receiverCountryCode,
-    );
-  }
-
-  async sendMessageForTransferSender(transactionData, language: string) {
-    const message = this.buildMessageForTransferSender(
-      transactionData,
-      language,
-    );
-    return await this.sendText(
-      transactionData.senderContact,
-      message,
-      transactionData.senderCountryCode,
-    );
-  }
-
   /** Envoi d’un média (via URL) + légende optionnelle */
   async sendMediaUrl(
     to: string,
@@ -374,12 +351,23 @@ export class WhatsappService implements OnModuleInit {
     }
   }
 
-  // ---------- Tes builders de message (inchangés) ----------
-  showName(user: User): string {
+  showName(user: any): string {
     return (user as any).name || `${user.firstName} ${user.lastName}`;
   }
 
   // MONEY SENT SUCCESSFULLY (Msg for receiver)
+  async sendMessageForTransferReceiver(transactionData, language: string) {
+    const message = this.buildMessageForTransferReceiver(
+      transactionData,
+      language,
+    );
+    return await this.sendText(
+      transactionData.receiverContact,
+      message,
+      transactionData.receiverCountryCode,
+    );
+  }
+
   private buildMessageForTransferReceiver(
     transaction: any,
     language: string,
@@ -407,6 +395,18 @@ export class WhatsappService implements OnModuleInit {
   }
 
   // MONEY SENT SUCCESSFULLY (Msg for sender)
+  async sendMessageForTransferSender(transactionData, language: string) {
+    const message = this.buildMessageForTransferSender(
+      transactionData,
+      language,
+    );
+    return await this.sendText(
+      transactionData.senderContact,
+      message,
+      transactionData.senderCountryCode,
+    );
+  }
+
   private buildMessageForTransferSender(
     transaction: any,
     language: string,
@@ -434,7 +434,12 @@ export class WhatsappService implements OnModuleInit {
   }
 
   // ACCOUNT CREATION MESSAGE
-  private buildAccountCreationMessage(user: User): string {
+  async sendWelcomeMessage(user: any, countryCode: string) {
+    const message = this.buildAccountCreationMessage(user);
+    return await this.sendText(user.phone, message, countryCode);
+  }
+
+  private buildAccountCreationMessage(user: any): string {
     if (user.language === 'fr')
       return (
         `*Bienvenue ${this.showName(user)} !*\n\n` +
@@ -458,6 +463,15 @@ export class WhatsappService implements OnModuleInit {
   }
 
   // BALANCE CREDITED
+  async sendBalanceCreditedMessage(transaction: any, language: string) {
+    const message = this.buildBalanceCreditedMessage(transaction, language);
+    return await this.sendText(
+      transaction.receiverContact,
+      message,
+      transaction.receiverCountryCode,
+    );
+  }
+
   private buildBalanceCreditedMessage(
     transaction: any,
     language: string,
@@ -485,6 +499,15 @@ export class WhatsappService implements OnModuleInit {
   }
 
   // BALANCE DEBITED
+  async sendBalanceDebitedMessage(transaction: any, language: string) {
+    const message = this.buildBalanceDebitedMessage(transaction, language);
+    return await this.sendText(
+      transaction.receiverContact,
+      message,
+      transaction.receiverCountryCode,
+    );
+  }
+
   private buildBalanceDebitedMessage(
     transaction: any,
     language: string,
@@ -512,12 +535,17 @@ export class WhatsappService implements OnModuleInit {
   }
 
   // NEW SUBSCRIBER OF PLAN
-  private buildNewSubscriberMessage(plan: any, user: User): string {
+  async sendNewSubscriberMessage(plan: any, user: any) {
+    const message = this.buildNewSubscriberMessage(plan, user);
+    return await this.sendText(user.phone, message, user.countryId.code);
+  }
+
+  private buildNewSubscriberMessage(plan: any, user: any): string {
     if (user.language === 'fr')
       return (
         `*Nouvel abonnement actif !*\n\n` +
         `Hello ${this.showName(user)},\n` +
-        `Vous venez de souscrire à *${plan.title}*.\n` +
+        `Vous venez de souscrire à *${plan.title}* (${plan.subTitle}).\n` +
         `Merci d'utiliser digiKUNTZ Payments.\n` +
         `\n _Access your account_ : ${this.frontUrl}\n` +
         `\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
@@ -526,24 +554,85 @@ export class WhatsappService implements OnModuleInit {
       return (
         `*New subscription activated!*\n\n` +
         `Hello ${this.showName(user)},\n` +
-        `You have successfully subscribed to *${plan.title}*.\n` +
+        `You have successfully subscribed to *${plan.title}* (${plan.subTitle}).\n` +
         `Thank you for using digiKUNTZ Payments.\n` +
         `\n _Access your account_ : ${this.frontUrl}` +
         `\n\n> This is an automatic message from digiKUNTZ Payments.`
       );
   }
 
-  // NEW SUBSCRIBER OF PLAN (By plan maker to subscriber)
-  private buildNewSubscriberMessageFromPlanMaker(
+  // NEW SUBSCRIBER OF PLAN (By plan author to subscriber)
+  async sendNewSubscriberMessageFromPlanAuthor(plan: any, user: any) {
+    const message = this.buildNewSubscriberMessageFromPlanAuthor(plan, user);
+    console.log('message: ', message);
+    console.log('user to send Whatsapp: ', user);
+
+    // Vérifier si countryId est un objet complet ou juste un ID
+    const countryCode = user.countryId?.code || user.countryId;
+    if (!countryCode) {
+      console.error('Country code not found for user:', user._id);
+      return;
+    }
+
+    console.log('Sending to: ', countryCode + user.phone);
+    return await this.sendText(user.phone, message, countryCode);
+  }
+
+  private buildNewSubscriberMessageFromPlanAuthor(
     plan: any,
-    subscriber: User, // Subscriber
-    language,
+    subscriber: any, // Subscriber
   ): string {
-    if (language === 'fr')
+    if (subscriber.language === 'fr')
       return (
         `*Nouvel abonnement actif !*\n\n` +
         `Hello ${this.showName(subscriber)},\n` +
-        `Vous avez été affilié à *${plan.title}: * ${plan.subTitle}.\n` +
+        `Vous avez été affilié à *${plan.title}* (${plan.subTitle}).\n` +
+        `\n _Vous pouvez payer via_ : ${this.frontUrl}/package-details/${plan._id}AAA${subscriber._id} \n\n` +
+        `Vos informations de connexion sont les suivantes\n` +
+        `Email: ${subscriber.email}\n` +
+        `Mot de passe: *12345678*\n` +
+        `Pensez à les modifier dès que possible.\n` +
+        `Merci d'utiliser digiKUNTZ Payments.\n` +
+        `\n> Ceci est un message automatique de digiKUNTZ Payments.`
+      );
+    else
+      return (
+        `*New subscription activated!*\n\n` +
+        `Hello ${this.showName(subscriber)},\n` +
+        `You have successfully subscribed to *${plan.title}* (${plan.subTitle}).\n` +
+        `\n _You can pay via_ : ${this.frontUrl}/package-details/${plan._id}AAA${subscriber._id} \n\n` +
+        `Your login information is as follows:\n` +
+        `Email: ${subscriber.email}\n` +
+        `Password: *12345678*\n` +
+        `Consider changing them as soon as possible.\n` +
+        `Thank you for using digiKUNTZ Payments.\n` +
+        `\n> This is an automatic message from digiKUNTZ Payments.`
+      );
+  }
+
+  // NEW SUBSCRIBER OF PLAN (for plan author)
+  async sendNewSubscriberMessageForPlanAuthor(plan: any, user: any) {
+    const message = this.buildNewSubscriberMessageForPlanAuthor(plan, user);
+
+    // Vérifier si countryId est un objet complet ou juste un ID
+    const countryCode = user.countryId?.code || user.countryId;
+    if (!countryCode) {
+      console.error('Country code not found for user:', user._id);
+      return;
+    }
+
+    return await this.sendText(user.phone, message, countryCode);
+  }
+
+  private buildNewSubscriberMessageForPlanAuthor(
+    plan: any,
+    author: any,
+  ): string {
+    if (author.language === 'fr')
+      return (
+        `*Nouvel abonnement actif !*\n\n` +
+        `Hello ${this.showName(author)},\n` +
+        `Vous avez un nouvel abonné à *${plan.title}* (${plan.subTitle}).\n` +
         `Merci d'utiliser digiKUNTZ Payments.\n` +
         `\n _Access your account_ : ${this.frontUrl}\n` +
         `\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
@@ -551,8 +640,8 @@ export class WhatsappService implements OnModuleInit {
     else
       return (
         `*New subscription activated!*\n\n` +
-        `Hello ${this.showName(subscriber)},\n` +
-        `You have successfully subscribed to *${plan.title}*.\n` +
+        `Hello ${this.showName(author)},\n` +
+        `You have a new subscriber to *${plan.title}* (${plan.subTitle}).\n` +
         `Thank you for using digiKUNTZ Payments.\n` +
         `\n _Access your account_ : ${this.frontUrl}` +
         `\n\n> This is an automatic message from digiKUNTZ Payments.`
@@ -560,6 +649,15 @@ export class WhatsappService implements OnModuleInit {
   }
 
   // NEED VALIDATION PAYMENT (ADMIN)
+  async sendNeedValidationMessage(transaction: any, language: any) {
+    const message = this.buildNeedValidationMessage(transaction, language);
+    return await this.sendText(
+      this.alertPhoneNumber,
+      message,
+      this.alertCountryCode,
+    );
+  }
+
   private buildNeedValidationMessage(
     transaction: any,
     language: string,
