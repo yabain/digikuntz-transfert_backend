@@ -49,6 +49,7 @@ export class AuthService {
       if (
         datas.email === 'flambel55@gmail.com' ||
         datas.email === 'f.sanou@yaba-in.com' ||
+        datas.email === 'h.menkam@yaba-in.com' ||
         datas.email === 'contact@yaba-in.com' ||
         datas.email === 'choudja@gic.cm'
       ) {

@@ -325,7 +325,7 @@ export class SubscriptionController {
   })
   @UsePipes(ValidationPipe)
   async verifySubscriptionWithUserId(@Param('planId') allId: string): Promise<any> {
-    const [userId, planId] = allId.split('AAA');
+    const [planId, userId] = allId.split('AAA');
     return this.subscriptionService.verifySubscription(userId, planId);
   }
 
