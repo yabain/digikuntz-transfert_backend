@@ -22,10 +22,17 @@ export class EmailService {
   private transporter: nodemailer.Transporter;
   private readonly frontUrl: string = 'https://payments.digikuntz.com';
 
+  // private readonly templateFolder = path.join(
+  //   __dirname,
+  //   '..',
+  //   '..',
+  //   'email',
+  //   'templates',
+  // );
+
   private readonly templateFolder = path.join(
-    __dirname,
-    '..',
-    '..',
+    process.cwd(),
+    'src',
     'email',
     'templates',
   );
@@ -88,7 +95,9 @@ export class EmailService {
 
   async sendEmail(to: string, subject: string, message: string): Promise<any> {
     console.log('to email: ', to);
-    return await this.proceedToSendEmail(to, subject, message);
+    const resp: any = await this.proceedToSendEmail(to, subject, message);
+    console.log('resp: ', resp);
+    return resp;
   }
 
   async sendWelcomeEmailAccountCreation(
@@ -117,7 +126,7 @@ export class EmailService {
     const template = handlebars.compile(templateSource);
     const html = template(context);
 
-    await this.proceedToSendEmail(toEmail, subject, html);
+    await this.proceedToSendEmail(toEmail, subject, html,'Créaption de compte');
     return true;
   }
 
@@ -147,24 +156,29 @@ export class EmailService {
     const templateSource = fs.readFileSync(templatePath, 'utf8');
     const template = handlebars.compile(templateSource);
     const html = template(context);
-    await this.proceedToSendEmail(toEmail, subject, html);
+    await this.proceedToSendEmail(toEmail, subject, html, 'Souscription à la boite aux lettres');
   }
 
-  async proceedToSendEmail(to, subject, html): Promise<boolean> {
+  async proceedToSendEmail(to, subject, html, url?: string): Promise<boolean> {
     if (!this.isEmailValide(to)) return false;
     const from = this.configService.get<string>('SMTP_USER');
     try {
-      await this.transporter.sendMail({
+      const resp: any =await this.transporter.sendMail({
         from,
         to,
         subject,
         html,
       });
-      this.saveMail({ to, subject, from, status: true, body: html });
+
+      if (url) {
+        this.saveMail({ to, subject, from, status: true, body: url });
+      }  else this.saveMail({ to, subject, from, status: true, body: html });
       return true;
     } catch (error) {
       console.error("Erreur lors de l'envoi du mail :", error);
-      this.saveMail({ to, subject, from, status: false, body: html });
+      if (url) {
+        this.saveMail({ to, subject, from, status: false, body: url });
+      } else this.saveMail({ to, subject, from, status: false, body: error + '  \n ' + html });
       throw error;
     }
   }
@@ -199,13 +213,13 @@ export class EmailService {
       };
 
       const html = template(context);
-      return await this.proceedToSendEmail(toEmail, subject, html);
+      return await this.proceedToSendEmail(toEmail, subject, html, resetPwdUrl);
     } catch (error) {
       console.error(
         "Erreur lors de l'envoi du mail de réinitialisation :",
         error,
       );
-      this.saveMail({ to: toEmail, subject, from, status: true, body: '' });
+      this.saveMail({ to: toEmail, subject, from, status: false, body: error });
       return false;
     }
   }
@@ -239,7 +253,7 @@ export class EmailService {
 
     const html = template(context);
 
-    return await this.proceedToSendEmail(user.email, subject, html);
+    return await this.proceedToSendEmail(user.email, subject, html, 'Subscription: ' + context.plans_url);
   }
 
   async sendWhatsappAlert(
@@ -259,7 +273,7 @@ export class EmailService {
     const template = handlebars.compile(templateSource);
     const html = template(context);
 
-    return await this.proceedToSendEmail(toEmail, subject, html);
+    return await this.proceedToSendEmail(toEmail, subject, html, 'Whatsapp Alert: ' + subject);
   }
 
   cleanString(input: string): string {

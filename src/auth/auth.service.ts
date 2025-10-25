@@ -32,7 +32,7 @@ export class AuthService {
     private jwtService: JwtService, // Injecting the JwtService for token generation
     private emailService: EmailService,
     private whatsappService: WhatsappService,
-  ) {}
+  ) { }
 
   /**
    * Handles user registration.
@@ -107,10 +107,18 @@ export class AuthService {
    */
   async signIn(authData: any): Promise<any> {
     // Find the user by email and populate cityId and countryId
-    const user = await this.userModel
-      .findOne({ email: authData.email })
-      .populate('cityId')
-      .populate('countryId');
+    let user: any;
+    if (authData.type === 'email') {
+      user = await this.userModel
+        .findOne({ email: authData.email })
+        .populate('cityId')
+        .populate('countryId');
+    } else {
+      user = await this.userModel
+        .findOne({ whatsapp: authData.whatsapp })
+        .populate('cityId')
+        .populate('countryId');
+    }
 
     if (!user) {
       throw new UnauthorizedException('Email or password invalid'); // Handle case where user is not found

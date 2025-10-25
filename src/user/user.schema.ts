@@ -84,7 +84,7 @@ export class User extends Document {
   @Prop()
   phone2: string;
 
-  @Prop()
+  @Prop({ unique: true })
   whatsapp: string;
 
   @Prop()
