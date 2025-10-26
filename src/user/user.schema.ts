@@ -34,6 +34,9 @@ export class User extends Document {
   verified: boolean;
 
   @Prop()
+  inVerification: boolean;
+
+  @Prop()
   vip: boolean;
 
   @Prop()
