@@ -21,15 +21,6 @@ import { Query } from 'express-serve-static-core';
 export class EmailService {
   private transporter: nodemailer.Transporter;
   private readonly frontUrl: string = 'https://payments.digikuntz.com';
-
-  // private readonly templateFolder = path.join(
-  //   __dirname,
-  //   '..',
-  //   '..',
-  //   'email',
-  //   'templates',
-  // );
-
   private readonly templateFolder = path.join(
     process.cwd(),
     'src',
@@ -50,12 +41,17 @@ export class EmailService {
   async initializeTransporter() {
     const newMailSmtp = await this.getTransporterData();
     this.transporter = nodemailer.createTransport({
-      host: newMailSmtp.smtpHost,
+      host: newMailSmtp.smtpHost || 'smtppro.zoho.com',
       port: newMailSmtp.smtpPort,
       secure: newMailSmtp.smtpSecure,
+      // port: 587,       // STARTTLS
+      // secure: false,   // false = STARTTLS, pas SSL direct
       auth: {
         user: newMailSmtp.smtpUser,
         pass: newMailSmtp.smtpPassword,
+      },
+      tls: {
+        rejectUnauthorized: true,
       },
     });
   }
@@ -74,7 +70,6 @@ export class EmailService {
     const currentPage = Number(query.page) || 1;
     const skip = resPerPage * (currentPage - 1);
 
-    // Define the keyword search criteria
     const keyword = query.keyword
       ? {
           $or: [
@@ -94,9 +89,8 @@ export class EmailService {
   }
 
   async sendEmail(to: string, subject: string, message: string): Promise<any> {
-    console.log('to email: ', to);
+    if (!this.isEmailValide(to)) return false;
     const resp: any = await this.proceedToSendEmail(to, subject, message);
-    console.log('resp: ', resp);
     return resp;
   }
 
@@ -126,7 +120,7 @@ export class EmailService {
     const template = handlebars.compile(templateSource);
     const html = template(context);
 
-    await this.proceedToSendEmail(toEmail, subject, html,'Créaption de compte');
+    await this.proceedToSendEmail(toEmail, subject, html, 'Création de compte');
     return true;
   }
 
@@ -136,7 +130,6 @@ export class EmailService {
     userName: string,
   ): Promise<void> {
     if (!this.isEmailValide(toEmail)) return;
-    console.log('Sending subscription newsletter email');
     const templateName = 'newsletter-subscription';
     const subject =
       language === 'fr'
@@ -156,14 +149,19 @@ export class EmailService {
     const templateSource = fs.readFileSync(templatePath, 'utf8');
     const template = handlebars.compile(templateSource);
     const html = template(context);
-    await this.proceedToSendEmail(toEmail, subject, html, 'Souscription à la boite aux lettres');
+    await this.proceedToSendEmail(
+      toEmail,
+      subject,
+      html,
+      'Souscription à la boite aux lettres',
+    );
   }
 
   async proceedToSendEmail(to, subject, html, url?: string): Promise<boolean> {
     if (!this.isEmailValide(to)) return false;
     const from = this.configService.get<string>('SMTP_USER');
     try {
-      const resp: any =await this.transporter.sendMail({
+      const resp: any = await this.transporter.sendMail({
         from,
         to,
         subject,
@@ -172,13 +170,19 @@ export class EmailService {
 
       if (url) {
         this.saveMail({ to, subject, from, status: true, body: url });
-      }  else this.saveMail({ to, subject, from, status: true, body: html });
+      } else this.saveMail({ to, subject, from, status: true, body: html });
       return true;
     } catch (error) {
-      console.error("Erreur lors de l'envoi du mail :", error);
+      console.error('Erreur lors de l\'envoi du mail :', error);
       if (url) {
         this.saveMail({ to, subject, from, status: false, body: url });
-      } else this.saveMail({ to, subject, from, status: false, body: error + '  \n ' + html });
+      } else this.saveMail({
+        to,
+        subject,
+        from,
+        status: false,
+        body: error + '  \n ' + html,
+      });
       throw error;
     }
   }
@@ -216,7 +220,7 @@ export class EmailService {
       return await this.proceedToSendEmail(toEmail, subject, html, resetPwdUrl);
     } catch (error) {
       console.error(
-        "Erreur lors de l'envoi du mail de réinitialisation :",
+        'Erreur lors de l\'envoi du mail de réinitialisation :',
         error,
       );
       this.saveMail({ to: toEmail, subject, from, status: false, body: error });
@@ -253,7 +257,12 @@ export class EmailService {
 
     const html = template(context);
 
-    return await this.proceedToSendEmail(user.email, subject, html, 'Subscription: ' + context.plans_url);
+    return await this.proceedToSendEmail(
+      user.email,
+      subject,
+      html,
+      'Subscription: ' + context.plans_url,
+    );
   }
 
   async sendWhatsappAlert(
@@ -277,11 +286,8 @@ export class EmailService {
   }
 
   cleanString(input: string): string {
-    // Remove HTML tags using regex
     let result = input.replace(/<[^>]*>/g, '');
-    // Remove \r, \n, and \t characters
     result = result.replace(/[\r\n\t]/g, '');
-    // console.log('cleaned string: ', result);
     return result;
   }
 
