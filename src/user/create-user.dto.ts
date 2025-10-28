@@ -65,6 +65,11 @@ export class CreateUserDto {
   @IsOptional()
   readonly isAdmin: boolean;
 
+  @ApiProperty({ example: 'male' })
+  @IsString()
+  @IsOptional()
+  readonly gender: string; // male or female
+
   @ApiProperty({ example: true })
   @IsBoolean()
   @IsEmpty({ message: 'You cannot pass isAdmin' })

@@ -61,6 +61,10 @@ export class UpdateUserDto {
 
   @IsString()
   @IsOptional()
+  readonly gender: string; // male or female
+
+  @IsString()
+  @IsOptional()
   readonly cityId: string;
 
   @IsString()

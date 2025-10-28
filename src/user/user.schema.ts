@@ -91,6 +91,9 @@ export class User extends Document {
   whatsapp: string;
 
   @Prop()
+  gender: string; // male or female
+
+  @Prop()
   twitter: string;
 
   @Prop()
