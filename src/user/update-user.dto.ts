@@ -121,7 +121,7 @@ export class UpdateUserDto {
 
   @IsString()
   @IsOptional()
-  readonly webSite: string;
+  readonly website: string;
 
   @IsString()
   @IsOptional()
