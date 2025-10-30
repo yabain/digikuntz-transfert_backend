@@ -126,9 +126,9 @@ export class WhatsappService implements OnModuleInit {
       this.lastState = 'INITIALIZING';
 
       // ★ Au démarrage SANS session, on notifie qu'une (re)connexion est requise.
-      if (!hadPrevSession) {
+      // if (!hadPrevSession) {
         void this.sendConnexionFailureAlert();
-      }
+      // }
     });
 
     this.client.on('authenticated', () => {

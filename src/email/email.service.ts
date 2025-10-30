@@ -134,7 +134,7 @@ export class EmailService {
         const recipients = to[i];
         setTimeout(async () => {
           await this.proceedToSendEmail(recipients, subject, message || '', url || undefined);
-          console.log(`✅ Alert "${subject}" sent to : ${to}`);
+          console.log(`✅ Alert "${subject}" sent to : ${recipients}`);
         }, 1000 * i)
 
       }
