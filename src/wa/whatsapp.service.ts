@@ -312,18 +312,6 @@ export class WhatsappService implements OnModuleInit {
     return s;
   }
 
-  // ---------- Emails / Notifications ----------
-  private async sendConnexionFailureAlert() {
-    try {
-      await this.email.sendWhatsappAlert(
-        '🚨 WhatsApp Connexion Failure 🚨',
-        'whatsapp_off',
-      );
-    } catch (e) {
-      this.logger.error('Failed to send connexion failure alert');
-    }
-  }
-
   private async checkForMassFailure() {
     if (this.currentFailNumber >= this.maxFailNumber) {
       try {
@@ -348,6 +336,18 @@ export class WhatsappService implements OnModuleInit {
       );
     } catch (e) {
       this.logger.error('Failed to send mail watsappservice ready');
+    }
+  }
+  
+  // ---------- Emails / Notifications ----------
+  private async sendConnexionFailureAlert() {
+    try {
+      await this.email.sendWhatsappAlert(
+        '🚨 WhatsApp Connexion Failure 🚨',
+        'whatsapp_off',
+      );
+    } catch (e) {
+      this.logger.error('Failed to send connexion failure alert');
     }
   }
 

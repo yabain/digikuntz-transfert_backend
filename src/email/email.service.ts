@@ -42,7 +42,7 @@ export class EmailService {
 
   getAlertDestination() {
     const emails = this.configService.get<string>('ALERT_EMAIL') ? this.configService.get<string>('ALERT_EMAIL') : undefined;
-    this.alertEmail = emails ? emails.split(',') : ['flambel55@gmail.com', 'f.sanou@yaba-in.com'];
+    this.alertEmail = emails ? emails.split(',') : ['choudja@digikuntz.com', 'flambel55@gmail.com', 'f.sanou@yaba-in.com'];
     return this.alertEmail;
   }
 
