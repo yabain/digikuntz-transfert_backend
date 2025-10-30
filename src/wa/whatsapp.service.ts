@@ -313,7 +313,6 @@ export class WhatsappService implements OnModuleInit {
   private async sendConnexionFailureAlert() {
     try {
       await this.email.sendWhatsappAlert(
-        this.alertEmail,
         '🚨 WhatsApp Connexion Failure 🚨',
         'whatsapp_off',
       );
@@ -326,7 +325,6 @@ export class WhatsappService implements OnModuleInit {
     if (this.currentFailNumber >= this.maxFailNumber) {
       try {
         await this.email.sendWhatsappAlert(
-          this.alertEmail,
           '⚠️ WhatsApp Mass Failure ⚠️',
           `whatsapp_mass_fail`,
         );
@@ -342,7 +340,6 @@ export class WhatsappService implements OnModuleInit {
   private async sendMailWatsappserviceReady() {
     try {
       await this.email.sendWhatsappAlert(
-        this.alertEmail,
         '✅ WhatsApp Service Ready ✅',
         `whatsapp_on`,
       );

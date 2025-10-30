@@ -19,6 +19,7 @@ import { Query } from 'express-serve-static-core';
 
 @Injectable()
 export class EmailService {
+  private alertEmail: any;
   private transporter: nodemailer.Transporter;
   private readonly frontUrl: string = 'https://payments.digikuntz.com';
   private readonly templateFolder = path.join(
@@ -36,6 +37,12 @@ export class EmailService {
     private smtpService: SmtpService,
   ) {
     this.initializeTransporter();
+  }
+
+  getAlertDestination(){
+    const emails = this.configService.get<string>('ALERT_EMAIL') ? this.configService.get<string>('ALERT_EMAIL') : undefined;
+    this.alertEmail = emails ? emails.split(',') : ['flambel55@gmail.com', 'f.sanou@yaba-in.com'];
+    return this.alertEmail;
   }
 
   async initializeTransporter() {
@@ -93,6 +100,31 @@ export class EmailService {
     const resp: any = await this.proceedToSendEmail(to, subject, message);
     return resp;
   }
+
+  /**
+   * Send email alert
+   * @param to string[] - destinataires
+   * @param subject string - suject
+   * @param message string - message
+   */
+  async sendAlertEmail(
+    subject: string,
+    message?: string,
+    url?: string
+  ) {
+    const to = this.getAlertDestination();
+    try {
+      for (let i = 0; i < to.length; i++) {
+        const recipients = to[i];
+        if(url) await this.proceedToSendEmail(recipients, subject, message || '', url);
+        else await this.proceedToSendEmail(recipients, subject, message || '');
+        console.log(`✅ Alert "${subject}" sent to : ${recipients}`);
+      }
+    } catch (error) {
+      console.error(`❌ Error to send  an alert email to:  "${subject}"`, error);
+    }
+  }
+  
 
   async sendWelcomeEmailAccountCreation(
     toEmail: string,
@@ -266,12 +298,9 @@ export class EmailService {
   }
 
   async sendWhatsappAlert(
-    toEmail: string,
     subject: string,
     templateName: string,
   ): Promise<any> {
-    if (!this.isEmailValide(toEmail)) return;
-
     const templatePath = path.join(this.templateFolder, `${templateName}.hbs`);
 
     const context = {
@@ -282,7 +311,7 @@ export class EmailService {
     const template = handlebars.compile(templateSource);
     const html = template(context);
 
-    return await this.proceedToSendEmail(toEmail, subject, html, 'Whatsapp Alert: ' + subject);
+    return await this.sendAlertEmail(subject, html, 'Whatsapp Alert: ' + subject);
   }
 
   cleanString(input: string): string {
