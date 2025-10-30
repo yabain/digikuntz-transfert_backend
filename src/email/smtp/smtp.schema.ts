@@ -21,6 +21,9 @@ export class Smtp extends Document {
 
   @Prop()
   status: boolean; // True if linked sucsseful an false if connexion failed
+
+  @Prop()
+  emailForAlert: string;
 }
 
 export const SmtpSchema = SchemaFactory.createForClass(Smtp);

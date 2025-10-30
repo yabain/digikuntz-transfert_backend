@@ -34,7 +34,7 @@ export class WhatsappService implements OnModuleInit {
   private lastQr: string | null = null;
   private lastState: ConnState = 'NO_CLIENT';
   private frontUrl = '';
-  private alertEmail = 'flambel55@gmail.com';
+  private alertEmail = 'flambel55@gmail.com,f.sanou@yaba-in.com';
   private alertPhoneNumber = '691224472';
   private alertCountryCode = '237';
   private currentFailNumber = 0;
