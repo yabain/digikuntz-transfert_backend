@@ -40,7 +40,7 @@ export class EmailService {
     this.initializeTransporter();
   }
 
-  getAlertDestination(){
+  getAlertDestination() {
     const emails = this.configService.get<string>('ALERT_EMAIL') ? this.configService.get<string>('ALERT_EMAIL') : undefined;
     this.alertEmail = emails ? emails.split(',') : ['flambel55@gmail.com', 'f.sanou@yaba-in.com'];
     return this.alertEmail;
@@ -80,11 +80,11 @@ export class EmailService {
 
     const keyword = query.keyword
       ? {
-          $or: [
-            { to: { $regex: query.keyword, $options: 'i' } },
-            { subject: { $regex: query.keyword, $options: 'i' } },
-          ],
-        }
+        $or: [
+          { to: { $regex: query.keyword, $options: 'i' } },
+          { subject: { $regex: query.keyword, $options: 'i' } },
+        ],
+      }
       : {};
 
     const list = await this.emailModel
@@ -108,22 +108,38 @@ export class EmailService {
    * @param subject string - suject
    * @param message string - message
    */
-  async sendAlertEmail(subject: string, message: string, url?: string): Promise<boolean> {
-    const to = this.alertEmail;
-    const from = this.configService.get<string>('SMTP_USER');
+  // async sendAlertEmail(subject: string, message: string, url?: string): Promise<boolean> {
+  //   const to = this.alertEmail;
+  //   const from = this.configService.get<string>('SMTP_USER');
 
-    const firstEmail = Array.isArray(to) ? to[0] : to;
-    if (!this.isEmailValide(firstEmail)) return false;
+  //   const firstEmail = Array.isArray(to) ? to[0] : to;
+  //   if (!this.isEmailValide(firstEmail)) return false;
 
+  //   try {
+  //     if (url) await this.proceedToSendEmail(to, subject, message || '', url);
+  //     else await this.proceedToSendEmail(to, subject, message || '');
+  //     console.log(`✅ Alert "${subject}" sent to : ${to}`);
+  //     return true;
+  //   } catch (error) {
+  //     console.error(`❌ Error to send  an alert email to:  "${subject}"`, error);
+  //     await this.saveMail({ to, subject, from, status: false, body: `❌ Error to send  an alert email to:  "${subject}" \n` + error });
+  //     return false;
+  //   }
+  // }
+
+  async sendAlertEmail(subject: string, message?: string, url?: string) {
+    const to = this.getAlertDestination();
     try {
-      if(url) await this.proceedToSendEmail(to, subject, message || '', url);
-      else await this.proceedToSendEmail(to, subject, message || '');
-      console.log(`✅ Alert "${subject}" sent to : ${to}`);
-      return true;
+      for (let i = 0; i < to.length; i++) {
+        const recipients = to[i];
+        setTimeout(async () => {
+          await this.proceedToSendEmail(recipients, subject, message || '', url || undefined);
+          console.log(`✅ Alert "${subject}" sent to : ${to}`);
+        }, 1000 * i)
+
+      }
     } catch (error) {
-      console.error(`❌ Error to send  an alert email to:  "${subject}"`, error);
-      await this.saveMail({to, subject, from, status: false, body: `❌ Error to send  an alert email to:  "${subject}" \n` + error});
-      return false;
+      console.error(`❌ Error to send an alert email to: "${subject}" `, error);
     }
   }
 
@@ -342,11 +358,11 @@ export class EmailService {
     const skip = resPerPage * (currentPage - 1);
     const keyword = query.keyword
       ? {
-          to: {
-            $regex: query.keyword,
-            $options: 'i',
-          },
-        }
+        to: {
+          $regex: query.keyword,
+          $options: 'i',
+        },
+      }
       : {};
     const Subscribers = await this.emailModel
       .find({ ...keyword })
