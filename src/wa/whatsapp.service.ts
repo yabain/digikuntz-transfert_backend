@@ -29,6 +29,7 @@ export class WhatsappService implements OnModuleInit {
 
   private client: Client | null = null;
   private ready = false;
+  private sendOnStart: boolean = false;
 
   // mémoire: dernier QR + statut
   private lastQr: string | null = null;
@@ -127,8 +128,10 @@ export class WhatsappService implements OnModuleInit {
 
       // ★ Au démarrage SANS session, on notifie qu'une (re)connexion est requise.
       // if (!hadPrevSession) {
+      if (!this.sendOnStart) {
         void this.sendConnexionFailureAlert();
-      // }
+        this.sendOnStart = true;
+      }
     });
 
     this.client.on('authenticated', () => {
