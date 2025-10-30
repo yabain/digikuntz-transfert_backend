@@ -36,6 +36,7 @@ export class EmailService {
     private dateService: DateService,
     private smtpService: SmtpService,
   ) {
+    this.alertEmail = this.getAlertDestination();
     this.initializeTransporter();
   }
 
@@ -107,24 +108,24 @@ export class EmailService {
    * @param subject string - suject
    * @param message string - message
    */
-  async sendAlertEmail(
-    subject: string,
-    message?: string,
-    url?: string
-  ) {
-    const to = this.getAlertDestination();
+  async sendAlertEmail(subject: string, message: string, url?: string): Promise<boolean> {
+    const to = this.alertEmail;
+    const from = this.configService.get<string>('SMTP_USER');
+
+    const firstEmail = Array.isArray(to) ? to[0] : to;
+    if (!this.isEmailValide(firstEmail)) return false;
+
     try {
-      for (let i = 0; i < to.length; i++) {
-        const recipients = to[i];
-        if(url) await this.proceedToSendEmail(recipients, subject, message || '', url);
-        else await this.proceedToSendEmail(recipients, subject, message || '');
-        console.log(`✅ Alert "${subject}" sent to : ${recipients}`);
-      }
+      if(url) await this.proceedToSendEmail(to, subject, message || '', url);
+      else await this.proceedToSendEmail(to, subject, message || '');
+      console.log(`✅ Alert "${subject}" sent to : ${to}`);
+      return true;
     } catch (error) {
       console.error(`❌ Error to send  an alert email to:  "${subject}"`, error);
+      await this.saveMail({to, subject, from, status: false, body: `❌ Error to send  an alert email to:  "${subject}" \n` + error});
+      return false;
     }
   }
-  
 
   async sendWelcomeEmailAccountCreation(
     toEmail: string,
@@ -190,7 +191,13 @@ export class EmailService {
   }
 
   async proceedToSendEmail(to, subject, html, url?: string): Promise<boolean> {
-    if (!this.isEmailValide(to)) return false;
+    if (Array.isArray(to)) {
+      const invalid = to.some(email => !this.isEmailValide(email));
+      if (invalid) return false;
+    } else if (!this.isEmailValide(to)) {
+      return false;
+    }
+
     const from = this.configService.get<string>('SMTP_USER');
     try {
       const resp: any = await this.transporter.sendMail({
@@ -200,9 +207,7 @@ export class EmailService {
         html,
       });
 
-      if (url) {
-        this.saveMail({ to, subject, from, status: true, body: url });
-      } else this.saveMail({ to, subject, from, status: true, body: html });
+      this.saveMail({ to, subject, from, status: true, body: url || html });
       return true;
     } catch (error) {
       console.error('Erreur lors de l\'envoi du mail :', error);
