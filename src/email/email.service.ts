@@ -194,6 +194,7 @@ export class EmailService {
     if (Array.isArray(to)) {
       const invalid = to.some(email => !this.isEmailValide(email));
       if (invalid) return false;
+      to = to.join(',');
     } else if (!this.isEmailValide(to)) {
       return false;
     }
