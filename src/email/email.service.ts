@@ -28,6 +28,7 @@ export class EmailService {
     'email',
     'templates',
   );
+  smtpData: any;
 
   constructor(
     @InjectModel(Email.name)
@@ -36,27 +37,27 @@ export class EmailService {
     private dateService: DateService,
     private smtpService: SmtpService,
   ) {
-    this.alertEmail = this.getAlertDestination();
     this.initializeTransporter();
   }
 
   getAlertDestination() {
-    const emails = this.configService.get<string>('ALERT_EMAIL') ? this.configService.get<string>('ALERT_EMAIL') : undefined;
+    const emails = this.smtpData ? this.smtpData.emailForAlert : this.configService.get<string>('ALERT_EMAIL');
     this.alertEmail = emails ? emails.split(',') : ['choudja@digikuntz.com', 'flambel55@gmail.com', 'f.sanou@yaba-in.com'];
     return this.alertEmail;
   }
 
   async initializeTransporter() {
-    const newMailSmtp = await this.getTransporterData();
+    this.smtpData = await this.getTransporterData();
+    this.alertEmail = this.getAlertDestination();
     this.transporter = nodemailer.createTransport({
-      host: newMailSmtp.smtpHost || 'smtppro.zoho.com',
-      port: newMailSmtp.smtpPort,
-      secure: newMailSmtp.smtpSecure,
+      host: this.smtpData.smtpHost || 'smtppro.zoho.com',
+      port: this.smtpData.smtpPort || '465',
+      secure: this.smtpData.smtpSecure || true,
       // port: 587,       // STARTTLS
       // secure: false,   // false = STARTTLS, pas SSL direct
       auth: {
-        user: newMailSmtp.smtpUser,
-        pass: newMailSmtp.smtpPassword,
+        user: this.smtpData.smtpUser || 'payments@digikuntz.com',
+        pass: this.smtpData.smtpPassword || 'YD7pkyKyarD8',
       },
       tls: {
         rejectUnauthorized: true,

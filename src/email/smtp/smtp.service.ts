@@ -48,6 +48,7 @@ export class SmtpService {
       smtpUser: this.configService.get<string>('SMTP_USER'),
       smtpPassword: this.configService.get<string>('SMTP_PASSWORD'),
       smtpEncription: this.configService.get<string>('SMTP_ENCRIPTION'),
+      emailForAlert: this.configService.get<string>('ALERT_EMAIL'),
       status: true,
     };
     return this.updateSmtpData({ ...data });
