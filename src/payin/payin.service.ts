@@ -19,6 +19,7 @@ import type { Request } from 'express';
 import { Payin, PayinDocument, PayinStatus } from './payin.schema';
 import { CreatePayinDto } from './payin.dto';
 import { ConfigService } from '@nestjs/config';
+import { Query } from 'express-serve-static-core';
 
 type InitPayinPayload = {
   amount: number;
@@ -504,5 +505,31 @@ export class PayinService {
     }
 
     return { status: 'ok' };
+  }
+
+  async getAllPayinTransactoins(query: Query): Promise<any[]> {
+    const resPerPage = 10;
+    const currentPage = Number(query.page) || 1;
+    const skip = resPerPage * (currentPage - 1);
+
+    const keyword = query.keyword
+      ? {
+          title: {
+            $regex: query.keyword,
+            $options: 'i',
+          },
+        }
+      : {};
+    const transactions = await this.payinModel
+      .find({ ...keyword })
+      .limit(resPerPage)
+      .sort({ createdAt: -1 }) // Sort recent to old
+      .skip(skip)
+      .populate('transactionId');
+    return transactions;
+  }
+
+  async getTotalTransaction(): Promise<number> {
+    return await this.payinModel.countDocuments();
   }
 }

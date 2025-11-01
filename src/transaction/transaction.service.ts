@@ -23,7 +23,7 @@ import { Transaction } from './transaction.schema';
 import * as mongoose from 'mongoose';
 import { Query } from 'express-serve-static-core';
 import { Payout } from 'src/payout/payout.schema';
-// import { PayoutService } from 'src/payout/payout.service';
+import { PayinService } from 'src/payin/payin.service';
 // import { CreateTransactionDto } from './create-transaction.dto';
 
 @Injectable()
@@ -36,8 +36,8 @@ export class TransactionService {
     private payoutModel: mongoose.Model<Payout>,
     private httpService: HttpService,
     private configService: ConfigService,
-    // private payoutService: PayoutService,
-  ) {}
+    private payinService: PayinService,
+  ) { }
 
   async findAll(query: Query): Promise<Transaction[]> {
     const resPerPage = 10;
@@ -46,11 +46,11 @@ export class TransactionService {
 
     const keyword = query.keyword
       ? {
-          title: {
-            $regex: query.keyword,
-            $options: 'i',
-          },
-        }
+        title: {
+          $regex: query.keyword,
+          $options: 'i',
+        },
+      }
       : {};
     const transactions = await this.transactionModel
       .find({ ...keyword })
@@ -61,122 +61,101 @@ export class TransactionService {
   }
 
   async getAllPayoutTransactoins(query: Query): Promise<Transaction[]> {
-    const resPerPage = 10;
-    const currentPage = Number(query.page) || 1;
-    const skip = resPerPage * (currentPage - 1);
-
-    const keyword = query.keyword
-      ? {
-          title: {
-            $regex: query.keyword,
-            $options: 'i',
-          },
-        }
-      : {};
-    
-      const res = await this.transactionModel.aggregate([
-        {
-          $match: {
-            $and: [
-              { transactionType: { $in: ['transfer', 'withdrawal'] } },
-            ],
-          },
-        },
-        { $skip: skip },
-        { $limit: resPerPage },
-      ]);
-
-    return res;
-  }
-
-  async getPayoutListByStatus(status, query?): Promise<any> {
-    console.log('status: ', status);
     const resPerPage = Number(query?.resPerPage) || 10;
     const currentPage = Number(query?.page) || 1;
     const skip = resPerPage * (currentPage - 1);
 
-    let res: any;
-    if (status == 'rejected') {
-      res = await this.transactionModel.aggregate([
-        {
-          $match: {
-            status: 'transaction_payin_rejected',
-            transactionType: { $in: ['transfer', 'withdrawal'] },
-          },
+    const keywordFilter = query.keyword
+      ? {
+        title: { $regex: query.keyword, $options: 'i' },
+      }
+      : {};
+
+    const res = await this.transactionModel.aggregate([
+      {
+        $match: {
+          $and: [
+            { transactionType: { $in: ['transfer', 'withdrawal'] } },
+            { ...keywordFilter },
+          ],
         },
-        { $skip: skip },
-        { $limit: resPerPage },
-      ]);
-    } else if (status == 'accepted') {
-      res = await this.transactionModel.aggregate([
-        {
-          $match: {
-            status: 'transaction_payout_success',
-            transactionType: { $in: ['transfer', 'withdrawal'] },
-          },
-        },
-        { $skip: skip },
-        { $limit: resPerPage },
-      ]);
-    } else if (status == 'pending') {
-      res = await this.transactionModel.aggregate([
-        {
-          $match: {
-            $and: [
-              {
-                status: {
-                  $in: [
-                    'transaction_payin_success',
-                    'transaction_payout_pending',
-                    // 'transaction_payout_error',
-                  ],
-                },
-              },
-              { transactionType: { $in: ['transfer', 'withdrawal'] } },
-            ],
-          },
-        },
-        { $skip: skip },
-        { $limit: resPerPage },
-      ]);
-      // console.log('result of ' + status, res.length);
-    } else if (status == 'error') {
-      res = await this.transactionModel.aggregate([
-        {
-          $match: {
-            $and: [
-              {
-                status: {
-                  $in: [
-                    // 'transaction_payin_success',
-                    // 'transaction_payout_pending',
-                    'transaction_payout_error',
-                  ],
-                },
-              },
-              { transactionType: { $in: ['transfer', 'withdrawal'] } },
-            ],
-          },
-        },
-        { $skip: skip },
-        { $limit: resPerPage },
-      ]);
-    } else {
-      res = await this.transactionModel.aggregate([
-        {
-          $match: {
-            status: 'transaction_payin_success',
-            transactionType: { $in: ['transfer', 'withdrawal'] },
-          },
-        },
-        { $skip: skip },
-        { $limit: resPerPage },
-      ]);
-    }
-    // console.log('result of ' + status, res.length);
+      },
+      { $sort: { createdAt: -1 } },
+      { $skip: skip },
+      { $limit: resPerPage },
+    ]);
 
     return res;
   }
+
+
+
+  async getAllPayinTransactoins(query: Query): Promise<any[]> {
+    return await this.payinService.getAllPayinTransactoins(query);
+  }
+
+  async getPayoutListByStatus(status: string, query?: any): Promise<any> {
+    const resPerPage = Number(query?.resPerPage) || 10;
+    const currentPage = Number(query?.page) || 1;
+    const skip = resPerPage * (currentPage - 1);
+
+    let matchCondition: any = {
+      transactionType: { $in: ['transfer', 'withdrawal'] },
+    };
+
+    switch (status) {
+      case 'rejected':
+        matchCondition.status = 'transaction_payin_rejected';
+        break;
+
+      case 'accepted':
+        matchCondition.status = 'transaction_payout_success';
+        break;
+
+      case 'pending':
+        matchCondition = {
+          $and: [
+            {
+              status: {
+                $in: [
+                  'transaction_payin_success',
+                  'transaction_payout_pending',
+                ],
+              },
+            },
+            { transactionType: { $in: ['transfer', 'withdrawal'] } },
+          ],
+        };
+        break;
+
+      case 'error':
+        matchCondition = {
+          $and: [
+            {
+              status: {
+                $in: ['transaction_payout_error'],
+              },
+            },
+            { transactionType: { $in: ['transfer', 'withdrawal'] } },
+          ],
+        };
+        break;
+
+      default:
+        matchCondition.status = 'transaction_payin_success';
+        break;
+    }
+
+    const res = await this.transactionModel.aggregate([
+      { $match: matchCondition },
+      { $sort: { createdAt: -1 } },
+      { $skip: skip },
+      { $limit: resPerPage },
+    ]);
+
+    return res;
+  }
+
 
   async getPayoutPendingListByStatus(query?): Promise<any> {
     const resPerPage = Number(query?.resPerPage) || 10;
@@ -222,88 +201,53 @@ export class TransactionService {
   }
 
   async getTransactionsStatistics(): Promise<any> {
-    const totalTransferTransaction = await this.transactionModel.countDocuments(
-      {
-        transactionType: 'transfer',
-      },
-    );
+    const totalTransferTransaction = await this.getTotalTransferTransaction();
 
-    const totalWithdrawalTransaction =
-      await this.transactionModel.countDocuments({
-        transactionType: 'withdrawal',
-      });
+    const totalWithdrawalTransaction = await this.getTotalWithdrawalTransaction();
 
-    const pendingTransferTransaction =
-      await this.transactionModel.countDocuments({
-        status: 'transaction_payin_success',
-        transactionType: 'transfer',
-      });
+    const pendingTransferTransaction = await this.getPendingTransferTransaction();
 
-    const pendingWithdrawalTransaction =
-      await this.transactionModel.countDocuments({
-        status: 'transaction_payin_success',
-        transactionType: 'withdrawal',
-      });
+    const pendingWithdrawalTransaction = await this.getPendingWithdrawalTransaction();
 
-    const errorTransferTransaction = await this.transactionModel.countDocuments(
-      {
-        status: 'transaction_payout_error',
-        transactionType: 'transfer',
-      },
-    );
+    const errorTransferTransaction = await this.getErrorTransferTransaction();
 
-    const errorWithdrawalTransaction =
-      await this.transactionModel.countDocuments({
-        status: 'transaction_payout_error',
-        transactionType: 'withdrawal',
-      });
+    const errorWithdrawalTransaction = await this.getErrorWithdrawalTransaction();
 
-    const rejectedTransferTransaction =
-      await this.transactionModel.countDocuments({
-        status: 'transaction_payin_rejected',
-        transactionType: 'transfer',
-      });
+    const rejectedTransferTransaction = await this.getRejectedTransferTransaction();
 
-    const rejectedWithdrawalTransaction =
-      await this.transactionModel.countDocuments({
-        status: 'transaction_payin_rejected',
-        transactionType: 'withdrawal',
-      });
+    const rejectedWithdrawalTransaction = await this.getRejectedWithdrawalTransaction();
 
-    const endedTransferTransaction = await this.transactionModel.countDocuments(
-      {
-        status: 'transaction_payout_success',
-        transactionType: 'transfer',
-      },
-    );
+    const endedTransferTransaction = await this.getEndedTransferTransaction();
 
-    const endedWithdrawalTransaction =
-      await this.transactionModel.countDocuments({
-        status: 'transaction_payout_success',
-        transactionType: 'withdrawal',
-      });
+    const endedWithdrawalTransaction = await this.getEndedWithdrawalTransaction();
 
-    const totalTransaction =
-      totalTransferTransaction + totalWithdrawalTransaction;
-
-    const errorTransaction =
+    const errorTransactions =
       errorTransferTransaction + errorWithdrawalTransaction;
 
-    const rejectedTransaction =
+    const rejectedTransactions =
       rejectedTransferTransaction + rejectedWithdrawalTransaction;
 
-    const pendingTransaction =
+    const pendingTransactions =
       pendingTransferTransaction + pendingWithdrawalTransaction;
 
-    const endedTransaction =
+    const endedTransactions =
       endedTransferTransaction + endedWithdrawalTransaction;
 
+    const totalPayinTransactions = await this.getTotalPayinTransactions();
+
+    const totalPayoutTransactions =
+      totalWithdrawalTransaction + totalTransferTransaction;
+    
+    const totalTransactions = await this.getTotalTransaction();
+
     return {
-      totalTransaction,
-      rejectedTransaction,
-      pendingTransaction,
-      endedTransaction,
-      errorTransaction,
+      rejectedTransactions,
+      pendingTransactions,
+      endedTransactions,
+      errorTransactions,
+      totalPayoutTransactions,
+      totalPayinTransactions,
+      totalTransactions,
     };
   }
 
@@ -317,11 +261,11 @@ export class TransactionService {
 
     const keyword = query.keyword
       ? {
-          title: {
-            $regex: query.keyword,
-            $options: 'i',
-          },
-        }
+        title: {
+          $regex: query.keyword,
+          $options: 'i',
+        },
+      }
       : {};
     const transactions = await this.transactionModel
       .find({ ...keyword, userId })
@@ -564,5 +508,89 @@ export class TransactionService {
     const targetDateTime = new Date(`${dateStr}`);
     const currentDateTime = new Date();
     return targetDateTime > currentDateTime;
+  }
+
+
+
+  async getTotalTransaction(): Promise<number> {
+    return await this.transactionModel.countDocuments();
+  }
+
+  async getTotalTransferTransaction(): Promise<number> {
+    return await this.transactionModel.countDocuments(
+      {
+        transactionType: 'transfer',
+      },
+    );
+  }
+
+  async getTotalWithdrawalTransaction(): Promise<number> {
+    return await this.transactionModel.countDocuments({
+      transactionType: 'withdrawal',
+    });
+  }
+
+  async getEndedTransferTransaction(): Promise<number> {
+    return await this.transactionModel.countDocuments(
+      {
+        status: 'transaction_payout_success',
+        transactionType: 'transfer',
+      },
+    );
+  }
+
+  async getEndedWithdrawalTransaction(): Promise<number> {
+    return await this.transactionModel.countDocuments({
+      status: 'transaction_payout_success',
+      transactionType: 'withdrawal',
+    });
+  }
+
+  async getErrorTransferTransaction(): Promise<number> {
+    return await this.transactionModel.countDocuments(
+      {
+        status: 'transaction_payout_error',
+        transactionType: 'transfer',
+      },
+    );
+  }
+
+  async getErrorWithdrawalTransaction(): Promise<number> {
+    return await this.transactionModel.countDocuments({
+      status: 'transaction_payout_error',
+      transactionType: 'withdrawal',
+    });
+  }
+
+  async getPendingTransferTransaction(): Promise<number> {
+    return await this.transactionModel.countDocuments({
+      status: 'transaction_payin_success',
+      transactionType: 'transfer',
+    });
+  }
+
+  async getPendingWithdrawalTransaction(): Promise<number> {
+    return await this.transactionModel.countDocuments({
+      status: 'transaction_payin_success',
+      transactionType: 'withdrawal',
+    });
+  }
+
+  async getRejectedTransferTransaction(): Promise<number> {
+    return await this.transactionModel.countDocuments({
+      status: 'transaction_payin_rejected',
+      transactionType: 'transfer',
+    });
+  }
+
+  async getRejectedWithdrawalTransaction(): Promise<number> {
+    return await this.transactionModel.countDocuments({
+      status: 'transaction_payin_rejected',
+      transactionType: 'withdrawal',
+    });
+  }
+
+  async getTotalPayinTransactions(){
+    return await this.payinService.getTotalTransaction();
   }
 }

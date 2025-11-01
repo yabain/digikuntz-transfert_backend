@@ -258,4 +258,8 @@ export class PayoutService {
 
     return { reference: newReference, saved, fw: res?.data };
   }
+
+  async getTotalTransaction(): Promise<number> {
+    return await this.payoutModel.countDocuments();
+  }
 }

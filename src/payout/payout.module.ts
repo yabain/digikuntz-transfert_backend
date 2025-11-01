@@ -12,6 +12,7 @@ import {
 import { Payout, PayoutSchema } from './payout.schema';
 import { TransactionService } from 'src/transaction/transaction.service';
 import { PayoutCron } from './payout.cron';
+import { PayinService } from 'src/payin/payin.service';
 
 @Module({
   imports: [
@@ -23,8 +24,8 @@ import { PayoutCron } from './payout.cron';
       { name: Transaction.name, schema: TransactionSchema },
     ]),
   ],
-  providers: [PayoutService, TransactionService, PayoutCron],
+  providers: [PayoutService, PayinService, TransactionService, PayoutCron],
   controllers: [PayoutController],
   exports: [PayoutService],
 })
-export class PayoutModule {}
+export class PayoutModule { }
