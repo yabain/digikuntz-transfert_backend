@@ -170,3 +170,6 @@ export class Transaction {
 }
 
 export const TransactionSchema = SchemaFactory.createForClass(Transaction);
+TransactionSchema.index({ createdAt: -1 });
+TransactionSchema.index({ ref: 'text' });
+

@@ -55,8 +55,38 @@ export class TransactionService {
     const transactions = await this.transactionModel
       .find({ ...keyword })
       .limit(resPerPage)
+      .sort({ createdAt: -1 }) // Sort recent to old
       .skip(skip);
     return transactions;
+  }
+
+  async getAllPayoutTransactoins(query: Query): Promise<Transaction[]> {
+    const resPerPage = 10;
+    const currentPage = Number(query.page) || 1;
+    const skip = resPerPage * (currentPage - 1);
+
+    const keyword = query.keyword
+      ? {
+          title: {
+            $regex: query.keyword,
+            $options: 'i',
+          },
+        }
+      : {};
+    
+      const res = await this.transactionModel.aggregate([
+        {
+          $match: {
+            $and: [
+              { transactionType: { $in: ['transfer', 'withdrawal'] } },
+            ],
+          },
+        },
+        { $skip: skip },
+        { $limit: resPerPage },
+      ]);
+
+    return res;
   }
 
   async getPayoutListByStatus(status, query?): Promise<any> {

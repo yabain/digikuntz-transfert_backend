@@ -58,6 +58,28 @@ export class TransactionController {
     return this.transactionService.findAll(query);
   }
 
+  @Get('all-payout')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all transactions (admin only)' })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search filter',
+  })
+  @ApiResponse({ status: 200, description: 'List of transactions returned.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async getAllPayoutTransactoins(
+    @Query() query: ExpressQuery,
+    @Req() req,
+  ): Promise<Transaction[]> {
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unautorised');
+    }
+    return this.transactionService.getAllPayoutTransactoins(query);
+  }
+
   @Get('get-payout-list/:status')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get statistics about all plans (admin only)' })
