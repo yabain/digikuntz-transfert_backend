@@ -199,58 +199,7 @@ export class TransactionService {
 
     return transaction;
   }
-
-  async getTransactionsStatistics(): Promise<any> {
-    const totalTransferTransaction = await this.getTotalTransferTransaction();
-
-    const totalWithdrawalTransaction = await this.getTotalWithdrawalTransaction();
-
-    const pendingTransferTransaction = await this.getPendingTransferTransaction();
-
-    const pendingWithdrawalTransaction = await this.getPendingWithdrawalTransaction();
-
-    const errorTransferTransaction = await this.getErrorTransferTransaction();
-
-    const errorWithdrawalTransaction = await this.getErrorWithdrawalTransaction();
-
-    const rejectedTransferTransaction = await this.getRejectedTransferTransaction();
-
-    const rejectedWithdrawalTransaction = await this.getRejectedWithdrawalTransaction();
-
-    const endedTransferTransaction = await this.getEndedTransferTransaction();
-
-    const endedWithdrawalTransaction = await this.getEndedWithdrawalTransaction();
-
-    const errorTransactions =
-      errorTransferTransaction + errorWithdrawalTransaction;
-
-    const rejectedTransactions =
-      rejectedTransferTransaction + rejectedWithdrawalTransaction;
-
-    const pendingTransactions =
-      pendingTransferTransaction + pendingWithdrawalTransaction;
-
-    const endedTransactions =
-      endedTransferTransaction + endedWithdrawalTransaction;
-
-    const totalPayinTransactions = await this.getTotalPayinTransactions();
-
-    const totalPayoutTransactions =
-      totalWithdrawalTransaction + totalTransferTransaction;
-    
-    const totalTransactions = await this.getTotalTransaction();
-
-    return {
-      rejectedTransactions,
-      pendingTransactions,
-      endedTransactions,
-      errorTransactions,
-      totalPayoutTransactions,
-      totalPayinTransactions,
-      totalTransactions,
-    };
-  }
-
+  
   async getTransactionsListOfUser(
     userId: any,
     query: Query,
@@ -512,6 +461,59 @@ export class TransactionService {
 
 
 
+
+  // ---------------- System statistic ------------------------
+  async getTransactionsStatistics(): Promise<any> {
+    const totalTransferTransaction = await this.getTotalTransferTransaction();
+
+    const totalWithdrawalTransaction = await this.getTotalWithdrawalTransaction();
+
+    const pendingTransferTransaction = await this.getPendingTransferTransaction();
+
+    const pendingWithdrawalTransaction = await this.getPendingWithdrawalTransaction();
+
+    const errorTransferTransaction = await this.getErrorTransferTransaction();
+
+    const errorWithdrawalTransaction = await this.getErrorWithdrawalTransaction();
+
+    const rejectedTransferTransaction = await this.getRejectedTransferTransaction();
+
+    const rejectedWithdrawalTransaction = await this.getRejectedWithdrawalTransaction();
+
+    const endedTransferTransaction = await this.getEndedTransferTransaction();
+
+    const endedWithdrawalTransaction = await this.getEndedWithdrawalTransaction();
+
+    const errorTransactions =
+      errorTransferTransaction + errorWithdrawalTransaction;
+
+    const rejectedTransactions =
+      rejectedTransferTransaction + rejectedWithdrawalTransaction;
+
+    const pendingTransactions =
+      pendingTransferTransaction + pendingWithdrawalTransaction;
+
+    const endedTransactions =
+      endedTransferTransaction + endedWithdrawalTransaction;
+
+    const totalPayinTransactions = await this.payinService.getTotalTransaction();;
+
+    const totalPayoutTransactions =
+      totalWithdrawalTransaction + totalTransferTransaction;
+    
+    const totalTransactions = await this.getTotalTransaction();
+
+    return {
+      rejectedTransactions,
+      pendingTransactions,
+      endedTransactions,
+      errorTransactions,
+      totalPayoutTransactions,
+      totalPayinTransactions,
+      totalTransactions,
+    };
+  }
+
   async getTotalTransaction(): Promise<number> {
     return await this.transactionModel.countDocuments();
   }
@@ -589,8 +591,48 @@ export class TransactionService {
       transactionType: 'withdrawal',
     });
   }
+  // ---------------- / System statistic ------------------------
 
-  async getTotalPayinTransactions(){
-    return await this.payinService.getTotalTransaction();
+  // ------------------- User transactions statistic
+  async getTransactionsStatisticsOfUser(userId: string): Promise<any>{
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new NotFoundException('Invalid event ID');
+    }
+    const totalTransactions = await this.getTotalTransferTransactionOfUser(userId);
+    const totalPayinTransactions = await this.payinService.getTotalTransactionOfUser(userId);
+    const totalPayoutTransactions = totalTransactions - totalPayinTransactions;
+    return {
+      totalPayoutTransactions,
+      totalPayinTransactions,
+      totalTransactions,
+    };
+  }
+
+  async getTotalTransferTransactionOfUser(userId: string): Promise<number> {
+    return await this.transactionModel.countDocuments(
+      {
+        transactionType: 'transfer',
+        userId: userId
+      },
+    );
+  }
+
+  async getTotalWithdrawalTransactionOfUser(userId: string): Promise<number> {
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new NotFoundException('Invalid event ID');
+    }
+    return await this.transactionModel.countDocuments({
+      transactionType: 'withdrawal',
+      userId: userId
+    });
+  }
+
+  async getTotalTransactionOfUser(userId: string): Promise<number> {
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new NotFoundException('Invalid event ID');
+    }
+    return await this.transactionModel.countDocuments({
+      userId: userId
+    });
   }
 }

@@ -33,21 +33,19 @@ import { Plans, PlansSchema } from 'src/plans/plans.schema';
 import { Options, OptionsSchema } from 'src/plans/options/options.shema';
 import { WhatsappModule } from 'src/wa/whatsapp.module';
 
+
 @Module({
   imports: [
     HttpModule,
     WhatsappModule,
     MongooseModule.forFeature([
-      { name: 'Transaction', schema: TransactionSchema },
-    ]),
-    MongooseModule.forFeature([
+      { name: Transaction.name, schema: TransactionSchema },
       { name: City.name, schema: CitySchema },
       { name: Payin.name, schema: PayinSchema },
       { name: Payout.name, schema: PayoutSchema },
       { name: Country.name, schema: CountrySchema },
       { name: Email.name, schema: EmailSchema },
       { name: Smtp.name, schema: SmtpSchema },
-      { name: Transaction.name, schema: TransactionSchema },
       { name: Balance.name, schema: BalanceSchema },
       { name: User.name, schema: UserSchema },
       { name: Subscription.name, schema: SubscriptionSchema },

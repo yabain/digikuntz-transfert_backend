@@ -532,4 +532,8 @@ export class PayinService {
   async getTotalTransaction(): Promise<number> {
     return await this.payinModel.countDocuments();
   }
+
+  async getTotalTransactionOfUser(userId: string): Promise<number> {
+    return await this.payinModel.countDocuments({ userId });
+  }
 }

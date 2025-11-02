@@ -262,4 +262,8 @@ export class PayoutService {
   async getTotalTransaction(): Promise<number> {
     return await this.payoutModel.countDocuments();
   }
+
+  async getTotalTransactionOfUser(userId: string): Promise<number> {
+    return await this.payoutModel.countDocuments({ userId });
+  }
 }
