@@ -19,7 +19,7 @@ export class Subscription extends Document {
   userId: User;
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
-  planAuthor: User;
+  planAuthor: User; // planAuthor Id
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Plans' })
   planId: Plans;

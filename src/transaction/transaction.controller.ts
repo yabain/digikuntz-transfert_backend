@@ -82,24 +82,28 @@ export class TransactionController {
 
   @Get('all-payin')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get all transactions (admin only)' })
-  @ApiQuery({
-    name: 'search',
-    required: false,
-    type: String,
-    description: 'Search filter',
-  })
-  @ApiResponse({ status: 200, description: 'List of transactions returned.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async getAllPayinTransactoins(
+  async getAllPayinTransactions(
     @Query() query: ExpressQuery,
     @Req() req,
   ): Promise<Transaction[]> {
     if (!req.user.isAdmin) {
       throw new NotFoundException('Unautorised');
     }
-    return this.transactionService.getAllPayinTransactoins(query);
+    return this.transactionService.getAllPayinTransactions(query);
+  }
+
+  @Get('user-transactions/:id')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async getAllTransactoinsOfUser(
+    @Param('id') userId: string,
+    @Query() query: ExpressQuery,
+    @Req() req,
+  ): Promise<Transaction[]> {
+    return this.transactionService.getAllTransactionsOfUser(userId, query);
   }
 
   @Get('get-payout-list/:status')

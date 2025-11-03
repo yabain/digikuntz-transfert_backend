@@ -88,10 +88,43 @@ export class TransactionService {
     return res;
   }
 
-
-
-  async getAllPayinTransactoins(query: Query): Promise<any[]> {
+  async getAllPayinTransactions(query: Query): Promise<any[]> {
     return await this.payinService.getAllPayinTransactoins(query);
+  }
+
+  async getAllTransactionsOfUser(userId: string, query: any): Promise<any> {
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new NotFoundException('Invalid transaction ID');
+    }
+    const page = Number(query.page) > 0 ? Number(query.page) : 1;
+    const limit = 10;
+    const skip = (page - 1) * limit;
+  
+    const filter = {
+      $or: [
+        { userId: userId },
+        { senderId: userId },
+      ],
+    };
+  
+    const transactions = await this.transactionModel
+      .find(filter)
+      .sort({ createdAt: -1 }) // tri décroissant par date
+      .skip(skip)
+      .limit(limit)
+      .lean();
+  
+    const total = await this.transactionModel.countDocuments(filter);
+  
+    return {
+      data: transactions,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(total / limit),
+        totalItems: total,
+        hasNextPage: page * limit < total,
+      },
+    };
   }
 
   async getPayoutListByStatus(status: string, query?: any): Promise<any> {
