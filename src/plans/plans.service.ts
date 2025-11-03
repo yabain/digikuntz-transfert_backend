@@ -228,7 +228,7 @@ export class PlansService {
 
       const subscription = await this.subscriptionService.createSubscription({
         userId: userWithCountryDetails._id,
-        planAuthor: plan.author,
+        receiverId: plan.author,
         planId: plan._id,
         quantity: 0,
         cycle: plan.cycle,

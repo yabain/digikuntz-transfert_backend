@@ -20,7 +20,7 @@ export class Item extends Document {
   userId: User;
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
-  planAuthor: User;
+  receiverId: User;
 
   @Prop()
   dateStart: string;

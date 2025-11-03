@@ -97,12 +97,12 @@ export class TransactionService {
       throw new NotFoundException('Invalid transaction ID');
     }
     const page = Number(query.page) > 0 ? Number(query.page) : 1;
-    const limit = 10;
+    const limit = 20;
     const skip = (page - 1) * limit;
   
     const filter = {
       $or: [
-        { userId: userId },
+        { receiverId: userId },
         { senderId: userId },
       ],
     };

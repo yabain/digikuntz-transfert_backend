@@ -160,7 +160,7 @@ export class Transaction {
   planId: string; // Deduced from the response code
 
   @Prop()
-  planAuthor: string; // Deduced from the response code
+  receiverId: string; // Deduced from the response code
 
   @Prop()
   cycle: string; // Deduced from the response code      dayly | weekly |monthly | yearly

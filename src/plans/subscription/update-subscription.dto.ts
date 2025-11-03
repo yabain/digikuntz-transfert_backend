@@ -19,7 +19,7 @@ export class UpdateSubscriptionDto {
   userId: User;
 
   @IsOptional()
-  planAuthor: User;
+  receiverId: User; // Plan author Id
 
   @IsOptional()
   planId: Plans;

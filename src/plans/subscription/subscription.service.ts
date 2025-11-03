@@ -125,7 +125,7 @@ export class SubscriptionService {
     const subscription = await this.subscriptionModel
       .findById(res._id)
       .populate('userId')
-      .populate('planAuthor')
+      .populate('receiverId')
       .populate('planId');
       if (!subscription) {
         throw new NotFoundException('Subscription not found');
@@ -133,7 +133,7 @@ export class SubscriptionService {
 
     this.whatsappService.sendNewSubscriberMessageForPlanAuthor(
       subscription.planId,
-      subscription.planAuthor,
+      subscription.receiverId,
     );
 
     return res;
@@ -189,7 +189,7 @@ export class SubscriptionService {
     const subscription = await this.subscriptionModel
       .findById(subscriptionId)
       .populate('userId')
-      .populate('planAuthor')
+      .populate('receiverId')
       .populate('planId');
     if (!subscription) {
       throw new NotFoundException('User not found');
@@ -217,7 +217,7 @@ export class SubscriptionService {
     const subscription = await this.subscriptionModel
       .findOne({ userId: userId, planId: planId })
       .populate('userId')
-      .populate('planAuthor')
+      .populate('receiverId')
       .populate('planId');
     if (!subscription) {
       throw new NotFoundException('User not found');
@@ -412,7 +412,7 @@ export class SubscriptionService {
       throw new NotFoundException('Invalid subscription ID');
     }
     if (
-      userData._id.toString() !== subscriptionData.planAuthor.toString() &&
+      userData._id.toString() !== subscriptionData.receiverId.toString() &&
       !userData.isAdmin
     ) {
       throw new NotFoundException('Unauthorized');
@@ -456,7 +456,7 @@ export class SubscriptionService {
       const subscriptionList = await this.subscriptionModel
         .find({ userId })
         .populate('planId', 'title price cycle')
-        .populate('planAuthor', 'name email');
+        .populate('receiverId', 'name email');
 
       return subscriptionList;
     } catch (error) {
@@ -473,7 +473,7 @@ export class SubscriptionService {
 
     try {
       const subscriberList: any = await this.subscriptionModel.find({
-        planAuthor: userId,
+        receiverId: userId,
       });
       if (!subscriberList) {
         throw new NotFoundException('No subscriber found');
@@ -573,7 +573,7 @@ export class SubscriptionService {
   parseTransactionToSubscription(transaction) {
     return {
       userId: transaction.senderId, // Current user Id
-      planAuthor: transaction.bankAccountNumber, // Id of Author of plan
+      receiverId: transaction.bankAccountNumber, // Id of Author of plan
       planId: transaction.receiverCountry,
       quantity: Number(transaction.receiverCountryCode), // Number of cycle to subscribe
       cycle: transaction.receiverAddress, // Cycle type : dayly | monthly | weeklee | yearly

@@ -20,7 +20,7 @@ export class CreateSubscriptionDto {
   userId: User;
 
   @IsNotEmpty()
-  planAuthor: User;
+  receiverId: User; // plan author Id
 
   @IsNotEmpty()
   planId: Plans;

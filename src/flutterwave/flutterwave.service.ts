@@ -449,7 +449,7 @@ export class FlutterwaveService {
       }
 
       const creditBalance = await this.balanceService.creditBalance(
-        transaction.planAuthor,
+        transaction.receiverId,
         Number(transaction.estimation),
         transaction.senderCurrency,
       );
@@ -480,7 +480,7 @@ export class FlutterwaveService {
   async createSubscription(transaction) {
     await this.subscriptionService.createSubscription({
       userId: transaction.senderId,
-      planAuthor: transaction.planAuthor,
+      receiverId: transaction.receiverId,
       planId: transaction.planId,
       quantity: Number(transaction.quantity),
       cycle: transaction.cycle,
