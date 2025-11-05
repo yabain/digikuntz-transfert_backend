@@ -36,7 +36,7 @@ import { Service } from './service.schema';
 import { CreateServiceDto } from './create-service.dto';
 import { UpdateServiceDto } from './update-service.dto';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
-import { multerConfigForUser } from 'src/multer.config';
+import { multerConfigForService } from 'src/multer.config';
 
 @Controller('service')
 export class ServiceController {
@@ -165,11 +165,10 @@ export class ServiceController {
     },
   })
   @ApiResponse({ status: 200, description: 'User profile picture updated.' })
-  @UseInterceptors(FilesInterceptor('pictureFile', 1, multerConfigForUser))
+  @UseInterceptors(FilesInterceptor('pictureFile', 1, multerConfigForService))
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async updatePicture(
-    @Req() req,
     @Param('id') serviceId: string,
     @UploadedFiles() picture: Array<Express.Multer.File>,
   ): Promise<any> {

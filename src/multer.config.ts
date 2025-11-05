@@ -62,3 +62,19 @@ export const multerConfigForEvent = {
     fileSize: 2 * 1024 * 1024, // 2 MB
   },
 };
+
+// Configuration for Multer to handle service file uploads
+export const multerConfigForService = {
+  storage: diskStorage({
+    destination: getUploadPath(),
+    filename: (req, file, callback) => {
+      const serviceId = req.params.id;
+      const fileExt = path.extname(file.originalname);
+      const fileName = `serviceFile_${serviceId}${fileExt}`;
+      callback(null, fileName);
+    },
+  }),
+  limits: {
+    fileSize: 2 * 1024 * 1024, // 2 MB
+  },
+};
