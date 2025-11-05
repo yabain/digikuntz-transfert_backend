@@ -33,6 +33,8 @@ import { DateService } from 'src/email/date.service';
 import { SmtpService } from 'src/email/smtp/smtp.service';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
 import { WhatsappModule } from 'src/wa/whatsapp.module';
+import { ServicePaymentService } from 'src/service/service-payment/service-payment.service';
+import { ServicePayment, ServicePaymentSchema } from 'src/service/service-payment/service-payment.schema';
 
 @Module({
   imports: [
@@ -51,6 +53,7 @@ import { WhatsappModule } from 'src/wa/whatsapp.module';
       { name: Options.name, schema: OptionsSchema },
       { name: Email.name, schema: EmailSchema },
       { name: Smtp.name, schema: SmtpSchema },
+      { name: ServicePayment.name, schema: ServicePaymentSchema },
     ]),
   ],
   controllers: [FlutterwaveController],
@@ -67,6 +70,7 @@ import { WhatsappModule } from 'src/wa/whatsapp.module';
     EmailService,
     DateService,
     SmtpService,
+    ServicePaymentService,
   ],
   exports: [FlutterwaveService],
 })

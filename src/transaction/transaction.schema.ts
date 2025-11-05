@@ -6,6 +6,7 @@ export enum TransactionType {
   DEPOSITE = 'deposit',
   WITHDRAWAL = 'withdrawal',
   PAYMENT = 'payment',
+  SERVICE = 'service',
   TRANSFER = 'transfer',
   SUBSCRIPTION = 'subscription',
   FUNDRAISING = 'fundraising',

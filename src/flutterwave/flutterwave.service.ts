@@ -33,6 +33,7 @@ import {
 } from 'src/transaction/transaction.schema';
 import { BalanceService } from 'src/balance/balance.service';
 import { SubscriptionService } from 'src/plans/subscription/subscription.service';
+import { ServicePaymentService } from 'src/service/service-payment/service-payment.service';
 
 @Injectable()
 export class FlutterwaveService {
@@ -56,6 +57,7 @@ export class FlutterwaveService {
     private transactionService: TransactionService,
     private balanceService: BalanceService,
     private subscriptionService: SubscriptionService,
+    private servicePaymentService: ServicePaymentService
   ) {
     this.secretHash = this.config.get<string>('FLUTTERWAVE_SECRET_HASH');
     this.fwSecret = this.config.get<string>('FLUTTERWAVE_SECRET_KEY');
@@ -310,6 +312,9 @@ export class FlutterwaveService {
         if (transaction.transactionType === this.transactionType.SUBSCRIPTION) {
           await this.handleSubscription(transaction);
         }
+        if (transaction.transactionType === this.transactionType.SERVICE) {
+          await this.handleService(transaction);
+        }
         if (transaction.transactionType === this.transactionType.WITHDRAWAL) {
           // await this.handleWithdrawal(transaction);
         }
@@ -464,6 +469,27 @@ export class FlutterwaveService {
     }
   }
 
+  async handleService(transaction) {
+    try {
+        await this.createServicePayment(transaction);
+
+      const creditBalance = await this.balanceService.creditBalance(
+        transaction.receiverId,
+        Number(transaction.estimation),
+        transaction.senderCurrency,
+      );
+      return creditBalance;
+
+      // Send notification
+    } catch (err) {
+      // console.log('(fw service: handleSubscription) Error: ', err);
+      return {
+        message: '(fw service: handleSubscription) Error: ' + err,
+        status: 'error',
+      };
+    }
+  }
+
   handleWithdrawal() {
     try {
       // Send notification to user
@@ -478,20 +504,13 @@ export class FlutterwaveService {
   }
 
   async createSubscription(transaction) {
-    await this.subscriptionService.createSubscription({
-      userId: transaction.senderId,
-      receiverId: transaction.receiverId,
-      planId: transaction.planId,
-      quantity: Number(transaction.quantity),
-      cycle: transaction.cycle,
-      startDate: transaction.createdAt,
-      endDate: this.subscriptionService.calculateEndDate(
-        transaction.createdAt,
-        transaction.cycle,
-        Number(transaction.quantity),
-      ),
-      status: true,
-    });
+    const payload = this.subscriptionService.parseTransactionToSubscription(transaction)
+    await this.subscriptionService.createSubscription(payload);
+  }
+
+  async createServicePayment(transaction) {
+    const payload = this.servicePaymentService.parseTransactionToServicePayment(transaction)
+    await this.servicePaymentService.createServicePayment(payload);
   }
 
   async openPayin(txRef: string, userId: string) {

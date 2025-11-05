@@ -29,6 +29,7 @@ import { FlutterwaveModule } from './flutterwave/flutterwave.module';
 import { SmtpModule } from './email/smtp/smtp.module';
 import { WhatsappModule } from './wa/whatsapp.module';
 import { UserSettingsModule } from './userSettings/userSettings.module';
+import { ServiceModule } from './service/service.module';
 
 @Module({
   imports: [
@@ -89,6 +90,7 @@ import { UserSettingsModule } from './userSettings/userSettings.module';
     SmtpModule,
     WhatsappModule,
     UserSettingsModule,
+    ServiceModule,
   ],
   controllers: [AppController],
   providers: [AppService],

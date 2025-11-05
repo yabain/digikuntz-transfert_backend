@@ -1,17 +1,15 @@
 import { Module } from '@nestjs/common';
-import { PlansService } from './plans.service';
-import { PlansController } from './plans.controller';
+import { ServiceService } from './service.service';
+import { ServiceController } from './service.controller';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from 'src/auth/auth.module';
 import { UserSchema, User } from 'src/user/user.schema';
-import { OptionsSchema, Options } from './options/options.shema';
-import { ItemSchema, Item } from './item/item.shema';
-import { PlansSchema, Plans } from './plans.schema';
+import { OptionsServiceSchema, OptionsService } from './options-service/options-service.shema';
+import { ServiceSchema, Service } from './service.schema';
 import { UserService } from 'src/user/user.service';
 import { DateService } from 'src/email/date.service';
 import { EmailService } from 'src/email/email.service';
-import { ItemService } from './item/item.service';
-import { OptionsService } from './options/options.service';
+import { OptionsServiceService } from './options-service/options-service.service';
 import { EmailSchema, Email } from 'src/email/email.schema';
 import { SmtpService } from 'src/email/smtp/smtp.service';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
@@ -23,16 +21,11 @@ import { PayinService } from 'src/payin/payin.service';
 import { PayoutService } from 'src/payout/payout.service';
 import { TransactionService } from 'src/transaction/transaction.service';
 import { BalanceService } from 'src/balance/balance.service';
-import { SubscriptionService } from './subscription/subscription.service';
 import { Balance, BalanceSchema } from 'src/balance/balance.schema';
 import {
   Transaction,
   TransactionSchema,
 } from 'src/transaction/transaction.schema';
-import {
-  Subscription,
-  SubscriptionSchema,
-} from './subscription/subscription.schema';
 import { WhatsappModule } from 'src/wa/whatsapp.module';
 import { AuthService } from 'src/auth/auth.service';
 import {
@@ -42,8 +35,15 @@ import {
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { ServicePaymentService } from 'src/service/service-payment/service-payment.service';
-import { ServicePayment, ServicePaymentSchema } from 'src/service/service-payment/service-payment.schema';
+import { ServicePaymentService } from './service-payment/service-payment.service';
+import { ServicePayment, ServicePaymentSchema } from './service-payment/service-payment.schema';
+import { SubscriptionService } from 'src/plans/subscription/subscription.service';
+import { Subscription, SubscriptionSchema } from 'src/plans/subscription/subscription.schema';
+import { ItemService } from 'src/plans/item/item.service';
+import { Item, ItemSchema } from 'src/plans/item/item.shema';
+import { OptionsService as PlansOptionsService } from 'src/plans/options/options.service';
+import { Options, OptionsSchema } from 'src/plans/options/options.shema';
+import { Plans, PlansSchema } from 'src/plans/plans.schema';
 
 @Module({
   imports: [
@@ -62,26 +62,27 @@ import { ServicePayment, ServicePaymentSchema } from 'src/service/service-paymen
     }),
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
-      { name: Options.name, schema: OptionsSchema },
-      { name: Item.name, schema: ItemSchema },
-      { name: Plans.name, schema: PlansSchema },
+      { name: OptionsService.name, schema: OptionsServiceSchema },
+      { name: Service.name, schema: ServiceSchema },
       { name: Email.name, schema: EmailSchema },
       { name: Smtp.name, schema: SmtpSchema },
       { name: Payout.name, schema: PayoutSchema },
       { name: Payin.name, schema: PayinSchema },
       { name: Transaction.name, schema: TransactionSchema },
       { name: Balance.name, schema: BalanceSchema },
-      { name: Subscription.name, schema: SubscriptionSchema },
       { name: RevokedToken.name, schema: RevokedTokenSchema },
       { name: ServicePayment.name, schema: ServicePaymentSchema },
+      { name: Subscription.name, schema: SubscriptionSchema },
+      { name: Item.name, schema: ItemSchema },
+      { name: Options.name, schema: OptionsSchema },
+      { name: Plans.name, schema: PlansSchema },
     ]),
     HttpModule,
   ],
   providers: [
-    PlansService,
+    ServiceService,
     UserService,
-    OptionsService,
-    ItemService,
+    OptionsServiceService,
     EmailService,
     DateService,
     SmtpService,
@@ -90,10 +91,12 @@ import { ServicePayment, ServicePaymentSchema } from 'src/service/service-paymen
     PayoutService,
     TransactionService,
     BalanceService,
-    SubscriptionService,
     AuthService,
     ServicePaymentService,
+    SubscriptionService,
+    ItemService,
+    PlansOptionsService,
   ],
-  controllers: [PlansController],
+  controllers: [ServiceController],
 })
-export class PlansModule {}
+export class ServiceModule {}

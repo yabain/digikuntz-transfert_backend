@@ -34,6 +34,8 @@ import { DateService } from 'src/email/date.service';
 import { SmtpService } from 'src/email/smtp/smtp.service';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
 import { WhatsappModule } from 'src/wa/whatsapp.module';
+import { ServicePaymentService } from 'src/service/service-payment/service-payment.service';
+import { ServicePayment, ServicePaymentSchema } from 'src/service/service-payment/service-payment.schema';
 
 @Module({
   imports: [
@@ -52,6 +54,7 @@ import { WhatsappModule } from 'src/wa/whatsapp.module';
       { name: Email.name, schema: EmailSchema },
       { name: Options.name, schema: OptionsSchema },
       { name: Smtp.name, schema: SmtpSchema },
+      { name: ServicePayment.name, schema: ServicePaymentSchema },
     ]),
   ],
   providers: [
@@ -68,6 +71,7 @@ import { WhatsappModule } from 'src/wa/whatsapp.module';
     EmailService,
     DateService,
     SmtpService,
+    ServicePaymentService,
   ],
   controllers: [PayinController],
   exports: [PayinService],

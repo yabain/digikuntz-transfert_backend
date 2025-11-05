@@ -32,7 +32,8 @@ import { Item, ItemSchema } from 'src/plans/item/item.shema';
 import { Plans, PlansSchema } from 'src/plans/plans.schema';
 import { Options, OptionsSchema } from 'src/plans/options/options.shema';
 import { WhatsappModule } from 'src/wa/whatsapp.module';
-
+import { ServicePaymentService } from 'src/service/service-payment/service-payment.service';
+import { ServicePayment, ServicePaymentSchema } from 'src/service/service-payment/service-payment.schema';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { WhatsappModule } from 'src/wa/whatsapp.module';
       { name: Balance.name, schema: BalanceSchema },
       { name: User.name, schema: UserSchema },
       { name: Subscription.name, schema: SubscriptionSchema },
+      { name: ServicePayment.name, schema: ServicePaymentSchema },
       { name: Item.name, schema: ItemSchema },
       { name: Plans.name, schema: PlansSchema },
       { name: Options.name, schema: OptionsSchema },
@@ -67,10 +69,11 @@ import { WhatsappModule } from 'src/wa/whatsapp.module';
     BalanceService,
     UserService,
     SubscriptionService,
+    ServicePaymentService,
     ItemService,
     OptionsService,
   ],
   controllers: [TransactionController],
   exports: [TransactionService],
 })
-export class TransactionModule {}
+export class TransactionModule { }

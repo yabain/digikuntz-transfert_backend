@@ -44,6 +44,7 @@ export class SubscriptionService {
       if (subscriptionData) await this.createSubscription(subscriptionData);
     }
   }
+  
   async getSubscriptionsStatistic(): Promise<{
     subscribersNumber: number;
     pourcentage: number;
@@ -572,16 +573,16 @@ export class SubscriptionService {
 
   parseTransactionToSubscription(transaction) {
     return {
-      userId: transaction.senderId, // Current user Id
-      receiverId: transaction.bankAccountNumber, // Id of Author of plan
-      planId: transaction.receiverCountry,
-      quantity: Number(transaction.receiverCountryCode), // Number of cycle to subscribe
-      cycle: transaction.receiverAddress, // Cycle type : dayly | monthly | weeklee | yearly
+      userId: transaction.senderId,
+      receiverId: transaction.receiverId,
+      planId: transaction.planId,
+      quantity: Number(transaction.quantity),
+      cycle: transaction.cycle,
       startDate: transaction.createdAt,
       endDate: this.calculateEndDate(
         transaction.createdAt,
-        transaction.receiverAddress,
-        Number(transaction.receiverCountryCode),
+        transaction.cycle,
+        Number(transaction.quantity),
       ),
       status: true,
     };
