@@ -471,7 +471,7 @@ export class FlutterwaveService {
 
   async handleService(transaction) {
     try {
-        await this.createServicePayment(transaction);
+      await this.createServicePayment(transaction);
 
       const creditBalance = await this.balanceService.creditBalance(
         transaction.receiverId,
@@ -1067,4 +1067,164 @@ export class FlutterwaveService {
       throw err;
     }
   }
+
+
+
+  // Virtual cards -----------------------
+
+  // Create a virtual card
+  // payload example:
+  // {
+  //   "currency": "USD",
+  //   "amount": 50,
+  //   "customer": {
+  //     "name": "John Doe",
+  //     "email": "john@example.com"
+  //   },
+  //   "billing": {
+  //     "address": "1 Example St"
+  //   },
+  //   "meta": { / optional meta */ },
+  //   "type": "virtual" // some implementations use card_type/type
+  // }
+  async createVirtualCard(
+    countryWallet: string, // 'CM' | 'NG' | ...
+    cardPayload: Record<string, any>,
+  ) {
+    // choisir la clé selon le wallet (comme pour les autres appels)
+    let headers: any;
+    if (countryWallet === 'CM') {
+      headers = this.authHeader();
+    } else if (countryWallet === 'NG') {
+      headers = this.authHeaderNGN();
+    } else {
+      headers = this.authHeader(); // fallback
+    }
+
+    try {
+      const url = `${this.fwBaseUrlV3}/virtual-cards`;
+      const res = await firstValueFrom(
+        this.http.post(url, cardPayload, { headers }),
+      );
+      // res.data contient le JSON renvoyé par FW
+      console.log('FW res: ', res);
+      console.log('FW createVirtualCard response: ', res.data);
+      return res.data;
+    } catch (err: any) {
+      if (err.response) {
+        console.error('FW createVirtualCard error: ', err.response.data);
+        throw new HttpException(
+          err.response.data,
+          err.response?.status || HttpStatus.BAD_GATEWAY,
+        );
+      }
+      console.error('Unexpected createVirtualCard error: ', err?.message ?? err);
+      throw err;
+    }
+  }
+
+  // get data of card
+  async getVirtualCard(countryWallet: string, cardId: string) {
+    if (!cardId) throw new NotFoundException('cardId required');
+
+    let headers: any;
+    if (countryWallet === 'CM') {
+      headers = this.authHeader();
+    } else if (countryWallet === 'NG') {
+      headers = this.authHeaderNGN();
+    } else {
+      headers = this.authHeader();
+    }
+
+    try {
+      const url = `${this.fwBaseUrlV3}/virtual-cards/${encodeURIComponent(cardId)}`;
+      const res = await firstValueFrom(this.http.get(url, { headers }));
+      return res.data;
+    } catch (err: any) {
+      if (err.response) {
+        console.error('FW getVirtualCard error: ', err.response.data);
+        throw new HttpException(
+          err.response.data,
+          err.response?.status || HttpStatus.BAD_GATEWAY,
+        );
+      }
+      throw err;
+    }
+  }
+
+  // get the list of cards
+  async getVirtualCards(countryWallet: string, params?: { page?: number; per_page?: number }) {
+    let headers: any;
+    if (countryWallet === 'CM') {
+      headers = this.authHeader();
+    } else if (countryWallet === 'NG') {
+      headers = this.authHeaderNGN();
+    } else {
+      headers = this.authHeader();
+    }
+
+    try {
+      const url = `${this.fwBaseUrlV3}/virtual-cards`;
+      const res = await firstValueFrom(this.http.get(url, { headers, params }));
+      return res.data;
+    } catch (err: any) {
+      if (err.response) {
+        throw new HttpException(
+          err.response.data,
+          err.response?.status || HttpStatus.BAD_GATEWAY,
+        );
+      }
+      throw err;
+    }
+  }
+
+  /**
+ * Fund a virtual card from the main wallet
+ * @param countryWallet 'CM' | 'NG' | ...
+ * @param cardId ID of the virtual card to fund
+ * @param amount Amount to fund
+ * @param currency Currency code, e.g. 'USD'
+ */
+async fundVirtualCard(
+  countryWallet: string,
+  cardId: string,
+  amount: number,
+  currency: string = 'USD',
+) {
+  if (!cardId) throw new NotFoundException('cardId required');
+  if (!amount || amount <= 0) throw new HttpException('Amount must be greater than 0', HttpStatus.BAD_REQUEST);
+
+  // Choisir la clé selon le wallet
+  let headers: any;
+  if (countryWallet === 'CM') {
+    headers = this.authHeader();
+  } else if (countryWallet === 'NG') {
+    headers = this.authHeaderNGN();
+  } else {
+    headers = this.authHeader();
+  }
+
+  try {
+    const url = `${this.fwBaseUrlV3}/virtual-cards/${encodeURIComponent(cardId)}/fund`;
+    const payload = {
+      amount,
+      currency,
+    };
+
+    const res = await firstValueFrom(this.http.post(url, payload, { headers }));
+    // res.data contient le JSON renvoyé par Flutterwave
+    return res.data;
+  } catch (err: any) {
+    if (err.response) {
+      console.error('FW fundVirtualCard error: ', err.response.data);
+      throw new HttpException(
+        err.response.data,
+        err.response?.status || HttpStatus.BAD_GATEWAY,
+      );
+    }
+    console.error('Unexpected fundVirtualCard error: ', err?.message ?? err);
+    throw err;
+  }
+}
+
 }

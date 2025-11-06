@@ -42,6 +42,7 @@ export class UserService {
     const users = await this.userModel.find({})
     .populate('countryId')
     .populate('cityId')
+    .sort({ createdAt: -1 });
 
     // Sanitize user data
     return users.map(this.sanitizeUser);
@@ -253,6 +254,7 @@ export class UserService {
     // Find users matching the keyword with pagination
     const users = await this.userModel
       .find({ ...keyword })
+      .sort({ createdAt: -1 })
       .limit(resPerPage)
       .skip(skip);
 
@@ -294,6 +296,7 @@ export class UserService {
       .find({ ...keyword })
       .populate('countryId')
       .populate('cityId')
+      .sort({ createdAt: -1 })
       .limit(resPerPage)
       .skip(skip);
 

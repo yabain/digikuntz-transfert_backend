@@ -127,4 +127,25 @@ export class FlutterwaveController {
   openPayin(@Param('id') txRef: string, @Req() req) {
     return this.fw.openPayin(txRef, req.user._id);
   }
+
+  @Post('create-virtual-card/:countryWallet')
+  // @UseGuards(AuthGuard('jwt'))
+  // @UsePipes(ValidationPipe)
+  createVirtualCard(@Body() cardPayload: Record<string, any>, @Req() req, @Param('countryWallet') countryWallet) {
+    // if (!req.user.isAdmin) {
+    //   throw new NotFoundException('Unautorised');
+    // }
+    return this.fw.createVirtualCard(countryWallet, cardPayload);
+  }
+
+
+  @Get('get-cards-list/:countryWallet')
+  // @UseGuards(AuthGuard('jwt'))
+  // @UsePipes(ValidationPipe)
+  getVirtualCardsList(@Req() req, @Param('countryWallet') countryWallet) {
+    // if (!req.user.isAdmin) {
+    //   throw new NotFoundException('Unautorised');
+    // }
+    return this.fw.getVirtualCards(countryWallet);
+  }
 }
