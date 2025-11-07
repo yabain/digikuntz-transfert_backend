@@ -1,5 +1,6 @@
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
+import { Transaction } from 'src/transaction/transaction.schema';
 import { User } from '../../user/user.schema';
 import { Service } from '../service.schema';
 import {
@@ -16,6 +17,9 @@ export class CreateServicePaymentDto {
 
   @IsNotEmpty()
   serviceId: Service;
+
+  @IsNotEmpty()
+  transactionId: Transaction
 
   @IsNotEmpty()
   quantity: number;

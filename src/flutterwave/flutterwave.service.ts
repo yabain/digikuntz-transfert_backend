@@ -505,7 +505,7 @@ export class FlutterwaveService {
 
   async createSubscription(transaction) {
     const payload = this.subscriptionService.parseTransactionToSubscription(transaction)
-    await this.subscriptionService.createSubscription(payload);
+    await this.subscriptionService.createSubscription(payload, transaction._id);
   }
 
   async createServicePayment(transaction) {

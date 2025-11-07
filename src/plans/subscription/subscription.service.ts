@@ -137,16 +137,17 @@ export class SubscriptionService {
 
       if(startDate != endDate){
         const item = {
+          plansId: subscription.planId,
           userId: subscription.userId,
           receiverId: subscription.receiverId, // plan author Id
-          planId: subscription.planId,
-          subscriptionId: subscription._id,
-          transactionId: transactionId || '',
+          subscriptionId: subscription._id as any,
+          transactionId: transactionId as any || '',
           quantity: subscription.quantity,
-          startDate: startDate,
-          endDate: endDate,
+          dateStart: startDate.toISOString(),
+          dateEnd: endDate.toISOString(),
           status: true,
         }
+        await this.itemService.createItem(item, subscription.userId)
       }
 
     this.whatsappService.sendNewSubscriberMessageForPlanAuthor(

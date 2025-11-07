@@ -1,5 +1,6 @@
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
+import { Transaction } from 'src/transaction/transaction.schema';
 import { User } from '../../user/user.schema';
 import { Service } from '../service.schema';
 import {
@@ -18,6 +19,10 @@ export class UpdateServicePaymentDto {
   @IsEmpty({ message: 'You cannot pass ServiceId' })
   @IsOptional()
   serviceId: Service;
+
+  @IsEmpty({ message: 'You cannot pass TransactionId' })
+  @IsOptional()
+  transactionId: Transaction;
 
   @IsOptional()
   quantity: number;

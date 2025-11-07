@@ -28,12 +28,25 @@ export class BalanceController {
 
   @Get()
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get balance of current users' })
-  @ApiResponse({ status: 200, description: 'Balance of users returned.' })
+  @ApiOperation({ summary: 'Get balance of current user' })
+  @ApiResponse({ status: 200, description: 'Balance of user returned.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getBalance(@Req() req): Promise<any> {
     return this.balanceService.getBalanceByUserId(req.user._id);
+  }
+
+  @Get(':id')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get balance of a user' })
+  @ApiResponse({ status: 200, description: 'Balance of users returned.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async getUserBalance(@Param('id') userId: string, @Req() req): Promise<any> {
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unautorised');
+    }
+    return this.balanceService.getBalanceByUserId(userId);
   }
 
   @Get('user/:id')

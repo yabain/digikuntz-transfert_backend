@@ -1,5 +1,5 @@
 /* eslint-disable prettier/prettier */
-import { IsString, IsNotEmpty, IsEmpty, IsBoolean } from 'class-validator';
+import { IsString, IsNotEmpty, IsEmpty, IsBoolean, isNotEmpty } from 'class-validator';
 import { Subscription } from '../subscription/subscription.schema';
 import { User } from 'src/user/user.schema';
 import { Plans } from '../plans.schema';
@@ -23,9 +23,15 @@ export class CreateItemDto {
   transactionId: Transaction;
 
   @IsNotEmpty()
+  quantity: number;
+
+  @IsNotEmpty()
   dateStart: string;
 
   @IsNotEmpty()
   dateEnd: string;
+
+  @IsNotEmpty()
+  status: boolean;
 
 }

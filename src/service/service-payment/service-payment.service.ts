@@ -318,6 +318,7 @@ export class ServicePaymentService {
       userId: transaction.senderId,
       receiverId: transaction.receiverId,
       serviceId: transaction.serviceId,
+      transactionId: transaction._id,
       quantity: Number(transaction.quantity),
     };
   }
