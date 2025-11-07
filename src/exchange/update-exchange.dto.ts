@@ -1,6 +1,6 @@
 import { IsString, IsOptional } from 'class-validator';
 
-export class UpdateTransactionDto {
+export class UpdateExchangeDto {
   @IsOptional()
   readonly disclaimer: string;
 

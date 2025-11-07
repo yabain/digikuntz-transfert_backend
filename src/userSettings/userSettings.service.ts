@@ -52,7 +52,7 @@ export class UserSettingsService {
         layoutSidebarView: 1
       });
     }
-    console.log('res getUserSettingd: ', settings);
+    // console.log('res getUserSettingd: ', settings);
     return settings;
   }
 
@@ -67,7 +67,7 @@ export class UserSettingsService {
       userSettings,
       { new: true },
     );
-    console.log('res getUserSettingd: ', resp);
+    // console.log('res getUserSettingd: ', resp);
     return resp;
   }
 }

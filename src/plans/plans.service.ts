@@ -180,7 +180,7 @@ export class PlansService {
     return planData;
   }
 
-  async creatPlans(plan: CreatePlansDto, user: any): Promise<Plans> {
+  async createPlans(plan: CreatePlansDto, user: any): Promise<Plans> {
     const session = await this.plansModel.db.startSession();
     try {
       let created: Plans;

@@ -102,8 +102,9 @@ export class SubscriptionService {
 
   async createSubscription(
     subscriptionData: CreateSubscriptionDto,
+    transactionId?: string,
   ): Promise<Subscription> {
-    // Calculer la date de fin d'abonnement
+    // Calculate subscrioption date
     const startDate = subscriptionData.startDate || new Date();
     const endDate = this.calculateEndDate(
       startDate,
@@ -117,6 +118,8 @@ export class SubscriptionService {
       startDate,
       endDate,
     };
+    
+    // Constroct item payload
 
     const res = await this.subscriptionModel.create(subscriptionWithDates);
     // console.log('(subscription service: createSubscription) res: ', res);
@@ -130,6 +133,20 @@ export class SubscriptionService {
       .populate('planId');
       if (!subscription) {
         throw new NotFoundException('Subscription not found');
+      }
+
+      if(startDate != endDate){
+        const item = {
+          userId: subscription.userId,
+          receiverId: subscription.receiverId, // plan author Id
+          planId: subscription.planId,
+          subscriptionId: subscription._id,
+          transactionId: transactionId || '',
+          quantity: subscription.quantity,
+          startDate: startDate,
+          endDate: endDate,
+          status: true,
+        }
       }
 
     this.whatsappService.sendNewSubscriberMessageForPlanAuthor(

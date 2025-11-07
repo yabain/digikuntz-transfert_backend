@@ -1,6 +1,6 @@
 import { IsString, IsNotEmpty, IsNumber } from 'class-validator';
 
-export class CreateTransactionDto {
+export class CreateExchangeDto {
   @IsString()
   @IsNotEmpty()
   readonly disclaimer: string;

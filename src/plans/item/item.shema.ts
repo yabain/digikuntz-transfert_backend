@@ -5,12 +5,13 @@ import mongoose from 'mongoose';
 import { Plans } from '../plans.schema'
 import { User } from '../../user/user.schema'
 import { Subscription } from '../subscription/subscription.schema';
+import { Transaction } from 'src/transaction/transaction.schema';
 
 @Schema({
   timestamps: true,
 })
 export class Item extends Document {
-  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Subscription' })
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Plans' })
   plansId: Plans;
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Subscription' })
@@ -21,6 +22,9 @@ export class Item extends Document {
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
   receiverId: User;
+
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Transaction' })
+  transactionId: Transaction;
 
   @Prop()
   dateStart: string;

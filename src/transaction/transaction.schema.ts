@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
+import { Service } from 'src/service/service.schema';
 import { User } from 'src/user/user.schema';
 
 export enum TransactionType {
@@ -114,7 +115,7 @@ export class Transaction {
   @Prop()
   senderEmail: string;
 
-  @Prop()
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
   senderId: string;
 
   @Prop()
@@ -156,6 +157,7 @@ export class Transaction {
   @Prop()
   message: string; // Deduced from the response code
 
+
   // If transaction is a subscription
   @Prop()
   planId: string; // Deduced from the response code
@@ -166,8 +168,15 @@ export class Transaction {
   @Prop()
   cycle: string; // Deduced from the response code      dayly | weekly |monthly | yearly
 
+
+  ///---------------- For service and subscription
   @Prop()
   quantity: number; // Deduced from the response code
+  ///------------------
+
+  // If transaction is for service
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
+  serviceId: Service;
 }
 
 export const TransactionSchema = SchemaFactory.createForClass(Transaction);

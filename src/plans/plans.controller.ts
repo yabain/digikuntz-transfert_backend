@@ -138,7 +138,7 @@ export class PlansController {
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async createPlans(@Body() plans: any, @Req() req): Promise<any> {
-    return this.plansService.creatPlans(plans, req.user);
+    return this.plansService.createPlans(plans, req.user);
   }
 
   @Post('add-subscriber')

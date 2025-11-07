@@ -14,6 +14,7 @@ import {
   TStatus,
   TransactionType,
 } from './transaction.schema';
+import { Service } from 'src/service/service.schema';
 
 export class CreateTransactionDto {
   @IsString()
@@ -46,7 +47,7 @@ export class CreateTransactionDto {
   @IsNotEmpty()
   taxes: number;
 
-  @IsNotEmpty()
+  @IsOptional()
   receiverCountryCode: string;
 
   @IsNumber()
@@ -55,6 +56,9 @@ export class CreateTransactionDto {
 
   @IsOptional()
   userId: User;
+
+  @IsOptional()
+  serviceId: Service;
 
   @IsEmail()
   @IsNotEmpty()
@@ -65,7 +69,7 @@ export class CreateTransactionDto {
   userName: string;
 
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   userPhone: string;
 
   @IsEnum(TransactionType, {
@@ -80,7 +84,7 @@ export class CreateTransactionDto {
   @IsNotEmpty()
   moneyCode: Currency; // as 'moneyCode' in payment API req/res
 
-  @IsNotEmpty()
+  @IsOptional()
   titled: string; // as 'raison' in payment API req/res
 
   @IsEnum(PaymentMethode, {
