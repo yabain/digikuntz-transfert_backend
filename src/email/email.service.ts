@@ -74,11 +74,35 @@ export class EmailService {
     return await this.smtpService.getSmtpDataAndUpdate();
   }
 
-  async getOutputMails(query: Query): Promise<any[]> {
-    const resPerPage = 10;
-    const currentPage = Number(query.page) || 1;
-    const skip = resPerPage * (currentPage - 1);
+  // async getOutputMails(query: Query): Promise<any[]> {
+  //   const resPerPage = 10;
+  //   const currentPage = Number(query.page) || 1;
+  //   const skip = resPerPage * (currentPage - 1);
 
+  //   const keyword = query.keyword
+  //     ? {
+  //       $or: [
+  //         { to: { $regex: query.keyword, $options: 'i' } },
+  //         { subject: { $regex: query.keyword, $options: 'i' } },
+  //       ],
+  //     }
+  //     : {};
+
+
+  //   const list = await this.emailModel
+  //     .find({ ...keyword })
+  //     .sort({ createdAt: -1 })
+  //     .limit(resPerPage)
+  //     .skip(skip);
+
+  //   return list;
+  // }
+
+  async getOutputMails(query): Promise<any> {
+    const page = Number(query.page) > 0 ? Number(query.page) : 1;
+    const limit = 10;
+    const skip = (page - 1) * limit;
+    
     const keyword = query.keyword
       ? {
         $or: [
@@ -88,15 +112,32 @@ export class EmailService {
       }
       : {};
 
-    const list = await this.emailModel
+    const [total, success, emails] = await Promise.all([
+      this.emailModel.countDocuments(),
+      this.emailModel.countDocuments({ status: true }),
+      this.emailModel
       .find({ ...keyword })
       .sort({ createdAt: -1 })
-      .limit(resPerPage)
-      .skip(skip);
+      .limit(limit)
+      .skip(skip)
+      .lean()
+    ]);
 
-    return list;
+    return {
+      data: emails,
+      pagination: {
+        currentPage: page,
+        limit,
+        totalItem: total,
+        totalPages: Math.ceil(total / limit),
+        success: success,
+        error: total - success,
+        hasNextPage: page * limit < total,
+        emails: emails.length
+      }
+    };
   }
-
+  
   async sendEmail(to: string, subject: string, message: string): Promise<any> {
     if (!this.isEmailValide(to)) return false;
     const resp: any = await this.proceedToSendEmail(to, subject, message);
@@ -351,24 +392,5 @@ export class EmailService {
       status: data.status,
       body: data.body || '',
     });
-  }
-
-  async findAllEmail(query): Promise<any[]> {
-    const resPerPage = 10;
-    const currentPage = Number(query.page) || 1;
-    const skip = resPerPage * (currentPage - 1);
-    const keyword = query.keyword
-      ? {
-        to: {
-          $regex: query.keyword,
-          $options: 'i',
-        },
-      }
-      : {};
-    const Subscribers = await this.emailModel
-      .find({ ...keyword })
-      .limit(resPerPage)
-      .skip(skip);
-    return Subscribers;
   }
 }

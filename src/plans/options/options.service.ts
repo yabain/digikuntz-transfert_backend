@@ -91,4 +91,20 @@ export class OptionsService {
     );
     return optionse;
   }
+
+  // Méthode optimisée pour récupérer les options de plusieurs plans
+  async getAllOptionsOfMultiplePlans(planIds: string[]): Promise<any[]> {
+    if (!planIds || planIds.length === 0) {
+      return [];
+    }
+    
+    const validIds = planIds.filter(id => mongoose.Types.ObjectId.isValid(id));
+    if (validIds.length === 0) {
+      return [];
+    }
+
+    return await this.optionsModel
+      .find({ plansId: { $in: validIds } })
+      .lean();
+  }
 }

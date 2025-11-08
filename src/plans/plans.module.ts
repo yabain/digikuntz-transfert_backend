@@ -44,11 +44,13 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { ServicePaymentService } from 'src/service/service-payment/service-payment.service';
 import { ServicePayment, ServicePaymentSchema } from 'src/service/service-payment/service-payment.schema';
+import { AppCacheModule } from '../cache/cache.module';
 
 @Module({
   imports: [
     AuthModule,
     WhatsappModule,
+    AppCacheModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       inject: [ConfigService],

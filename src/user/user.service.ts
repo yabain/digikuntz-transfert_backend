@@ -18,6 +18,7 @@ import { CreateUserDto } from './create-user.dto';
 import { UpdateUserDto } from './update-user.dto';
 import * as bcrypt from 'bcryptjs';
 import { ConfigService } from '@nestjs/config';
+import { CacheService } from '../cache/cache.service';
 
 @Injectable()
 export class UserService {
@@ -25,6 +26,7 @@ export class UserService {
     @InjectModel(User.name)
     private userModel: mongoose.Model<User>,
     private readonly configService: ConfigService,
+    private cacheService: CacheService,
   ) {}
 
   private sanitizeUser(user: any): any {
@@ -36,16 +38,49 @@ export class UserService {
     return obj;
   }
   
-  async getAllUsers(): Promise<any[]> {
+  async getAllUsers( query: any): Promise<any> {
+    const page = Number(query.page) > 0 ? Number(query.page) : 1;
+    const limit = 10;
+    const skip = (page - 1) * limit;
 
-    // Find users matching the keyword with pagination
-    const users = await this.userModel.find({})
-    .populate('countryId')
-    .populate('cityId')
-    .sort({ createdAt: -1 });
+    // Requête optimisée sans populate
+    // const users = await this.userModel.find({})
+    //   .select('firstName lastName name email pictureUrl isActive isAdmin accountType whatsapp verified createdAt')
+    //   .populate('countryId', 'name')
+    //   .populate('cityId', 'name')
+    //   .sort({ createdAt: -1 })
+    //   .skip(skip)
+    //   .limit(limit)
+    //   .lean();
 
-    // Sanitize user data
-    return users.map(this.sanitizeUser);
+    // Parallel execution
+    const [total, totalActive, adminers, users] = await Promise.all([
+      this.userModel.countDocuments(),
+      this.userModel.countDocuments({ isActive: true }),
+      this.userModel.countDocuments({ isAdmin: true }),
+      this.userModel.find({})
+      .select('firstName lastName name email pictureUrl isActive isAdmin accountType whatsapp verified createdAt')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate('countryId', 'name flagUrl')
+      .populate('cityId', 'name')
+      .lean()
+    ]);
+
+
+    return {
+      data: users,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(total / limit),
+        totalItems: total,
+        hasNextPage: page * limit < total,
+        totalActive,
+        totalInactive: total - totalActive,
+        adminers,
+      },
+    };
   }
 
   async searchToAllUsers(query: Query): Promise<any[]> {
@@ -53,13 +88,12 @@ export class UserService {
     const currentPage = Number(query.page) || 1;
     const skip = resPerPage * (currentPage - 1);
 
-    // Define the keyword search criteria
     const keyword = query.keyword
       ? {
           $or: [
-            { name: { $regex: query.keyword, $options: 'i' } },
-            { firstName: { $regex: query.keyword, $options: 'i' } },
-            { lastName: { $regex: query.keyword, $options: 'i' } },
+            { name: { $regex: query.keyword as string, $options: 'i' } },
+            { firstName: { $regex: query.keyword as string, $options: 'i' } },
+            { lastName: { $regex: query.keyword as string, $options: 'i' } },
           ],
         }
       : {};
@@ -67,11 +101,13 @@ export class UserService {
     // Find users matching the keyword with pagination
     const users = await this.userModel
       .find({ ...keyword })
+      .select('-password -resetPasswordToken -balance')
       .limit(resPerPage)
-      .skip(skip);
+      .skip(skip)
+      .sort({ createdAt: -1 })
+      .lean();
 
-    // Sanitize user data
-    return users.map(this.sanitizeUser);
+    return users;
   }
   /**
    * Create a new user.
@@ -119,28 +155,37 @@ export class UserService {
    * @throws NotFoundException if the user ID is invalid or the user is not found.
    */
   async getUserById(userId: string): Promise<any> {
-    console.log('getUserById', userId)
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new NotFoundException('Invalid user ID');
     }
 
-    // Find the user by ID
-    const user = await this.userModel
-      .findById(userId)
-      .populate('countryId')
-      .populate('cityId');
-    if (!user) {
-      console.error('(getUserById) User not found for ID:', userId)
-      throw new NotFoundException('User not found');
-    } else {
-      user.password = '';
-      user.resetPasswordToken = '';
-    }
+    try {
+      // Vérifier le cache
+      const cachedUser = await this.cacheService.getUserCache(userId);
+      if (cachedUser) {
+        return cachedUser;
+      }
 
-    // Enrich user data with follower and following counts
-    let userData: any = { ...user };
-    userData = userData._doc;
-    return this.sanitizeUser(userData);
+      const user = await this.userModel
+        .findById(userId)
+        .select('-password -resetPasswordToken -balance')
+        .populate('countryId', 'name')
+        .populate('cityId', 'name')
+        .lean();
+        
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+
+      // Mettre en cache avec logique conditionnelle
+      await this.cacheService.setUserCache(userId, user);
+      return user;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new NotFoundException('Error retrieving user');
+    }
   }
 
   /**
@@ -155,23 +200,31 @@ export class UserService {
       throw new NotFoundException('Invalid user');
     }
 
-    // Update the user in the database
-    const user = await this.userModel
-      .findByIdAndUpdate(userId, userData, {
-        new: true,
-        runValidators: true,
-      })
-      .populate('countryId')
-      .populate('cityId');
+    try {
+      const user = await this.userModel
+        .findByIdAndUpdate(userId, userData, {
+          new: true,
+          runValidators: true,
+        })
+        .select('-password -resetPasswordToken -balance')
+        .populate('countryId', 'name')
+        .populate('cityId', 'name')
+        .lean();
 
-    if (!user) {
-      throw new NotFoundException('User not found');
-    } else {
-      user.password = '';
-      user.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+
+      // Invalider le cache
+      await this.cacheService.invalidateUserCache(userId);
+      
+      return user;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new NotFoundException('Error updating user');
     }
-
-    return this.sanitizeUser(user);
   }
 
   /**
@@ -218,6 +271,9 @@ export class UserService {
       throw new NotFoundException('User not found');
     }
 
+    // Invalider le cache
+    await this.cacheService.invalidateUserCache(req.user._id);
+
     return this.sanitizeUser(updatedUser);
   }
 
@@ -240,13 +296,12 @@ export class UserService {
     const currentPage = Number(query.page) || 1;
     const skip = resPerPage * (currentPage - 1);
 
-    // Define the keyword search criteria
     const keyword = query.keyword
       ? {
           $or: [
-            { name: { $regex: query.keyword, $options: 'i' } },
-            { firstName: { $regex: query.keyword, $options: 'i' } },
-            { lastName: { $regex: query.keyword, $options: 'i' } },
+            { name: { $regex: query.keyword as string, $options: 'i' } },
+            { firstName: { $regex: query.keyword as string, $options: 'i' } },
+            { lastName: { $regex: query.keyword as string, $options: 'i' } },
           ],
         }
       : {};
@@ -254,21 +309,13 @@ export class UserService {
     // Find users matching the keyword with pagination
     const users = await this.userModel
       .find({ ...keyword })
+      .select('-password -resetPasswordToken -balance')
       .sort({ createdAt: -1 })
       .limit(resPerPage)
-      .skip(skip);
+      .skip(skip)
+      .lean();
 
-    // Enrich user data with follower counts
-    let userArray: any = [];
-    for (const user of users) {
-      user.password = '';
-      user.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
-      let userData: any = { ...user };
-      userData = userData._doc;
-      userArray = [...userArray, userData];
-    }
-
-    return users.map(this.sanitizeUser);
+    return users;
   }
 
   /**
@@ -294,13 +341,15 @@ export class UserService {
     // Find users matching the keyword with pagination
     const users = await this.userModel
       .find({ ...keyword })
-      .populate('countryId')
-      .populate('cityId')
+      .select('-password -resetPasswordToken -balance')
+      .populate('countryId', 'name')
+      .populate('cityId', 'name')
       .sort({ createdAt: -1 })
       .limit(resPerPage)
-      .skip(skip);
+      .skip(skip)
+      .lean();
 
-    return users.map(this.sanitizeUser);
+    return users;
   }
 
   /**
@@ -346,7 +395,6 @@ export class UserService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    console.log('User: ', user);
     const status = user.isActive === false ? false : true
     const updatedUser = await this.userModel
       .findByIdAndUpdate(
@@ -358,7 +406,11 @@ export class UserService {
     if (!updatedUser) {
       throw new NotFoundException('User not found');
     }
-    return this.getAllUsers();
+    
+    // Invalider le cache
+    await this.cacheService.invalidateUserCache(userId);
+    
+    return this.sanitizeUser(updatedUser);
   }
 
   async updateAdminStatus(userId: any): Promise<any> {
@@ -370,7 +422,6 @@ export class UserService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    console.log('User: ', user);
     const status = user.isAdmin === false ? false : true
     const updatedUser = await this.userModel
       .findByIdAndUpdate(
@@ -382,7 +433,11 @@ export class UserService {
     if (!updatedUser) {
       throw new NotFoundException('User not found');
     }
-    return this.getAllUsers();
+    
+    // Invalider le cache
+    await this.cacheService.invalidateUserCache(userId);
+    
+    return this.sanitizeUser(updatedUser);
   }
 
   async updateVerifiedStatus(userId: any): Promise<any> {
@@ -394,7 +449,6 @@ export class UserService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    console.log('User: ', user);
     const status = user.verified === false ? false : true
     const updatedUser = await this.userModel
       .findByIdAndUpdate(
@@ -407,6 +461,9 @@ export class UserService {
       throw new NotFoundException('User not found');
     }
 
-    return this.getAllUsers();
+    // Invalider le cache
+    await this.cacheService.invalidateUserCache(userId);
+
+    return this.sanitizeUser(updatedUser);
   }
 }

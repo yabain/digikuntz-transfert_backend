@@ -44,11 +44,13 @@ import { Item, ItemSchema } from 'src/plans/item/item.shema';
 import { OptionsService as PlansOptionsService } from 'src/plans/options/options.service';
 import { Options, OptionsSchema } from 'src/plans/options/options.shema';
 import { Plans, PlansSchema } from 'src/plans/plans.schema';
+import { AppCacheModule } from '../cache/cache.module';
 
 @Module({
   imports: [
     AuthModule,
     WhatsappModule,
+    AppCacheModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       inject: [ConfigService],

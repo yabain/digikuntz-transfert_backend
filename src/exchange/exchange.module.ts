@@ -8,10 +8,12 @@ import { UserService } from 'src/user/user.service';
 import { User, UserSchema } from 'src/user/user.schema';
 import { CountryService } from 'src/country/country.service';
 import { Country, CountrySchema } from 'src/country/country.schema';
+import { AppCacheModule } from '../cache/cache.module';
 
 @Module({
   imports: [
     HttpModule,
+    AppCacheModule,
     MongooseModule.forFeature([
       { name: Exchange.name, schema: ExchangeSchema },
     ]),

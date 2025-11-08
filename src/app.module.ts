@@ -30,6 +30,7 @@ import { SmtpModule } from './email/smtp/smtp.module';
 import { WhatsappModule } from './wa/whatsapp.module';
 import { UserSettingsModule } from './userSettings/userSettings.module';
 import { ServiceModule } from './service/service.module';
+import { AppCacheModule } from './cache/cache.module';
 
 @Module({
   imports: [
@@ -91,6 +92,7 @@ import { ServiceModule } from './service/service.module';
     WhatsappModule,
     UserSettingsModule,
     ServiceModule,
+    AppCacheModule,
   ],
   controllers: [AppController],
   providers: [AppService],

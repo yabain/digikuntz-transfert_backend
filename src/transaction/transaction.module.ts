@@ -34,11 +34,13 @@ import { Options, OptionsSchema } from 'src/plans/options/options.shema';
 import { WhatsappModule } from 'src/wa/whatsapp.module';
 import { ServicePaymentService } from 'src/service/service-payment/service-payment.service';
 import { ServicePayment, ServicePaymentSchema } from 'src/service/service-payment/service-payment.schema';
+import { AppCacheModule } from '../cache/cache.module';
 
 @Module({
   imports: [
     HttpModule,
     WhatsappModule,
+    AppCacheModule,
     MongooseModule.forFeature([
       { name: Transaction.name, schema: TransactionSchema },
       { name: City.name, schema: CitySchema },

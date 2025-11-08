@@ -52,14 +52,16 @@ export class PlansService {
     const keyword = query.keyword
       ? {
           title: {
-            $regex: query.keyword,
+            $regex: query.keyword as string,
             $options: 'i',
           },
         }
       : {};
+      
     const plansList = await this.plansModel
       .find({ ...keyword })
-      .populate('author')
+      .populate('author', 'name email pictureUrl')
+      .sort({ createdAt: -1 })
       .limit(resPerPage)
       .skip(skip);
 
@@ -164,7 +166,7 @@ export class PlansService {
   }
 
   async getPlansById(planId: any): Promise<any> {
-    console.log('planId: ', planId);
+
     if (!mongoose.Types.ObjectId.isValid(planId)) {
       throw new NotFoundException('Invalid plan ID');
     }
@@ -266,7 +268,7 @@ export class PlansService {
     if (!plan) {
       throw new NotFoundException('Plan not found');
     }
-    console.log('plan: ', plan);
+
 
     if (String(plan.author) != String(userData._id) && !userData.isAdmin) {
       throw new NotFoundException('Unauthorized');
@@ -367,31 +369,25 @@ export class PlansService {
     }
   }
 
-  async searchByTitle(query: Query): Promise<Plans[]> {
+  async searchByTitle(query: Query): Promise<any[]> {
     const resPerPage = 20;
     const currentPage = Number(query.page) || 1;
     const skip = resPerPage * (currentPage - 1);
 
-    // Define the keyword search criteria
     const keyword = query.keyword
       ? {
-          $or: [{ title: { $regex: query.keyword, $options: 'i' } }],
+          $or: [{ title: { $regex: query.keyword as string, $options: 'i' } }],
         }
       : {};
 
-    // Find users matching the keyword with pagination
+    // Find plans matching the keyword with pagination
     const plans = await this.plansModel
       .find({ ...keyword })
+      .sort({ createdAt: -1 })
       .limit(resPerPage)
-      .skip(skip);
+      .skip(skip)
+      .lean();
 
-    // Enrich user data with follower counts
-    let planArray: any = [];
-    for (const plan of plans) {
-      let planData: any = { ...plan };
-      planData = planData._doc;
-      planArray = [...planArray, planData];
-    }
-    return planArray;
+    return plans as any[];
   }
 }

@@ -34,3 +34,11 @@ export class Service extends Document {
 }
 
 export const ServiceSchema = SchemaFactory.createForClass(Service);
+
+// Index pour optimiser les recherches
+ServiceSchema.index({ author: 1 });
+ServiceSchema.index({ title: 1 });
+ServiceSchema.index({ isActive: 1 });
+ServiceSchema.index({ createdAt: -1 });
+ServiceSchema.index({ title: 'text', description: 'text' }); // Index de recherche textuelle
+ServiceSchema.index({ author: 1, isActive: 1 }); // Index composé

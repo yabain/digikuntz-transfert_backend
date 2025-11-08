@@ -46,3 +46,11 @@ export class Plans extends Document {
 }
 
 export const PlansSchema = SchemaFactory.createForClass(Plans);
+
+// Index pour optimiser les recherches
+PlansSchema.index({ author: 1 });
+PlansSchema.index({ title: 1 });
+PlansSchema.index({ isActive: 1 });
+PlansSchema.index({ createdAt: -1 });
+PlansSchema.index({ title: 'text', description: 'text' }); // Index de recherche textuelle
+PlansSchema.index({ author: 1, isActive: 1 }); // Index composé

@@ -91,4 +91,20 @@ export class OptionsServiceService {
     );
     return optionse;
   }
+
+  // Méthode optimisée pour récupérer les options de plusieurs services
+  async getAllOptionsOfServices(serviceIds: string[]): Promise<any[]> {
+    if (!serviceIds || serviceIds.length === 0) {
+      return [];
+    }
+    
+    const validIds = serviceIds.filter(id => mongoose.Types.ObjectId.isValid(id));
+    if (validIds.length === 0) {
+      return [];
+    }
+
+    return await this.optionsModel
+      .find({ serviceId: { $in: validIds } })
+      .lean();
+  }
 }

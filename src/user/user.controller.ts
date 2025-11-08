@@ -50,6 +50,17 @@ export class UserController {
    * Get all users with optional query parameters for filtering and pagination.
    * Only accessible by admin users.
    */
+  @Get('all-users')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async getAllUsers(@Query() query: ExpressQuery, @Req() req): Promise<User[]> {
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unautorised');
+    }
+    return this.userService.getAllUsers(query);
+  }
+
   @Get()
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get all users (admin only)' })
@@ -62,13 +73,12 @@ export class UserController {
   @ApiResponse({ status: 200, description: 'List of users returned.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async getAllUser(@Query() query: ExpressQuery, @Req() req): Promise<User[]> {
+  async searchByEmail(@Query() query: ExpressQuery, @Req() req): Promise<User[]> {
     if (!req.user.isAdmin) {
       throw new NotFoundException('Unautorised');
     }
     return this.userService.searchByEmail(query);
   }
-
   /**
    * Get all users with optional query parameters for filtering and pagination.
    * Only accessible by admin users.

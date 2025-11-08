@@ -52,7 +52,7 @@ export class ServiceService {
     const keyword = query.keyword
       ? {
           title: {
-            $regex: query.keyword,
+            $regex: query.keyword as string,
             $options: 'i',
           },
         }
@@ -95,7 +95,6 @@ export class ServiceService {
       resp.push(planData);
     }
 
-    // console.log('user plan list', resp);
     return resp;
   }
 
@@ -162,20 +161,28 @@ export class ServiceService {
   }
 
   async getServiceById(planId: any): Promise<any> {
-    console.log('planId: ', planId);
     if (!mongoose.Types.ObjectId.isValid(planId)) {
       throw new NotFoundException('Invalid plan ID');
     }
 
-    const plan = await this.serviceModel.findById(planId).populate('author');
-    if (!plan) {
-      throw new NotFoundException('Plan not found');
+    try {
+      const plan = await this.serviceModel
+        .findById(planId)
+        .populate('author', 'name email pictureUrl')
+        .lean();
+        
+      if (!plan) {
+        throw new NotFoundException('Plan not found');
+      }
+
+      const planOption = await this.optionsService.getAllOptionsOfService(plan._id);
+      return { ...plan, options: planOption };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new NotFoundException('Error retrieving service');
     }
-
-    const planOption = await this.optionsService.getAllOptionsOfService(plan._id);
-    const planData = { ...plan.toObject(), options: planOption };
-
-    return planData;
   }
 
   async creatService(plan: CreateServiceDto, user: any): Promise<Service> {
@@ -249,7 +256,7 @@ export class ServiceService {
     if (!plan) {
       throw new NotFoundException('Plan not found');
     }
-    console.log('plan: ', plan);
+
 
     if (String(plan.author) != String(userData._id) && !userData.isAdmin) {
       throw new NotFoundException('Unauthorized');
@@ -327,31 +334,25 @@ export class ServiceService {
     return optionsList;
   }
 
-  async searchByTitle(query: Query): Promise<Service[]> {
+  async searchByTitle(query: Query): Promise<any[]> {
     const resPerPage = 20;
     const currentPage = Number(query.page) || 1;
     const skip = resPerPage * (currentPage - 1);
 
-    // Define the keyword search criteria
     const keyword = query.keyword
       ? {
-          $or: [{ title: { $regex: query.keyword, $options: 'i' } }],
+          $or: [{ title: { $regex: query.keyword as string, $options: 'i' } }],
         }
       : {};
 
-    // Find users matching the keyword with pagination
-    const service = await this.serviceModel
+    // Find services matching the keyword with pagination
+    const services = await this.serviceModel
       .find({ ...keyword })
+      .sort({ createdAt: -1 })
       .limit(resPerPage)
-      .skip(skip);
+      .skip(skip)
+      .lean();
 
-    // Enrich user data with follower counts
-    let planArray: any = [];
-    for (const plan of service) {
-      let planData: any = { ...plan };
-      planData = planData._doc;
-      planArray = [...planArray, planData];
-    }
-    return planArray;
+    return services as any[];
   }
 }

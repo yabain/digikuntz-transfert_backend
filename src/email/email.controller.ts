@@ -45,7 +45,7 @@ export class EmailController {
     if (!req.user.isAdmin) {
       throw new NotFoundException('Unautorised');
     }
-    return this.emailService.findAllEmail(query);
+    return this.emailService.getOutputMails(query);
   }
 
   @Post('send-test')

@@ -35,12 +35,14 @@ import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
 import { WhatsappModule } from 'src/wa/whatsapp.module';
 import { ServicePaymentService } from 'src/service/service-payment/service-payment.service';
 import { ServicePayment, ServicePaymentSchema } from 'src/service/service-payment/service-payment.schema';
+import { AppCacheModule } from '../cache/cache.module';
 
 @Module({
   imports: [
     ConfigModule,
     HttpModule,
     WhatsappModule,
+    AppCacheModule,
     MongooseModule.forFeature([
       { name: Payin.name, schema: PayinSchema },
       { name: Payout.name, schema: PayoutSchema },

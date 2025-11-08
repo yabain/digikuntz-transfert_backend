@@ -15,11 +15,13 @@ import { EmailSchema, Email } from 'src/email/email.schema';
 import { SmtpService } from 'src/email/smtp/smtp.service';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
 import { WhatsappModule } from 'src/wa/whatsapp.module';
+import { AppCacheModule } from '../../cache/cache.module';
 
 @Module({
   imports: [
     AuthModule,
     WhatsappModule,
+    AppCacheModule,
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: OptionsService.name, schema: OptionsServiceSchema },
