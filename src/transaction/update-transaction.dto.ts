@@ -19,6 +19,10 @@ export class UpdateTransactionDto {
   @IsEmpty()
   invoiceRef: string;
 
+  @IsString()
+  @IsOptional()
+  txRef: string;
+
   @IsNumber()
   @IsOptional()
   payment: number;

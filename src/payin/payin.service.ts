@@ -26,6 +26,7 @@ type InitPayinPayload = {
   currency?: string;
   customerEmail?: string;
   transactionId: string;
+  txRef: string;
   meta?: Record<string, unknown>;
 };
 
@@ -88,7 +89,7 @@ export class PayinService {
     return { Authorization: `Bearer ${this.fwSecret}` };
   }
 
-  private generateTxRef(prefix = 'tx'): string {
+  generateTxRef(prefix = 'tx'): string {
     return `${prefix}-${Date.now()}-${randomBytes(4).toString('hex')}`;
   }
 
@@ -170,9 +171,9 @@ export class PayinService {
   /* ========================= Public API ========================= */
 
   async initPayin(payload: InitPayinPayload) {
-    const txRef = this.generateTxRef();
+    // const txRef = this.generateTxRef();
     const doc = await this.payinModel.create({
-      txRef,
+      txRef: payload.txRef,
       amount: payload.amount,
       currency: payload.currency ?? PayinService.DEFAULT_CURRENCY,
       customerEmail: payload.customerEmail,
@@ -192,10 +193,8 @@ export class PayinService {
 
   // Hosted Payment (V3)
   async createPayin(dto: CreatePayinDto) {
-    const txRef = this.generateTxRef();
-
     const payload = {
-      tx_ref: txRef,
+      tx_ref: dto.txRef,
       amount: dto.amount,
       currency: dto.currency,
       redirect_url: this.buildRedirectUrl(dto.redirectUrl),
@@ -213,7 +212,7 @@ export class PayinService {
       await this.payinModel.create({
         userId: dto.userId,
         transactionId: dto.transactionId,
-        txRef,
+        txRef: dto.txRef,
         amount: dto.amount,
         currency: dto.currency,
         customerEmail: dto.customerEmail,
@@ -224,7 +223,7 @@ export class PayinService {
 
       return {
         status: PayinStatus.PENDING,
-        txRef,
+        txRef: dto.txRef,
         amount: dto.amount,
         currency: dto.currency,
         customerEmail: dto.customerEmail,

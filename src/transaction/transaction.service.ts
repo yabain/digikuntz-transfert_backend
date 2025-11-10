@@ -303,6 +303,21 @@ export class TransactionService {
     if (!transaction) throw new NotFoundException('Transaction not found');
     return transaction;
   }
+  async updateTransactionTxRef(
+    transactionId: string,
+    txRef: string,
+  ): Promise<any> {
+    if (!mongoose.Types.ObjectId.isValid(transactionId)) {
+      throw new NotFoundException('Invalid transaction ID');
+    }
+    const transaction: any = await this.transactionModel.findByIdAndUpdate(
+        transactionId,
+        { txRef },
+        { new: true },
+      );
+    if (!transaction) throw new NotFoundException('Transaction not found');
+    return transaction;
+  }
 
   private async handleTransactionStateSuccess(transactionData): Promise<any> {
     const transaction: any = await this.transactionModel.findById(

@@ -16,6 +16,7 @@ import { Payout, PayoutDocument, PayoutStatus } from './payout.schema';
 import { ConfigService } from '@nestjs/config';
 import { TStatus } from 'src/transaction/transaction.schema';
 import { TransactionService } from 'src/transaction/transaction.service';
+import { randomBytes } from 'crypto';
 
 @Injectable()
 export class PayoutService {
@@ -265,5 +266,9 @@ export class PayoutService {
 
   async getTotalTransactionOfUser(userId: string): Promise<number> {
     return await this.payoutModel.countDocuments({ userId });
+  }
+
+  generateTxRef(prefix = 'tx'): string {
+    return `${prefix}-${Date.now()}-${randomBytes(4).toString('hex')}`;
   }
 }

@@ -197,13 +197,18 @@ export class FlutterwaveService {
     transactionData.userId = userId;
     const raw = {
       ...transactionData,
+      txRef: this.payoutService.generateTxRef('txPayout'),
       userId,
+      senderId: userId,
+      receiverId: userId,
+      transactionType: 'withdrawal',
       status: 'transaction_payin_success',
     };
+    console.log('withdrawal raw: ', raw);
 
     try {
       const balance = await this.balanceService.debitBalance(
-        userId,
+        String(userId),
         transactionData.paymentWithTaxes,
         transactionData.senderCurrency,
       );
@@ -216,10 +221,11 @@ export class FlutterwaveService {
 
       return { status: 'pending' };
     } catch (error) {
+      console.error('Withdrawal error:', error);
       throw new HttpException(
         {
           status: HttpStatus.BAD_REQUEST,
-          error: error.message,
+          error: error.message || 'Unknown error occurred',
         },
         HttpStatus.BAD_REQUEST,
       );
@@ -232,6 +238,7 @@ export class FlutterwaveService {
     const raw = {
       ...transactionData,
       userId,
+      txRef: this.payinService.generateTxRef('txPayin'),
       // transactionType: 'transfer',
     };
 
@@ -244,6 +251,7 @@ export class FlutterwaveService {
 
       return this.payinService.createPayin({
         amount: savedTransaction.paymentWithTaxes,
+        txRef: savedTransaction.txRef,
         transactionId: savedTransaction._id,
         currency: savedTransaction.senderCurrency,
         customerEmail: savedTransaction.senderEmail,
@@ -576,9 +584,10 @@ export class FlutterwaveService {
       amount: transaction.receiverAmount,
       destinationCurrency: transaction.receiverCurrency,
       sourceCurrency: transaction.receiverCurrency,
-      reference: String(transaction._id),
+      reference: transaction.txRef,
       transactionId: String(transaction._id),
-      narration: transaction.raisonForTransfer,
+      narration: this.toAlphanumeric(transaction.raisonForTransfer),
+      txRef: transaction.txRef,
       userId: userId,
       type: this.getreceiverAccountType(transaction), // 'bank' | 'mobile_money' | 'wallet'
     };
@@ -646,6 +655,95 @@ export class FlutterwaveService {
         transactionId,
         TStatus.PAYOUTPENDING,
       );
+      return update;
+    } catch (err) {
+      if (err.response) {
+        console.error('FW Error:', err.response.data);
+      } else {
+        console.error('Unexpected Error:', err);
+      }
+      throw err;
+    }
+  }
+
+  async retryPayout(transactionId: string, userId) {
+    const transaction = await this.transactionService.findById(transactionId);
+    if (!transaction || transaction.status !== TStatus.PAYOUTERROR) {
+      throw new NotFoundException('Transaction not found or not payin success or not in payout error');
+    }
+    const newTxRef = this.payoutService.generateTxRef('txPayout')
+
+    const payloadPayout = {
+      accountBankCode: transaction.bankCode,
+      accountNumber: transaction.bankAccountNumber,
+      amount: transaction.receiverAmount,
+      destinationCurrency: transaction.receiverCurrency,
+      sourceCurrency: transaction.receiverCurrency,
+      reference: newTxRef,
+      transactionId: String(transaction._id),
+      narration: this.toAlphanumeric(transaction.raisonForTransfer),
+      txRef: newTxRef,
+      userId: userId,
+      type: this.getreceiverAccountType(transaction), // 'bank' | 'mobile_money' | 'wallet'
+    };
+
+    const countryCode = this.toIso2(payloadPayout.destinationCurrency);
+    let headers: any;
+
+    if (countryCode == 'CM') {
+      headers = this.authHeader(); // Use Flutterwave Cameroon (Francophone zone XAF)
+    } else if (countryCode == 'NG') {
+      headers = this.authHeaderNGN(); // Use Flutterwave Nigeria (NGN)
+    } else {
+      // for coming FW accounts
+      headers = this.authHeader();
+    }
+    try {
+      const payload = {
+        account_bank: payloadPayout.accountBankCode, // bank or MoMo operator
+        account_number: payloadPayout.accountNumber, // account number or MSISDN
+        amount: Number(payloadPayout.amount),
+        currency: payloadPayout.destinationCurrency,
+        reference: payloadPayout.reference,
+        narration: payloadPayout.narration,
+        debit_currency: payloadPayout.sourceCurrency,
+        beneficiary_name: transaction.receiverName,
+        meta: [
+          {
+            beneficiary_country: this.toIso2(transaction.receiverCountryCode),
+            sender: transaction.senderName,
+            sender_address: transaction.senderCountry,
+            sender_country: transaction.senderCountry,
+            sender_mobile_number: transaction.senderContact,
+          },
+        ],
+      };
+
+      console.log('payload for sending: ', payload);
+
+      const res = await firstValueFrom(
+        this.http.post(`${this.fwBaseUrlV3}/transfers`, payload, {
+          headers,
+        }),
+      );
+
+      // console.log('res of fw: ', res);
+
+      const status = this.normalizeStatus(res.data?.data?.status);
+
+      let doc = await this.payoutService.createPayout(payloadPayout, res);
+
+
+      const resp = { api: 'v3', ...res.data, saved: doc };
+      let update = await this.transactionService.updateTransactionStatus(
+        transactionId,
+        TStatus.PAYOUTPENDING,
+      );
+      update = await this.transactionService.updateTransactionTxRef(
+        transactionId,
+        newTxRef,
+      );
+
       return update;
     } catch (err) {
       if (err.response) {
@@ -1225,6 +1323,23 @@ async fundVirtualCard(
     console.error('Unexpected fundVirtualCard error: ', err?.message ?? err);
     throw err;
   }
+}
+/**
+ * Convert a text to alphanumeric
+ * @param {string} text - the sentence in param
+ * @returns {string} - Cleared sentence
+ */
+ toAlphanumeric(text) {
+  if (typeof text !== 'string') return '';
+
+  return text
+    // 1. Supprimer les accents et normaliser
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // retire les diacritiques
+    // 2. Remplacer les caractères non alphanumériques par rien
+    .replace(/[^a-zA-Z0-9]/g, '')
+    // 3. Supprimer les espaces (facultatif selon besoin)
+    .trim();
 }
 
 }

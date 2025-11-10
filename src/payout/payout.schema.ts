@@ -39,6 +39,9 @@ export class Payout extends Document  {
   sourceCurrency: string;
 
   @Prop({ required: true })
+  txRef: string; // This ref is send to Flutterwave as unique ref for transaction
+
+  @Prop({ required: true })
   destinationCurrency: string;
 
   @Prop()

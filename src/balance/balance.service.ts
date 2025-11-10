@@ -83,11 +83,11 @@ export class BalanceService {
       throw new NotFoundException('Invalid user');
     }
 
-    const user = await this.userService.getUserById(userId);
+    const user = await this.userService.getUserWithCurrency(userId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    if (user.countryId.currency !== currency) {
+    if (user.countryId?.currency !== currency) {
       throw new BadRequestException('Currency mismatch');
     }
 

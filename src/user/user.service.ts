@@ -172,8 +172,8 @@ export class UserService {
       const user = await this.userModel
         .findById(userId)
         .select('-password -resetPasswordToken -balance')
-        .populate('countryId', 'name')
-        .populate('cityId', 'name')
+        .populate('countryId')
+        .populate('cityId')
         .lean();
 
       if (!user) {
@@ -182,6 +182,7 @@ export class UserService {
 
       // Mettre en cache avec logique conditionnelle
       await this.cacheService.setUserCache(userId, user);
+      console.log('userData: ', user);
       return user;
     } catch (error) {
       if (error instanceof NotFoundException) {
@@ -500,5 +501,23 @@ export class UserService {
       });
     }
     return result;
+  }
+
+  async getUserWithCurrency(userId: string): Promise<any> {
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new NotFoundException('Invalid user ID');
+    }
+
+    const user = await this.userModel
+      .findById(userId)
+      .select('-password -resetPasswordToken -balance')
+      .populate('countryId', 'name currency')
+      .lean();
+      
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return user;
   }
 }

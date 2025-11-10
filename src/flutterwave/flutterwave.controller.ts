@@ -108,6 +108,17 @@ export class FlutterwaveController {
     return this.fw.createPayout(transactionId, req.user._id);
   }
 
+  // init payout transaction
+  @Get('retry-payout/:transactionId')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  retryPayout(@Req() req, @Param('transactionId') transactionId) {
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unautorised');
+    }
+    return this.fw.retryPayout(transactionId, req.user._id);
+  }
+
   // Webhook: this route must be PUBLIC (override guard upstream if needed)
   @Post('webhook')
   @HttpCode(200) // FW attend 200 sinon il retente

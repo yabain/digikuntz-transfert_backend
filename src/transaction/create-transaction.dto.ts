@@ -21,6 +21,10 @@ export class CreateTransactionDto {
   @IsEmpty()
   invoiceRef: string;
 
+  @IsString()
+  @IsOptional()
+  txRef: string;
+
   @IsNumber()
   @IsNotEmpty()
   payment: number;

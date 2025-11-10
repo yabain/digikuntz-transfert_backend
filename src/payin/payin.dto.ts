@@ -42,6 +42,10 @@ export class CreatePayinDto {
 
   @IsOptional()
   @IsString()
+  txRef?: string;
+
+  @IsOptional()
+  @IsString()
   redirectUrl?: string; // frontend success URL
 
   @IsOptional()

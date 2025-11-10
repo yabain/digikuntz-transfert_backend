@@ -62,6 +62,9 @@ export class Transaction {
   transactionRef: string;
 
   @Prop()
+  txRef: string;
+
+  @Prop()
   invoiceTaxes: string;
 
   @Prop()

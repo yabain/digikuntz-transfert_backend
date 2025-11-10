@@ -29,6 +29,7 @@ export class PayinController {
   async initialize(@Body() dto: any) {
     console.log('Payin initialize:');
     return this.payinService.initPayin({
+      txRef: dto.txRef,
       amount: dto.amount,
       currency: dto.currency || 'XAF',
       customerEmail: dto.customerEmail,
