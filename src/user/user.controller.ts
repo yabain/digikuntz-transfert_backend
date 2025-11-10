@@ -61,6 +61,16 @@ export class UserController {
     return this.userService.getAllUsers(query);
   }
 
+  @Get('get-statistics')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async getEmailStatsByMonth(@Req() req): Promise<any[]> {
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unautorised');
+    }
+    return this.userService.getUserStatsByMonth(req.user);
+  }
+
   @Get()
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get all users (admin only)' })

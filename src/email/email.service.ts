@@ -393,4 +393,37 @@ export class EmailService {
       body: data.body || '',
     });
   }
+
+  async getEmailStatsByMonth(currentUser): Promise<any[]> {
+    const result: any[] = [];
+    const now = new Date();
+    
+    for (let i = 11; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const nextMonth = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+      
+      const [success, failed] = await Promise.all([
+        this.emailModel.countDocuments({
+          status: true,
+          createdAt: { $gte: date, $lt: nextMonth }
+        }),
+        this.emailModel.countDocuments({
+          status: false,
+          createdAt: { $gte: date, $lt: nextMonth }
+        })
+      ]);
+
+      let language: string = ''
+      if(currentUser.language === 'fr') language = 'fr-FR'
+      else language = 'en-US'
+      
+      result.push({
+        month: date.toLocaleString(language, { month: 'long', year: 'numeric' }),
+        success,
+        failed
+      });
+    }
+    
+    return result;
+  }
 }

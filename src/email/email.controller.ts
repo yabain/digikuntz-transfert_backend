@@ -48,6 +48,16 @@ export class EmailController {
     return this.emailService.getOutputMails(query);
   }
 
+  @Get('get-statistics')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async getEmailStatsByMonth(@Req() req): Promise<any[]> {
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unautorised');
+    }
+    return this.emailService.getEmailStatsByMonth(req.user);
+  }
+
   @Post('send-test')
   @ApiOperation({ summary: 'Send a test email' })
   @ApiBody({

@@ -27,7 +27,7 @@ export class UserService {
     private userModel: mongoose.Model<User>,
     private readonly configService: ConfigService,
     private cacheService: CacheService,
-  ) {}
+  ) { }
 
   private sanitizeUser(user: any): any {
     if (!user) return user;
@@ -37,8 +37,8 @@ export class UserService {
     delete obj.balance;
     return obj;
   }
-  
-  async getAllUsers( query: any): Promise<any> {
+
+  async getAllUsers(query: any): Promise<any> {
     const page = Number(query.page) > 0 ? Number(query.page) : 1;
     const limit = 10;
     const skip = (page - 1) * limit;
@@ -54,18 +54,19 @@ export class UserService {
     //   .lean();
 
     // Parallel execution
-    const [total, totalActive, adminers, users] = await Promise.all([
+    const [total, totalActive, adminers, users, personal] = await Promise.all([
       this.userModel.countDocuments(),
       this.userModel.countDocuments({ isActive: true }),
       this.userModel.countDocuments({ isAdmin: true }),
       this.userModel.find({})
-      .select('firstName lastName name email pictureUrl isActive isAdmin accountType whatsapp verified createdAt')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .populate('countryId', 'name flagUrl')
-      .populate('cityId', 'name')
-      .lean()
+        .select('firstName lastName name email pictureUrl isActive isAdmin accountType whatsapp verified createdAt')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('countryId', 'name flagUrl')
+        .populate('cityId', 'name')
+        .lean(),
+        this.userModel.countDocuments({ accountType: 'personal' }),
     ]);
 
 
@@ -79,6 +80,8 @@ export class UserService {
         totalActive,
         totalInactive: total - totalActive,
         adminers,
+        totalPersonal: personal,
+        totalOrganisation: total - personal
       },
     };
   }
@@ -90,12 +93,12 @@ export class UserService {
 
     const keyword = query.keyword
       ? {
-          $or: [
-            { name: { $regex: query.keyword as string, $options: 'i' } },
-            { firstName: { $regex: query.keyword as string, $options: 'i' } },
-            { lastName: { $regex: query.keyword as string, $options: 'i' } },
-          ],
-        }
+        $or: [
+          { name: { $regex: query.keyword as string, $options: 'i' } },
+          { firstName: { $regex: query.keyword as string, $options: 'i' } },
+          { lastName: { $regex: query.keyword as string, $options: 'i' } },
+        ],
+      }
       : {};
 
     // Find users matching the keyword with pagination
@@ -138,7 +141,7 @@ export class UserService {
         password: hashedPwd,
       });
 
-    return this.sanitizeUser(user);
+      return this.sanitizeUser(user);
     } catch (error) {
       if (error.code === 11000) {
         throw new ConflictException('Email already exists');
@@ -172,7 +175,7 @@ export class UserService {
         .populate('countryId', 'name')
         .populate('cityId', 'name')
         .lean();
-        
+
       if (!user) {
         throw new NotFoundException('User not found');
       }
@@ -217,7 +220,7 @@ export class UserService {
 
       // Invalider le cache
       await this.cacheService.invalidateUserCache(userId);
-      
+
       return user;
     } catch (error) {
       if (error instanceof NotFoundException) {
@@ -298,12 +301,12 @@ export class UserService {
 
     const keyword = query.keyword
       ? {
-          $or: [
-            { name: { $regex: query.keyword as string, $options: 'i' } },
-            { firstName: { $regex: query.keyword as string, $options: 'i' } },
-            { lastName: { $regex: query.keyword as string, $options: 'i' } },
-          ],
-        }
+        $or: [
+          { name: { $regex: query.keyword as string, $options: 'i' } },
+          { firstName: { $regex: query.keyword as string, $options: 'i' } },
+          { lastName: { $regex: query.keyword as string, $options: 'i' } },
+        ],
+      }
       : {};
 
     // Find users matching the keyword with pagination
@@ -331,11 +334,11 @@ export class UserService {
     // Define the keyword search criteria
     const keyword = query.keyword
       ? {
-          email: {
-            $regex: query.keyword,
-            $options: 'i',
-          },
-        }
+        email: {
+          $regex: query.keyword,
+          $options: 'i',
+        },
+      }
       : {};
 
     // Find users matching the keyword with pagination
@@ -399,17 +402,17 @@ export class UserService {
     const updatedUser = await this.userModel
       .findByIdAndUpdate(
         userId,
-        { isActive: !status},
+        { isActive: !status },
         { new: true, runValidators: true },
       )
 
     if (!updatedUser) {
       throw new NotFoundException('User not found');
     }
-    
+
     // Invalider le cache
     await this.cacheService.invalidateUserCache(userId);
-    
+
     return this.sanitizeUser(updatedUser);
   }
 
@@ -426,17 +429,17 @@ export class UserService {
     const updatedUser = await this.userModel
       .findByIdAndUpdate(
         userId,
-        { isAdmin: !status},
+        { isAdmin: !status },
         { new: true, runValidators: true },
       )
 
     if (!updatedUser) {
       throw new NotFoundException('User not found');
     }
-    
+
     // Invalider le cache
     await this.cacheService.invalidateUserCache(userId);
-    
+
     return this.sanitizeUser(updatedUser);
   }
 
@@ -453,7 +456,7 @@ export class UserService {
     const updatedUser = await this.userModel
       .findByIdAndUpdate(
         userId,
-        { verified: !status},
+        { verified: !status },
         { new: true, runValidators: true },
       )
 
@@ -465,5 +468,37 @@ export class UserService {
     await this.cacheService.invalidateUserCache(userId);
 
     return this.sanitizeUser(updatedUser);
+  }
+
+  async getUserStatsByMonth(currentUser): Promise<any[]> {
+    const result: any[] = [];
+    const now = new Date();
+
+    for (let i = 11; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const nextMonth = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+
+      const [personal, organisation] = await Promise.all([
+        this.userModel.countDocuments({
+          accountType: 'personal',
+          createdAt: { $gte: date, $lt: nextMonth }
+        }),
+        this.userModel.countDocuments({
+          accountType: 'organisation',
+          createdAt: { $gte: date, $lt: nextMonth }
+        })
+      ]);
+
+      let language: string = ''
+      if (currentUser.language === 'fr') language = 'fr-FR'
+      else language = 'en-US'
+
+      result.push({
+        month: date.toLocaleString(language, { month: 'long', year: 'numeric' }),
+        personal,
+        organisation
+      });
+    }
+    return result;
   }
 }

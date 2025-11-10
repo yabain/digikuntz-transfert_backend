@@ -33,7 +33,7 @@ export class ServiceService {
     private waService: WhatsappService,
     private userService: UserService,
     private servicePaymentService: ServicePaymentService
-  ) {}
+  ) { }
 
   private sanitizeUser(user: any): any {
     if (!user) return user;
@@ -51,11 +51,11 @@ export class ServiceService {
 
     const keyword = query.keyword
       ? {
-          title: {
-            $regex: query.keyword as string,
-            $options: 'i',
-          },
-        }
+        title: {
+          $regex: query.keyword as string,
+          $options: 'i',
+        },
+      }
       : {};
     const serviceList = await this.serviceModel
       .find({ ...keyword })
@@ -168,9 +168,9 @@ export class ServiceService {
     try {
       const plan = await this.serviceModel
         .findById(planId)
-        .populate('author', 'name email pictureUrl')
+        .populate('author', '-password -agreeTerms -language -cityId -countryId -createdAt -updatedAt -description -resetPasswordToken -gender')
         .lean();
-        
+
       if (!plan) {
         throw new NotFoundException('Plan not found');
       }
@@ -211,18 +211,18 @@ export class ServiceService {
     if (!mongoose.Types.ObjectId.isValid(serviceId)) {
       throw new NotFoundException('Invalid service');
     }
-  
+
     // Find the service by ID
     const service = await this.serviceModel.findById(serviceId);
     if (!service) {
       throw new NotFoundException('Service not found');
     }
-  
+
     // Generate URLs for the uploaded files
     const fileUrls = files.map((file) => {
       return `${this.configService.get<string>('BACK_URL')}/assets/images/${file.filename}`;
     });
-  
+
     // Update the service's image in the database
     const updatedService = await this.serviceModel
       .findByIdAndUpdate(
@@ -231,11 +231,11 @@ export class ServiceService {
         { new: true, runValidators: true },
       )
       .populate('author');
-  
+
     if (!updatedService) {
       throw new NotFoundException('Service not found');
     }
-  
+
     return updatedService;
   }
 
@@ -321,11 +321,11 @@ export class ServiceService {
 
     const keyword = query.keyword
       ? {
-          title: {
-            $regex: query.keyword,
-            $options: 'i',
-          },
-        }
+        title: {
+          $regex: query.keyword,
+          $options: 'i',
+        },
+      }
       : {};
     const optionsList = await this.serviceModel
       .find({ ...keyword, status: true })
@@ -341,8 +341,8 @@ export class ServiceService {
 
     const keyword = query.keyword
       ? {
-          $or: [{ title: { $regex: query.keyword as string, $options: 'i' } }],
-        }
+        $or: [{ title: { $regex: query.keyword as string, $options: 'i' } }],
+      }
       : {};
 
     // Find services matching the keyword with pagination
