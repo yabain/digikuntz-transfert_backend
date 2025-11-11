@@ -261,7 +261,8 @@ export class TransactionService {
   }
 
   async verifyTransactionPayoutStatus(transactionData: any) {
-    const payout: any = await this.getPayout(transactionData._id);
+    const payout: any = await this.getPayout(transactionData.txRef);
+    console.log('verifyTransactionPayoutStatus payout', payout);
     if (!payout) {
       return false;
     }

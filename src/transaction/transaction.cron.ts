@@ -15,7 +15,7 @@ export class TransactionCron {
 
   constructor(private transactionService: TransactionService) {}
 
-  @Cron(CronExpression.EVERY_MINUTE) // ou EVERY_MINUTES
+  @Cron(CronExpression.EVERY_5_MINUTES) // ou EVERY_MINUTES
   async handleCron() {
     if (this.isRunning) {
       this.logger.debug('Transaction cron already running, skipping...');

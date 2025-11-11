@@ -38,6 +38,7 @@ export class PayoutService {
   async createPayout(payloadPayout, fwData)  {
     return  await this.payoutModel.create({
         reference: payloadPayout.reference,
+        txRef: payloadPayout.txRef,
         transactionId: payloadPayout.transactionId,
         userId: payloadPayout.userId,
         type: payloadPayout.type, // 'bank' | 'mobile_money' | 'wallet'
@@ -46,7 +47,7 @@ export class PayoutService {
         destinationCurrency: payloadPayout.destinationCurrency,
         accountBankCode: payloadPayout.accountBankCode,
         accountNumber: payloadPayout.accountNumber,
-        narration: payloadPayout.narration,
+        narration: this.toAlphanumeric(payloadPayout.narration),
         status: this.normalizeStatus(fwData.data?.data?.status),
         raw: fwData.data,
       })
@@ -144,10 +145,8 @@ export class PayoutService {
   }
 
   async verifyPayout(reference: string) {
-    const oldStatus = await this.getPayoutStatus(reference);
-    console.log('oldStatus: ', oldStatus);
-    if (!oldStatus)
-      throw new NotFoundException('Payout not found for this reference');
+    const oldStatus = 'PENDING';
+    
     const url = `${this.fwBaseUrlV3}/transfers?reference=${reference}`;
     const res: any = await this.http
       .get(url, {
@@ -157,7 +156,8 @@ export class PayoutService {
 
     if (res.data && res.data.data && res.data.data.length > 0) {
       const payout = res.data.data[0];
-      console.log('payout', payout);
+      console.log('payout from FW', payout);
+
       if (oldStatus !== payout.status) {
         await this.updatePayout(payout);
         if (payout.status === 'SUCCESSFUL') {
@@ -165,10 +165,12 @@ export class PayoutService {
             await this.transactionService.updateTransactionStatus(
               reference,
               TStatus.PAYOUTSUCCESS,
+              payout,
             );
             console.log('transaction SUCCESSFUL', transaction);
           // send Email payment success
           // Send Whatsapp
+          console.log('verify payout and update SUCCESS')
         }
         if (payout.status === 'FAILED') {
           const transaction =
@@ -219,7 +221,7 @@ export class PayoutService {
       destinationCurrency: existing.destinationCurrency,
       accountBankCode: existing.accountBankCode,
       accountNumber: existing.accountNumber,
-      narration: existing.narration ?? 'Payout retry',
+      narration: this.toAlphanumeric(existing.narration ?? 'Payout retry'),
     };
 
     const fwPayload: any = {
@@ -255,6 +257,11 @@ export class PayoutService {
     await this.transactionService.updateTransactionStatus(
       transactionIdStr,
       TStatus.PAYOUTPENDING,
+      saved,
+    );
+    const update = await this.transactionService.updateTransactionTxRef(
+      transactionIdStr,
+      newReference,
     );
 
     return { reference: newReference, saved, fw: res?.data };
@@ -271,4 +278,22 @@ export class PayoutService {
   generateTxRef(prefix = 'tx'): string {
     return `${prefix}-${Date.now()}-${randomBytes(4).toString('hex')}`;
   }
+
+/**
+ * Convert a text to alphanumeric
+ * @param {string} text - the sentence in param
+ * @returns {string} - Cleared sentence
+ */
+ toAlphanumeric(text) {
+  if (typeof text !== 'string') return '';
+
+  return text
+    // 1. Supprimer les accents et normaliser
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // retire les diacritiques
+    // 2. Remplacer les caractères non alphanumériques par rien
+    .replace(/[^a-zA-Z0-9]/g, '')
+    // 3. Supprimer les espaces (facultatif selon besoin)
+    .trim();
+}
 }

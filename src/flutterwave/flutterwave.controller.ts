@@ -105,7 +105,7 @@ export class FlutterwaveController {
     if (!req.user.isAdmin) {
       throw new NotFoundException('Unautorised');
     }
-    return this.fw.createPayout(transactionId, req.user._id);
+    return this.fw.payout(transactionId, req.user._id);
   }
 
   // init payout transaction

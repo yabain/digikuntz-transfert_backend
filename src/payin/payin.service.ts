@@ -419,15 +419,15 @@ export class PayinService {
    * Generic verify: accept either numeric FW id or txRef
    */
   async verifyPayin(idOrTxRef: string, saveLocal = false) {
-    console.log('verifyPayin: idOrTxRef', idOrTxRef);
+    // console.log('verifyPayin: idOrTxRef', idOrTxRef);
     try {
       let resp;
       if (/^\d+$/.test(idOrTxRef)) {
-        this.logger.debug(`verifyPayin: idOrTxRef is numeric: ${idOrTxRef}`);
+        // this.logger.debug(`verifyPayin: idOrTxRef is numeric: ${idOrTxRef}`);
         // numeric -> verify by tx id
         resp = await this.fwGet(`${this.fwBaseUrlV3}/transactions/${idOrTxRef}/verify`);
       } else {
-        this.logger.debug(`verifyPayin: idOrTxRef is txRef: ${idOrTxRef}`);
+        // this.logger.debug(`verifyPayin: idOrTxRef is txRef: ${idOrTxRef}`);
         resp = await this.fwGet(`${this.fwBaseUrlV3}/transactions/verify_by_reference`, {
           tx_ref: idOrTxRef,
         });
@@ -447,11 +447,11 @@ export class PayinService {
       return this.handleVerifyPayin(idOrTxRef, saveLocal, resp.data);
     } catch (error: unknown) {
       const { fwData, message } = this.unwrapAxiosError(error);
-      this.logger.error(`verifyPayin error for ${idOrTxRef}: ${message}`, fwData ?? '');
+      // this.logger.error(`verifyPayin error for ${idOrTxRef}: ${message}`, fwData ?? '');
 
       // Si FW indique "not found", on renvoie l'enregistrement local au lieu de throw
       if (fwData?.message?.includes('No transaction was found for this id')) {
-        this.logger.warn('No transaction found on FW, returning local record');
+        // this.logger.warn('No transaction found on FW, returning local record');
         return this.handleVerifyPayin(idOrTxRef, saveLocal);
       }
 

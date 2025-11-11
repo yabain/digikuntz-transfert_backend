@@ -572,11 +572,15 @@ export class FlutterwaveService {
   }
 
   // ---------- Payouts ----------
-  async createPayout(transactionId: string, userId) {
+  async payout(transactionId: string, userId: any, retrying: boolean = false) {
     const transaction = await this.transactionService.findById(transactionId);
     if (!transaction || transaction.status !== TStatus.PAYINSUCCESS) {
       throw new NotFoundException('Transaction not found or not payin success');
     }
+    transaction.reference = transaction.reference
+    const newTxRef = this.payoutService.generateTxRef('txPayout');
+    transaction.reference = transaction.reference || newTxRef;
+    transaction.txRef = transaction.txRef || newTxRef;
 
     const payloadPayout = {
       accountBankCode: transaction.bankCode,
@@ -584,10 +588,10 @@ export class FlutterwaveService {
       amount: transaction.receiverAmount,
       destinationCurrency: transaction.receiverCurrency,
       sourceCurrency: transaction.receiverCurrency,
-      reference: transaction.txRef,
+      reference: retrying ? newTxRef : transaction.txRef,
       transactionId: String(transaction._id),
       narration: this.toAlphanumeric(transaction.raisonForTransfer),
-      txRef: transaction.txRef,
+      txRef: retrying ? newTxRef : transaction.txRef,
       userId: userId,
       type: this.getreceiverAccountType(transaction), // 'bank' | 'mobile_money' | 'wallet'
     };
@@ -645,16 +649,15 @@ export class FlutterwaveService {
       );
 
       // console.log('res of fw: ', res);
-
-      const status = this.normalizeStatus(res.data?.data?.status);
-
       const doc = await this.payoutService.createPayout(payloadPayout, res);
 
       const resp = { api: 'v3', ...res.data, saved: doc };
       const update = await this.transactionService.updateTransactionStatus(
         transactionId,
-        TStatus.PAYOUTPENDING,
+        this.normalizeStatus(res.data?.data?.status),
+        resp,
       );
+      console.log('update: ', update)
       return update;
     } catch (err) {
       if (err.response) {
@@ -671,80 +674,16 @@ export class FlutterwaveService {
     if (!transaction || transaction.status !== TStatus.PAYOUTERROR) {
       throw new NotFoundException('Transaction not found or not payin success or not in payout error');
     }
-    const newTxRef = this.payoutService.generateTxRef('txPayout')
 
-    const payloadPayout = {
-      accountBankCode: transaction.bankCode,
-      accountNumber: transaction.bankAccountNumber,
-      amount: transaction.receiverAmount,
-      destinationCurrency: transaction.receiverCurrency,
-      sourceCurrency: transaction.receiverCurrency,
-      reference: newTxRef,
-      transactionId: String(transaction._id),
-      narration: this.toAlphanumeric(transaction.raisonForTransfer),
-      txRef: newTxRef,
-      userId: userId,
-      type: this.getreceiverAccountType(transaction), // 'bank' | 'mobile_money' | 'wallet'
-    };
-
-    const countryCode = this.toIso2(payloadPayout.destinationCurrency);
-    let headers: any;
-
-    if (countryCode == 'CM') {
-      headers = this.authHeader(); // Use Flutterwave Cameroon (Francophone zone XAF)
-    } else if (countryCode == 'NG') {
-      headers = this.authHeaderNGN(); // Use Flutterwave Nigeria (NGN)
-    } else {
-      // for coming FW accounts
-      headers = this.authHeader();
-    }
     try {
-      const payload = {
-        account_bank: payloadPayout.accountBankCode, // bank or MoMo operator
-        account_number: payloadPayout.accountNumber, // account number or MSISDN
-        amount: Number(payloadPayout.amount),
-        currency: payloadPayout.destinationCurrency,
-        reference: payloadPayout.reference,
-        narration: payloadPayout.narration,
-        debit_currency: payloadPayout.sourceCurrency,
-        beneficiary_name: transaction.receiverName,
-        meta: [
-          {
-            beneficiary_country: this.toIso2(transaction.receiverCountryCode),
-            sender: transaction.senderName,
-            sender_address: transaction.senderCountry,
-            sender_country: transaction.senderCountry,
-            sender_mobile_number: transaction.senderContact,
-          },
-        ],
-      };
-
-      console.log('payload for sending: ', payload);
-
-      const res = await firstValueFrom(
-        this.http.post(`${this.fwBaseUrlV3}/transfers`, payload, {
-          headers,
-        }),
-      );
-
-      // console.log('res of fw: ', res);
-
-      const status = this.normalizeStatus(res.data?.data?.status);
-
-      let doc = await this.payoutService.createPayout(payloadPayout, res);
-
-
-      const resp = { api: 'v3', ...res.data, saved: doc };
       let update = await this.transactionService.updateTransactionStatus(
         transactionId,
-        TStatus.PAYOUTPENDING,
-      );
-      update = await this.transactionService.updateTransactionTxRef(
-        transactionId,
-        newTxRef,
+        TStatus.PAYINSUCCESS,
       );
 
-      return update;
+      console.log('update: ', update);
+
+      return this.payout(transactionId, userId, true);
     } catch (err) {
       if (err.response) {
         console.error('FW Error:', err.response.data);
@@ -772,15 +711,15 @@ export class FlutterwaveService {
   /**
    * Normalisation des statuts V3
    */
-  private normalizeStatus(status: string): string {
-    const map: Record<string, string> = {
-      NEW: 'PROCESSING',
-      PENDING: 'PROCESSING',
-      QUEUED: 'PROCESSING',
-      SUCCESSFUL: 'SUCCESSFUL',
-      FAILED: 'FAILED',
+  private normalizeStatus(status: string): TStatus {
+    const map: Record<string, TStatus> = {
+      NEW: TStatus.PAYOUTPENDING,
+      PENDING: TStatus.PAYOUTPENDING,
+      QUEUED: TStatus.PAYOUTPENDING,
+      SUCCESSFUL: TStatus.PAYOUTSUCCESS,
+      FAILED: TStatus.PAYOUTERROR,
     };
-    return map[status] || 'UNKNOWN';
+    return map[status] || TStatus.PAYOUTPENDING;
   }
 
   async verifyWebhookPayin(req) {
@@ -1283,63 +1222,64 @@ export class FlutterwaveService {
  * @param amount Amount to fund
  * @param currency Currency code, e.g. 'USD'
  */
-async fundVirtualCard(
-  countryWallet: string,
-  cardId: string,
-  amount: number,
-  currency: string = 'USD',
-) {
-  if (!cardId) throw new NotFoundException('cardId required');
-  if (!amount || amount <= 0) throw new HttpException('Amount must be greater than 0', HttpStatus.BAD_REQUEST);
+  async fundVirtualCard(
+    countryWallet: string,
+    cardId: string,
+    amount: number,
+    currency: string = 'USD',
+  ) {
+    if (!cardId) throw new NotFoundException('cardId required');
+    if (!amount || amount <= 0) throw new HttpException('Amount must be greater than 0', HttpStatus.BAD_REQUEST);
 
-  // Choisir la clé selon le wallet
-  let headers: any;
-  if (countryWallet === 'CM') {
-    headers = this.authHeader();
-  } else if (countryWallet === 'NG') {
-    headers = this.authHeaderNGN();
-  } else {
-    headers = this.authHeader();
-  }
-
-  try {
-    const url = `${this.fwBaseUrlV3}/virtual-cards/${encodeURIComponent(cardId)}/fund`;
-    const payload = {
-      amount,
-      currency,
-    };
-
-    const res = await firstValueFrom(this.http.post(url, payload, { headers }));
-    // res.data contient le JSON renvoyé par Flutterwave
-    return res.data;
-  } catch (err: any) {
-    if (err.response) {
-      console.error('FW fundVirtualCard error: ', err.response.data);
-      throw new HttpException(
-        err.response.data,
-        err.response?.status || HttpStatus.BAD_GATEWAY,
-      );
+    // Choisir la clé selon le wallet
+    let headers: any;
+    if (countryWallet === 'CM') {
+      headers = this.authHeader();
+    } else if (countryWallet === 'NG') {
+      headers = this.authHeaderNGN();
+    } else {
+      headers = this.authHeader();
     }
-    console.error('Unexpected fundVirtualCard error: ', err?.message ?? err);
-    throw err;
-  }
-}
-/**
- * Convert a text to alphanumeric
- * @param {string} text - the sentence in param
- * @returns {string} - Cleared sentence
- */
- toAlphanumeric(text) {
-  if (typeof text !== 'string') return '';
 
-  return text
-    // 1. Supprimer les accents et normaliser
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // retire les diacritiques
-    // 2. Remplacer les caractères non alphanumériques par rien
-    .replace(/[^a-zA-Z0-9]/g, '')
-    // 3. Supprimer les espaces (facultatif selon besoin)
-    .trim();
-}
+    try {
+      const url = `${this.fwBaseUrlV3}/virtual-cards/${encodeURIComponent(cardId)}/fund`;
+      const payload = {
+        amount,
+        currency,
+      };
+
+      const res = await firstValueFrom(this.http.post(url, payload, { headers }));
+      // res.data contient le JSON renvoyé par Flutterwave
+      return res.data;
+    } catch (err: any) {
+      if (err.response) {
+        console.error('FW fundVirtualCard error: ', err.response.data);
+        throw new HttpException(
+          err.response.data,
+          err.response?.status || HttpStatus.BAD_GATEWAY,
+        );
+      }
+      console.error('Unexpected fundVirtualCard error: ', err?.message ?? err);
+      throw err;
+    }
+  }
+
+  /**
+   * Convert a text to alphanumeric
+   * @param {string} text - the sentence in param
+   * @returns {string} - Cleared sentence
+   */
+  toAlphanumeric(text) {
+    if (typeof text !== 'string') return '';
+
+    return text
+      // 1. Supprimer les accents et normaliser
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // retire les diacritiques
+      // 2. Remplacer les caractères non alphanumériques par rien
+      .replace(/[^a-zA-Z0-9]/g, '')
+      // 3. Supprimer les espaces (facultatif selon besoin)
+      .trim();
+  }
 
 }
