@@ -577,10 +577,9 @@ export class FlutterwaveService {
     if (!transaction || transaction.status !== TStatus.PAYINSUCCESS) {
       throw new NotFoundException('Transaction not found or not payin success');
     }
-    transaction.reference = transaction.reference
     const newTxRef = this.payoutService.generateTxRef('txPayout');
-    transaction.reference = transaction.reference || newTxRef;
-    transaction.txRef = transaction.txRef || newTxRef;
+    transaction.reference = newTxRef;
+    transaction.txRef = transaction.txRef || newTxRef; // Save old txRef (if it is retry)
 
     const payloadPayout = {
       accountBankCode: transaction.bankCode,
@@ -588,10 +587,10 @@ export class FlutterwaveService {
       amount: transaction.receiverAmount,
       destinationCurrency: transaction.receiverCurrency,
       sourceCurrency: transaction.receiverCurrency,
-      reference: retrying ? newTxRef : transaction.txRef,
+      reference: newTxRef,
       transactionId: String(transaction._id),
       narration: this.toAlphanumeric(transaction.raisonForTransfer),
-      txRef: retrying ? newTxRef : transaction.txRef,
+      txRef: transaction.txRef || newTxRef, // Save old txRef (if it is retry)
       userId: userId,
       type: this.getreceiverAccountType(transaction), // 'bank' | 'mobile_money' | 'wallet'
     };
