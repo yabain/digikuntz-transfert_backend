@@ -17,6 +17,7 @@ import { ConfigService } from '@nestjs/config';
 import { TStatus } from 'src/transaction/transaction.schema';
 import { TransactionService } from 'src/transaction/transaction.service';
 import { randomBytes } from 'crypto';
+import { WhatsappService } from 'src/wa/whatsapp.service';
 
 @Injectable()
 export class PayoutService {
@@ -30,6 +31,7 @@ export class PayoutService {
     @InjectModel(Payout.name)
     private readonly payoutModel: mongoose.Model<PayoutDocument>,
     private transactionService: TransactionService,
+    private whatsappService: WhatsappService,
   ) {
     this.fwSecret = this.config.get<string>('FLUTTERWAVE_SECRET_KEY');
     this.fwSecretNGN = this.config.get<string>('FLUTTERWAVE_SECRET_KEY_NGN');
@@ -169,7 +171,13 @@ export class PayoutService {
             );
             console.log('transaction SUCCESSFUL', transaction);
           // send Email payment success
-          // Send Whatsapp
+          if(transaction.transactionType === 'transfer'){
+          this.whatsappService.sendMessageForTransferReceiver(transaction);
+          this.whatsappService.sendMessageForTransferSender(transaction);
+        } else if (transaction.transactionType === 'withdrawal') {
+          this.whatsappService.sendWithdrawalMessage(transaction);
+        }
+
           console.log('verify payout and update SUCCESS')
         }
         if (payout.status === 'FAILED') {

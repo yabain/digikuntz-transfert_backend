@@ -16,7 +16,7 @@ import {
 
 export class UpdateTransactionDto {
   @IsString()
-  @IsEmpty()
+  @IsOptional()
   invoiceRef: string;
 
   @IsString()
@@ -61,7 +61,6 @@ export class UpdateTransactionDto {
   eventId: Event;
 
   @IsOptional()
-  @IsEmpty({ message: 'You cannot pass user id' })
   userId: User;
 
   @IsEmail()
@@ -71,6 +70,9 @@ export class UpdateTransactionDto {
   @IsString()
   @IsOptional()
   userName: string;
+
+  @IsOptional()
+  raw: any;
 
   @IsString()
   @IsOptional()

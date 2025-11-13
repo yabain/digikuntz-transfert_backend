@@ -24,6 +24,7 @@ import * as mongoose from 'mongoose';
 import { Query } from 'express-serve-static-core';
 import { Payout } from 'src/payout/payout.schema';
 import { PayinService } from 'src/payin/payin.service';
+import { UpdateTransactionDto } from './update-transaction.dto';
 // import { CreateTransactionDto } from './create-transaction.dto';
 
 @Injectable()
@@ -189,7 +190,6 @@ export class TransactionService {
     return res;
   }
 
-
   async getPayoutPendingListByStatus(query?): Promise<any> {
     const resPerPage = Number(query?.resPerPage) || 10;
     const currentPage = Number(query?.page) || 1;
@@ -326,10 +326,10 @@ export class TransactionService {
     );
     if (transaction && transaction.reqStatus === TStatus.PAYINPENDING) {
       transactionData = await this.updateTransaction(transactionData._id, {
-        reqStatus: TStatus.SUCCESS,
+        reqStatusCode: 200,
         message: transactionData.message ? transactionData.message : '',
-        reqErrorCode: '',
-      });
+        reqErrorCode: 0,
+      } as any);
       return {
         success: true,
         status: transactionData.reqStatus,
@@ -483,7 +483,7 @@ export class TransactionService {
 
   async updateTransaction(
     transactionId: string,
-    transactionData: any,
+    transactionData: UpdateTransactionDto,
   ): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(transactionId)) {
       throw new NotFoundException('Invalid transaction ID');

@@ -34,6 +34,7 @@ import {
 import { BalanceService } from 'src/balance/balance.service';
 import { SubscriptionService } from 'src/plans/subscription/subscription.service';
 import { ServicePaymentService } from 'src/service/service-payment/service-payment.service';
+import { WhatsappService } from 'src/wa/whatsapp.service';
 
 @Injectable()
 export class FlutterwaveService {
@@ -57,7 +58,8 @@ export class FlutterwaveService {
     private transactionService: TransactionService,
     private balanceService: BalanceService,
     private subscriptionService: SubscriptionService,
-    private servicePaymentService: ServicePaymentService
+    private servicePaymentService: ServicePaymentService,
+    private whatsappService: WhatsappService,
   ) {
     this.secretHash = this.config.get<string>('FLUTTERWAVE_SECRET_HASH');
     this.fwSecret = this.config.get<string>('FLUTTERWAVE_SECRET_KEY');
@@ -324,7 +326,7 @@ export class FlutterwaveService {
           await this.handleService(transaction);
         }
         if (transaction.transactionType === this.transactionType.WITHDRAWAL) {
-          // await this.handleWithdrawal(transaction);
+          await this.handleWithdrawal(transaction);
         }
         // console.log('updating transaction data')
         await this.transactionService.updateTransactionStatus(
@@ -498,8 +500,9 @@ export class FlutterwaveService {
     }
   }
 
-  handleWithdrawal() {
+  handleWithdrawal(transaction) {
     try {
+      this.whatsappService.sendWithdrawalMessage(transaction);
       // Send notification to user
       console.log('(fw service: handleWithdrawal) handleWithdrawal');
     } catch (err) {
@@ -651,11 +654,23 @@ export class FlutterwaveService {
       const doc = await this.payoutService.createPayout(payloadPayout, res);
 
       const resp = { api: 'v3', ...res.data, saved: doc };
+      // const update = await this.transactionService.updateTransactionStatus(
+      //   transactionId,
+      //   this.normalizeStatus(res.data?.data?.status),
+      //   resp,
+      // );
+
       const update = await this.transactionService.updateTransactionStatus(
         transactionId,
         this.normalizeStatus(res.data?.data?.status),
         resp,
       );
+      
+      await this.transactionService.updateTransactionTxRef(
+        transactionId,
+        newTxRef,
+      );
+      
       console.log('update: ', update)
       return update;
     } catch (err) {

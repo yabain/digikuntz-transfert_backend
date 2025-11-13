@@ -13,18 +13,25 @@ import { Payout, PayoutSchema } from './payout.schema';
 import { TransactionService } from 'src/transaction/transaction.service';
 import { PayoutCron } from './payout.cron';
 import { PayinService } from 'src/payin/payin.service';
+import { WhatsappModule } from 'src/wa/whatsapp.module';
 
 @Module({
   imports: [
     ConfigModule,
     HttpModule,
+    WhatsappModule,
     MongooseModule.forFeature([
       { name: Payin.name, schema: PayinSchema },
       { name: Payout.name, schema: PayoutSchema },
       { name: Transaction.name, schema: TransactionSchema },
     ]),
   ],
-  providers: [PayoutService, PayinService, TransactionService, PayoutCron],
+  providers: [
+    PayoutService,
+    PayinService,
+    TransactionService,
+    PayoutCron
+  ],
   controllers: [PayoutController],
   exports: [PayoutService],
 })

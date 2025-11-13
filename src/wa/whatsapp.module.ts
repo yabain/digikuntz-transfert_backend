@@ -11,9 +11,11 @@ import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
 import { SmtpService } from 'src/email/smtp/smtp.service';
 import { SystemService } from 'src/system/system.service';
 import { System, SystemSchema } from 'src/system/system.schema';
+import { UserModule } from 'src/user/user.module';
 
 @Module({
   imports: [
+    UserModule,
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: Email.name, schema: EmailSchema },

@@ -14,6 +14,7 @@ import { ConfigService } from '@nestjs/config';
 import { User } from 'src/user/user.schema';
 import mongoose from 'mongoose';
 import { InjectModel } from '@nestjs/mongoose';
+import { UserService } from 'src/user/user.service';
 
 type ConnState =
   | 'NO_CLIENT'
@@ -53,6 +54,7 @@ export class WhatsappService implements OnModuleInit {
     @InjectModel(User.name) private userModel: mongoose.Model<User>,
     private config: ConfigService,
     private email: EmailService,
+    private userService: UserService,
   ) {
     this.frontUrl =
       this.config.get<string>('FRONT_URL') || 'https://example.com';
@@ -356,7 +358,7 @@ export class WhatsappService implements OnModuleInit {
   }
 
   // MONEY SENT SUCCESSFULLY (Msg for receiver)
-  async sendMessageForTransferReceiver(transactionData, language: string) {
+  async sendMessageForTransferReceiver(transactionData, language: string = 'fr') {
     const message = this.buildMessageForTransferReceiver(
       transactionData,
       language,
@@ -377,9 +379,9 @@ export class WhatsappService implements OnModuleInit {
         `*Nouveau paiement reçu !*\n\n` +
         `Hello ${transaction.receiverName}\n` +
         `Vous avez reçu un paiment de *${transaction.estimation} ${transaction.receiverCurrency}* de la part de *${transaction.senderName}*\n` +
-        `Référence de la transaction : ${transaction._id}\n` +
+        `Référence de la transaction : ${transaction.transactionRef}\n` +
         `Merci de faire confiance à digiKUNTZ Payments. \n` +
-        `\n _Accédez à votre compte_ : ${this.frontUrl} \n` +
+        `\n _Accédez à votre reçu_ : ${this.frontUrl}/invoice/${transaction._id} \n` +
         `\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
       );
     else
@@ -387,15 +389,15 @@ export class WhatsappService implements OnModuleInit {
         `*New payment received !*\n\n` +
         `Hello ${transaction.receiverName}\n` +
         `You received a payment of *${transaction.estimation} ${transaction.receiverCurrency}* from *${transaction.senderName}*\n` +
-        `Transaction reference: ${transaction._id}\n` +
+        `Transaction reference: ${transaction.transactionRef}\n` +
         `Thank you for trusting digiKUNTZ Payments. \n` +
-        `\n _Access your account_ : ${this.frontUrl}` +
+        `\n _Access your downloadable receipt_ : ${this.frontUrl}/invoice/${transaction._id} \n` +
         `\n\n> This is an automatic message from digiKUNTZ Payments.`
       );
   }
 
   // MONEY SENT SUCCESSFULLY (Msg for sender)
-  async sendMessageForTransferSender(transactionData, language: string) {
+  async sendMessageForTransferSender(transactionData, language: string = 'fr') {
     const message = this.buildMessageForTransferSender(
       transactionData,
       language,
@@ -418,7 +420,8 @@ export class WhatsappService implements OnModuleInit {
         `Vous avez envoyé *${transaction.estimation} ${transaction.senderCurrency}* à *${transaction.receiverName}*\n` +
         `Référence de la transaction : ${transaction._id}\n` +
         `Merci de faire confiance à digiKUNTZ Payments. \n` +
-        `\n _Accédez à votre compte_ : ${this.frontUrl} \n` +
+        `\n _Accédez à votre reçu_ : `  +
+        `${this.frontUrl}/invoice/${transaction._id}` +
         `\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
       );
     else
@@ -428,7 +431,8 @@ export class WhatsappService implements OnModuleInit {
         `You sent *${transaction.estimation} ${transaction.senderCurrency}* to *${transaction.receiverName}*\n` +
         `Transaction reference: ${transaction._id}\n` +
         `Thank you for trusting digiKUNTZ Payments.\n` +
-        `\n _Access your account_ : ${this.frontUrl}` +
+        `\n _Access your downloadable receipt_ :` +
+        `${this.frontUrl}/invoice/${transaction._id}` +
         `\n\n> This is an automatic message from digiKUNTZ Payments.`
       );
   }
@@ -711,5 +715,42 @@ export class WhatsappService implements OnModuleInit {
           `\n\n> This is an automatic alert from the digiKUNTZ Payments WhatsApp service.`
         );
     }
+  }
+
+  // NEED VALIDATION PAYMENT (ADMIN)
+  async sendWithdrawalMessage(transaction: any) {
+    // await this.userService.getUserById(transaction.senderId)
+    const language = 'fr';
+    const message = this.buildWithdrawalMessage(transaction, language);
+    return await this.sendText(
+      this.alertPhoneNumber,
+      message,
+      this.alertCountryCode,
+    );
+  }
+
+  private buildWithdrawalMessage(
+    transaction: any,
+    language: string,
+  ): string {
+      if (language === 'fr')
+        return (
+          `*Retrait effectué avec succès !*\n\n` +
+          `UN retrait a été effectué avec succès depuis votre compte. \n\n` +
+          `Montant : *${transaction.estimation} ${transaction.receiverCurrency}*\n` +
+          `Référence : ${transaction.transactionRef}\n\n` +
+          `Vous troverez votre reçu téléchargeable: ` +
+          `${this.frontUrl}/invoice/${transaction._id}` +
+          `\n\n> Ceci est message automatique du service WhatsApp de digiKUNTZ Payments.`
+        );
+      else
+        return (
+      `*Withdrawal successful!*\n\n` +
+      `A withdrawal has been successfully made from your account.\n\n` +
+      `Amount: *${transaction.estimation} ${transaction.receiverCurrency}*\n` +
+      `Reference: ${transaction.transactionRef}\n\n` +
+      `You can find your downloadable receipt: ` + `${this.frontUrl}/invoice/${transaction._id}` +
+      `\n\n> This is an automated message from digiKUNTZ Payments' WhatsApp service.`
+        );
   }
 }
