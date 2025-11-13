@@ -260,8 +260,13 @@ export class TransactionService {
     return this.payoutModel.findOne({ reference }).lean().exec();
   }
 
+  async getPayoutByTxRef(txRef: string) {
+    return this.payoutModel.findOne({ txRef }).lean().exec();
+  }
+
   async verifyTransactionPayoutStatus(transactionData: any) {
-    const payout: any = await this.getPayout(transactionData.txRef);
+    console.log('verifyTransactionPayoutStatus transactionData', transactionData);
+    const payout: any = await this.getPayoutByTxRef(transactionData.txRef);
     console.log('verifyTransactionPayoutStatus payout', payout);
     if (!payout) {
       return false;
