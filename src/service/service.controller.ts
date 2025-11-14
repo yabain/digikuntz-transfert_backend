@@ -67,7 +67,6 @@ export class ServiceController {
   }
 
   // Get Statistics
-
   @Get('get-statistics')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get statistics about all service (admin only)' })

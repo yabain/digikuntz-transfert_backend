@@ -131,6 +131,17 @@ export class ServicePaymentController {
     return this.servicePaymentService.getServicePaymentsStatistic();
   }
 
+  @Get('item-statistics/:id')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async getItemStatistics(@Param('id') userId: string, @Req() req): Promise<any> {
+    if (!req.user.isAdmin && String(req.user._id) != userId) {
+      throw new NotFoundException('Unautorised');
+    }
+    return this.servicePaymentService.getItemStatistics(userId);
+  }
+
   /**
    * Get expired servicePayments (admin only)
    * @param req - Request object containing user information

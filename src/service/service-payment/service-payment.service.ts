@@ -107,6 +107,18 @@ export class ServicePaymentService {
     return res;
   }
 
+  async getItemStatistics(userId): Promise<any> {
+    const res = await this.serviceModel
+      .find({ userId: userId })
+      .populate('userId')
+      .populate('receiverId')
+      .populate('serviceId');
+    if (!res) {
+      throw new NotFoundException('ServicePayment not found');
+    }
+    return res;
+  }
+
   async getAllServicePayments(query: Query): Promise<ServicePayment[]> {
     const resPerPage = 10;
     const currentPage = Number(query.page) || 1;
