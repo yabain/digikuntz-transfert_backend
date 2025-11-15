@@ -45,6 +45,7 @@ import { OptionsService as PlansOptionsService } from 'src/plans/options/options
 import { Options, OptionsSchema } from 'src/plans/options/options.shema';
 import { Plans, PlansSchema } from 'src/plans/plans.schema';
 import { AppCacheModule } from '../cache/cache.module';
+import { ServicePaymentController } from './service-payment/service-payment.controller';
 
 @Module({
   imports: [
@@ -99,6 +100,6 @@ import { AppCacheModule } from '../cache/cache.module';
     ItemService,
     PlansOptionsService,
   ],
-  controllers: [ServiceController],
+  controllers: [ServiceController, ServicePaymentController],
 })
 export class ServiceModule {}

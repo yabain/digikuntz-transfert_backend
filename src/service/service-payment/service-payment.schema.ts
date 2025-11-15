@@ -11,10 +11,10 @@ import { Transaction } from 'src/transaction/transaction.schema';
 })
 export class ServicePayment extends Document {
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
-  userId: User;
+  userId: User; // Id of user who buy for the service
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
-  receiverId: User; 
+  receiverId: User; // Id of service Author
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Service' })
   serviceId: Service;

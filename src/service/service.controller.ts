@@ -108,7 +108,7 @@ export class ServiceController {
 
   /////
 
-  @Get('planList/:id')
+  @Get('serviceList/:id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get statistics about service of User' })
   @ApiResponse({ status: 200, description: 'Service Statistics.' })

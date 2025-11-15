@@ -131,16 +131,7 @@ export class ServicePaymentController {
     return this.servicePaymentService.getServicePaymentsStatistic();
   }
 
-  @Get('item-statistics/:id')
-  @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'))
-  @UsePipes(ValidationPipe)
-  async getItemStatistics(@Param('id') userId: string, @Req() req): Promise<any> {
-    if (!req.user.isAdmin && String(req.user._id) != userId) {
-      throw new NotFoundException('Unautorised');
-    }
-    return this.servicePaymentService.getItemStatistics(userId);
-  }
+
 
   /**
    * Get expired servicePayments (admin only)
@@ -298,6 +289,12 @@ export class ServicePaymentController {
   async verifyServicePaymentWithUserId(@Param('planId') allId: string): Promise<any> {
     const [planId, userId] = allId.split('AAA');
     return this.servicePaymentService.verifyServicePayment(userId, planId);
+  }
+
+  @Get('item-statistics/:id')
+  @ApiBearerAuth()
+  async getItemStatistics(@Param('id') userId: string, @Req() req): Promise<any> {
+    return this.servicePaymentService.getItemStatistics(userId);
   }
 
   /**

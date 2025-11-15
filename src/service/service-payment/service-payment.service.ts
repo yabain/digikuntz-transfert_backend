@@ -108,14 +108,23 @@ export class ServicePaymentService {
   }
 
   async getItemStatistics(userId): Promise<any> {
-    const res = await this.serviceModel
-      .find({ userId: userId })
-      .populate('userId')
-      .populate('receiverId')
-      .populate('serviceId');
-    if (!res) {
-      throw new NotFoundException('ServicePayment not found');
-    }
+    const res = await this.serviceModel.aggregate([
+      { $match: { receiverId: new mongoose.Types.ObjectId(userId) } },
+      {
+        $group: {
+          _id: '$serviceId',
+          quantity: { $sum: '$quantity' }
+        }
+      },
+      {
+        $project: {
+          serviceId: '$_id',
+          quantity: 1,
+          _id: 0
+        }
+      }
+    ]);
+    
     return res;
   }
 
