@@ -33,7 +33,7 @@ export class ExchangeService {
     let exchangeRate: any = await this.exchangeModel.find({});
     exchangeRate = exchangeRate[0];
 
-    if (this.isMoreThan180MinutesPast(exchangeRate.timestamp)) {
+    if (this.isMoreThan24HoursPast(exchangeRate.timestamp)) {
       exchangeRate = await this.getExchangeRateOnLine();
       exchangeRate = await this.updateExchangeRate(exchangeRate);
     }
@@ -124,10 +124,10 @@ export class ExchangeService {
     return resp;
   }
 
-  isMoreThan180MinutesPast(timestamp) {
+  isMoreThan24HoursPast(timestamp) {
     const now = Date.now();
     const inputTime = timestamp * 1000;
-    const differenceInMinutes = (now - inputTime) / (1000 * 60 * 3);
+    const differenceInMinutes = (now - inputTime) / (1000 * 60 * 24);
     // console.log('differenceInMinutes', differenceInMinutes);
     return differenceInMinutes > 15;
   }
