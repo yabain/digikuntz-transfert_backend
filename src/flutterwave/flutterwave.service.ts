@@ -685,6 +685,7 @@ export class FlutterwaveService {
 
   async retryPayout(transactionId: string, userId) {
     const transaction = await this.transactionService.findById(transactionId);
+    console.log('transactionData', transaction);
     if (!transaction || transaction.status !== TStatus.PAYOUTERROR) {
       throw new NotFoundException('Transaction not found or not payin success or not in payout error');
     }
