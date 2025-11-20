@@ -15,11 +15,11 @@ export class OptionsServiceService {
     private optionsModel: mongoose.Model<OptionsServiceService>,
   ) {}
 
-  async getAllOptionsOfService(plansId): Promise<OptionsServiceService[]> {
-      if (!mongoose.Types.ObjectId.isValid(plansId)) {
+  async getAllOptionsOfService(serviceId): Promise<OptionsServiceService[]> {
+      if (!mongoose.Types.ObjectId.isValid(serviceId)) {
         throw new NotFoundException('Invalid plan ID');
       }
-    const optionsList = await this.optionsModel.find({ plansId });
+    const optionsList = await this.optionsModel.find({ serviceId });
     if(!optionsList){
       return [];
     }
@@ -28,7 +28,7 @@ export class OptionsServiceService {
 
   async creatOptions(
     options: unknown,
-    plansId: any,
+    serviceId: any,
     session?: ClientSession,
   ): Promise<any[]> {
     let list: any;
@@ -44,10 +44,12 @@ export class OptionsServiceService {
     }
 
     console.log('option list:', list);
+    console.log('serviceId:', serviceId);
 
     let res: any[] = [];
     for (const option of list) {
-      const optionData: any = { ...option, plansId };
+      const optionData: any = { ...option, serviceId };
+      console.log('optionData:', optionData);
       const addData = await this.optionsModel.create(optionData);
       res = [...res, addData];
     }

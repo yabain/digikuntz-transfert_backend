@@ -176,6 +176,7 @@ export class ServiceService {
       }
 
       const planOption = await this.optionsService.getAllOptionsOfService(plan._id);
+      console.log('option', planOption);
       return { ...plan, options: planOption };
     } catch (error) {
       if (error instanceof NotFoundException) {

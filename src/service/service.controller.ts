@@ -136,9 +136,9 @@ export class ServiceController {
   }
 
   @Post('new')
-  @ApiOperation({ summary: 'Create a new plan' })
+  @ApiOperation({ summary: 'Create a new service' })
   @ApiBody({ type: CreateServiceDto })
-  @ApiResponse({ status: 201, description: 'plan created.' })
+  @ApiResponse({ status: 201, description: 'service created.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async createService(@Body() service: any, @Req() req): Promise<any> {
