@@ -859,20 +859,88 @@ export class FlutterwaveService {
     duration?: number | null;
     description?: string;
   }) {
-    console.log('createPaymentPlan: ', planDto);
+    console.log('Payload', planDto);
+    // Accept JSON string payloads (common with some clients)
+    if (typeof planDto === 'string') {
+      try {
+        planDto = JSON.parse(planDto) as any;
+      } catch {
+        throw new HttpException(
+          { message: 'Invalid JSON payload' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+
+    // Support envelope { data: {...} }
+    if (
+      planDto &&
+      typeof planDto === 'object' &&
+      (planDto as any).data &&
+      typeof (planDto as any).data === 'object'
+    ) {
+      planDto = (planDto as any).data as any;
+    }
+
+    // Defensive: ensure we have an object
+    if (!planDto || typeof planDto !== 'object') {
+      throw new HttpException(
+        {
+          message:
+            'Payload is required. Hint: send JSON with Content-Type: application/json',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const allowedIntervals = new Set([
+      'daily',
+      'weekly',
+      'monthly',
+      'quarterly',
+      'biannually',
+      'annually',
+    ]);
+
+    // Basic validation to avoid useless calls to FW
+    if (!planDto?.name || typeof planDto.name !== 'string') {
+      throw new HttpException(
+        { message: 'Plan name is required' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (!planDto?.interval || !allowedIntervals.has(planDto.interval)) {
+      throw new HttpException(
+        { message: `Interval must be one of: ${[...allowedIntervals].join(', ')}` },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (!planDto?.amount || Number(planDto.amount) <= 0) {
+      throw new HttpException(
+        { message: 'Amount must be greater than 0' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const currency = planDto.currency || 'XAF';
+
     try {
       const payload: any = {
         name: String(planDto.name),
-        amount: planDto.amount,
+        amount: Number(planDto.amount), // Flutterwave expects a number (major units)
         interval: planDto.interval,
-        currency: planDto.currency || 'XAF',
+        currency,
       };
       if (planDto.duration != null) payload.duration = planDto.duration;
       if (planDto.description) payload.description = planDto.description;
 
+      // Choose the correct key depending on currency/wallet
+      const headers =
+        currency.toUpperCase() === 'NGN' ? this.authHeaderNGN() : this.authHeader();
+
       const res = await firstValueFrom(
         this.http.post(`${this.fwBaseUrlV3}/payment-plans`, payload, {
-          headers: this.authHeader(),
+          headers,
         }),
       );
 

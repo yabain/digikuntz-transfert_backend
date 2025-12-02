@@ -132,6 +132,32 @@ export class FlutterwaveController {
     return this.fw.verifyPayout(reference);
   }
 
+  @Get('payment-plans')
+  // @UseGuards(AuthGuard('jwt'))
+  // @UsePipes(ValidationPipe)
+  listPaymentPlans(@Query() query: ExpressQuery, @Req() req) {
+    // if (!req.user.isAdmin) {
+    //   throw new NotFoundException('Unautorised');
+    // }
+    // Supports optional pagination params: page, perPage
+    return this.fw.getPaymentPlans({
+      page: query?.page as any,
+      perPage: query?.perPage as any,
+    });
+  }
+
+  // Create a Flutterwave payment plan (subscription plan)
+  @Post('payment-plans')
+  // @UseGuards(AuthGuard('jwt'))
+  // @UsePipes(ValidationPipe)
+  createPaymentPlan(@Body() planPayload: any, @Req() req) {
+    console.log('Payload', planPayload)
+    // if (!req.user.isAdmin) {
+    //   throw new NotFoundException('Unautorised');
+    // }
+    return this.fw.createPaymentPlan(planPayload);
+  }
+
   @Get('open-payin/:id')
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
