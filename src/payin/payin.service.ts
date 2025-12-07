@@ -343,9 +343,12 @@ export class PayinService {
     return this.payinModel.findById(payinId).lean().exec();
   }
 
-
   async getPayinByTxRef(txRef: string) {
     return this.payinModel.findOne({ txRef }).lean().exec();
+  }
+
+  async getPayinByTransactionId(transactionId: string) {
+    return this.payinModel.findOne({ transactionId }).lean().exec();
   }
 
   async getPayinStatus(txRef: string) {

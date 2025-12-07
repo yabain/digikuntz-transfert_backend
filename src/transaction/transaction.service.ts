@@ -215,6 +215,65 @@ export class TransactionService {
     return res;
   }
 
+  async getPayinPendingListByStatus(query?): Promise<any> {
+    const resPerPage = Number(query?.resPerPage) || 10;
+    const currentPage = Number(query?.page) || 1;
+    const skip = resPerPage * (currentPage - 1);
+
+    const sixtyMinutesAgo = new Date();
+    sixtyMinutesAgo.setMinutes(sixtyMinutesAgo.getMinutes() - 60);
+
+    const res = await this.transactionModel.aggregate([
+      {
+        $match: {
+          $and: [
+            {
+              status: 'transaction_payin_pending',
+            },
+            {
+              updatedAt: { $lt: sixtyMinutesAgo },
+            },
+          ],
+        },
+      },
+      { $skip: skip },
+      { $limit: resPerPage },
+    ]);
+
+    return res;
+  }
+
+  async getPayinByTxRef(txRef: string) {
+    return this.payoutModel.findOne({ txRef }).lean().exec();
+  }
+
+  async verifyTransactionPayinStatus(transactionData: any) {
+    let payin: any = await this.payinService.getPayinByTxRef(transactionData.txRef);
+    console.log('transaction payin 00: ', payin)
+    if (!payin) {
+      console.log('no Payin found using txRef');
+      payin = await this.payinService.getPayinByTransactionId(transactionData._id);
+      console.log('transaction payin: ', payin)
+      if (!payin) {
+        return this.updateTransactionStatus(
+          transactionData._id,
+          TStatus.PAYINERROR,
+        );
+      }
+    }
+    if (payin.status === 'successful') {
+      return this.updateTransactionStatus(
+        transactionData._id,
+        TStatus.PAYINSUCCESS,
+      );
+    } else if (payin.status === 'failed') {
+      return this.updateTransactionStatus(
+        transactionData._id,
+        TStatus.PAYINERROR,
+      );
+    } else return false;
+  }
+
   async findById(transactionId: string): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(transactionId)) {
       throw new NotFoundException('Invalid event ID');
@@ -266,10 +325,14 @@ export class TransactionService {
 
   async verifyTransactionPayoutStatus(transactionData: any) {
     console.log('verifyTransactionPayoutStatus transactionData', transactionData);
-    const payout: any = await this.getPayoutByTxRef(transactionData.txRef);
+    let payout: any = await this.getPayoutByTxRef(transactionData.txRef);
     console.log('verifyTransactionPayoutStatus payout', payout);
     if (!payout) {
+      console.log('no Payout found using txRef');
+      payout = await this.getPayout(transactionData.txRef);
+      if (!payout) {
       return false;
+      }
     }
     if (payout.status === 'SUCCESSFUL') {
       return this.updateTransactionStatus(
@@ -281,7 +344,7 @@ export class TransactionService {
         transactionData._id,
         TStatus.PAYOUTERROR,
       );
-    } else return true;
+    } else return false;
   }
 
   async updateTransactionStatus(

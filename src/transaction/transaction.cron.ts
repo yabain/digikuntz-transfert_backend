@@ -26,12 +26,20 @@ export class TransactionCron {
     try {
       this.logger.debug('Cron check processing Transaction');
     const resPerPage = {
-      resPerPage: 1000,
+      resPerPage: 500,
       page: 1,
     };
+    this.handlePayoutPendinding(resPerPage);
+    this.handlePayinPendinding(resPerPage);
+    } finally {
+      this.isRunning = false;
+    }
+  }
+
+  async handlePayoutPendinding(resPerPage): Promise<any>{
     const pending: any =
       await this.transactionService.getPayoutPendingListByStatus(resPerPage);
-    // console.log('(Transaction Cron) Verify transaction: ', pending);
+    console.log('(Transaction Cron) Verify transaction Payout: ', pending);
       for (const t of pending) {
         try {
           await this.transactionService.verifyTransactionPayoutStatus(t);
@@ -41,8 +49,20 @@ export class TransactionCron {
           );
         }
       }
-    } finally {
-      this.isRunning = false;
-    }
+  }
+
+  async handlePayinPendinding(resPerPage): Promise<any>{
+    const pending: any =
+      await this.transactionService.getPayinPendingListByStatus(resPerPage);
+    console.log('(Transaction Cron) Verify transaction Payin: ', pending);
+      for (const t of pending) {
+        try {
+          await this.transactionService.verifyTransactionPayinStatus(t);
+        } catch (err) {
+          this.logger.warn(
+            '(Transaction Cron) Error verifying transaction ' + t.reference + ' : ' + err.message,
+          );
+        }
+      }
   }
 }
