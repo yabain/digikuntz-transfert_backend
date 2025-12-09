@@ -222,16 +222,30 @@ export class WhatsappService implements OnModuleInit {
     }
   }
 
-  /** Envoi d’un message texte */
+  /** Envoi d'un message texte */
   async sendText(to: string, message: string, countryCode?: string) {
     this.assertClient();
-    await this.ensureInjectionReady();
+    
+    try {
+      await this.ensureInjectionReady();
+    } catch (e: any) {
+      const errorMessage = e?.message ?? String(e);
+      this.logger.error(`Failed to ensure injection ready: ${errorMessage}`);
+      this.currentFailNumber++;
+      await this.checkForMassFailure();
+      return { 
+        success: false, 
+        error: errorMessage.includes('Session closed') 
+          ? 'WhatsApp session closed. Please wait for reconnection or check service status.'
+          : 'WhatsApp service not ready. Please try again later.'
+      };
+    }
 
     try {
       const phone = this.formatPhone(to, countryCode);
       const wid = await this.client!.getNumberId(phone); // null si non WhatsApp
       if (!wid?._serialized) {
-        // ★ échec logique d’envoi -> incrément + check
+        // ★ échec logique d'envoi -> incrément + check
         this.currentFailNumber++;
         await this.checkForMassFailure();
         return { success: false, error: 'Recipient is not on WhatsApp' };
@@ -243,13 +257,32 @@ export class WhatsappService implements OnModuleInit {
       return { success: true };
     } catch (e: any) {
       // ★ échec technique -> incrément + check
+      const errorMessage = e?.message ?? String(e);
+      this.logger.error(`Failed to send message: ${errorMessage}`);
       this.currentFailNumber++;
       await this.checkForMassFailure();
-      return { success: false, error: e?.message || 'Send failed' };
+      
+      // Détecter si c'est une erreur de session fermée
+      if (
+        errorMessage.includes('Session closed') ||
+        errorMessage.includes('Protocol error') ||
+        errorMessage.includes('Target closed')
+      ) {
+        this.ready = false;
+        this.lastState = 'UNKNOWN';
+        // Tenter de réinitialiser en arrière-plan
+        void this.reinitialize().catch(() => {});
+        return { 
+          success: false, 
+          error: 'WhatsApp session closed. Reinitializing... Please try again in a few moments.'
+        };
+      }
+      
+      return { success: false, error: errorMessage || 'Send failed' };
     }
   }
 
-  /** Envoi d’un média (via URL) + légende optionnelle */
+  /** Envoi d'un média (via URL) + légende optionnelle */
   async sendMediaUrl(
     to: string,
     fileUrl: string,
@@ -257,13 +290,27 @@ export class WhatsappService implements OnModuleInit {
     countryCode?: string,
   ) {
     this.assertClient();
-    await this.ensureInjectionReady();
+    
+    try {
+      await this.ensureInjectionReady();
+    } catch (e: any) {
+      const errorMessage = e?.message ?? String(e);
+      this.logger.error(`Failed to ensure injection ready: ${errorMessage}`);
+      this.currentFailNumber++;
+      await this.checkForMassFailure();
+      return { 
+        success: false, 
+        error: errorMessage.includes('Session closed') 
+          ? 'WhatsApp session closed. Please wait for reconnection or check service status.'
+          : 'WhatsApp service not ready. Please try again later.'
+      };
+    }
 
     try {
       const phone = this.formatPhone(to, countryCode);
       const wid = await this.client!.getNumberId(phone);
       if (!wid?._serialized) {
-        // ★ échec logique d’envoi -> incrément + check
+        // ★ échec logique d'envoi -> incrément + check
         this.currentFailNumber++;
         await this.checkForMassFailure();
         return { success: false, error: 'Recipient is not on WhatsApp' };
@@ -277,9 +324,28 @@ export class WhatsappService implements OnModuleInit {
       return { success: true };
     } catch (e: any) {
       // ★ échec technique -> incrément + check
+      const errorMessage = e?.message ?? String(e);
+      this.logger.error(`Failed to send media: ${errorMessage}`);
       this.currentFailNumber++;
       await this.checkForMassFailure();
-      return { success: false, error: e?.message || 'Send failed' };
+      
+      // Détecter si c'est une erreur de session fermée
+      if (
+        errorMessage.includes('Session closed') ||
+        errorMessage.includes('Protocol error') ||
+        errorMessage.includes('Target closed')
+      ) {
+        this.ready = false;
+        this.lastState = 'UNKNOWN';
+        // Tenter de réinitialiser en arrière-plan
+        void this.reinitialize().catch(() => {});
+        return { 
+          success: false, 
+          error: 'WhatsApp session closed. Reinitializing... Please try again in a few moments.'
+        };
+      }
+      
+      return { success: false, error: errorMessage || 'Send failed' };
     }
   }
 
@@ -290,7 +356,7 @@ export class WhatsappService implements OnModuleInit {
       this.logger.warn('Client not ready yet, tentative d’envoi…');
   }
 
-  /** ping d’injection: échoue tant que l’injection n’est pas prête */
+  /** ping d'injection: échoue tant que l'injection n'est pas prête */
   private async ensureInjectionReady(timeoutMs = 20_000) {
     if (!this.client) throw new Error('Client not initialized');
     const start = Date.now();
@@ -299,13 +365,42 @@ export class WhatsappService implements OnModuleInit {
       try {
         await this.client.getChats();
         return;
-      } catch (e) {
+      } catch (e: any) {
         lastErr = e;
+        const errorMessage = e?.message ?? String(e);
+        
+        // Détecter si la session est fermée
+        if (
+          errorMessage.includes('Session closed') ||
+          errorMessage.includes('Protocol error') ||
+          errorMessage.includes('Target closed')
+        ) {
+          this.logger.warn('Session closed detected, attempting to reinitialize...');
+          this.ready = false;
+          this.lastState = 'UNKNOWN';
+          
+          // Tenter de réinitialiser le client
+          try {
+            await this.reinitialize();
+            // Attendre un peu après la réinitialisation
+            await new Promise((r) => setTimeout(r, 2000));
+            // Réessayer une fois après réinitialisation
+            if (this.client) {
+              await this.client.getChats();
+              return;
+            }
+          } catch (reinitErr) {
+            this.logger.error('Failed to reinitialize client: ' + (reinitErr?.message ?? reinitErr));
+          }
+          
+          throw new Error('Session closed and reinitialization failed');
+        }
+        
         await new Promise((r) => setTimeout(r, 300));
       }
     }
     this.logger.error('Injection timeout: ' + (lastErr?.message ?? lastErr));
-    throw new Error('Injection not ready');
+    throw new Error('Injection not ready: ' + (lastErr?.message ?? 'Timeout'));
   }
 
   private formatPhone(to: string, cc?: string) {
