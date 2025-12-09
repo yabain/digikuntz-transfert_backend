@@ -195,6 +195,9 @@ export class TransactionService {
     const currentPage = Number(query?.page) || 1;
     const skip = resPerPage * (currentPage - 1);
 
+    const sixtyMinutesAgo = new Date();
+    sixtyMinutesAgo.setMinutes(sixtyMinutesAgo.getMinutes() - 300);
+
     const res = await this.transactionModel.aggregate([
       {
         $match: {
@@ -204,7 +207,12 @@ export class TransactionService {
                 $in: ['transaction_payout_pending'],
               },
             },
-            { transactionType: { $in: ['transfer', 'withdrawal'] } },
+            {
+              transactionType: { $in: ['transfer', 'withdrawal'] }
+            },
+            {
+              updatedAt: { $lt: sixtyMinutesAgo },
+            },
           ],
         },
       },
@@ -221,7 +229,7 @@ export class TransactionService {
     const skip = resPerPage * (currentPage - 1);
 
     const sixtyMinutesAgo = new Date();
-    sixtyMinutesAgo.setMinutes(sixtyMinutesAgo.getMinutes() - 60);
+    sixtyMinutesAgo.setMinutes(sixtyMinutesAgo.getMinutes() - 300);
 
     const res = await this.transactionModel.aggregate([
       {
@@ -265,6 +273,11 @@ export class TransactionService {
       return this.updateTransactionStatus(
         transactionData._id,
         TStatus.PAYINSUCCESS,
+      );
+    } else if (payin.status === 'cancelled') {
+      return this.updateTransactionStatus(
+        transactionData._id,
+        TStatus.PAYINCLOSED,
       );
     } else if (payin.status === 'failed') {
       return this.updateTransactionStatus(
