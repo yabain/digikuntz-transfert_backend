@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -47,7 +47,7 @@ import { WhatsappModule } from 'src/wa/whatsapp.module';
       { name: Smtp.name, schema: SmtpSchema },
       { name: System.name, schema: SystemSchema },
     ]),
-    WhatsappModule,
+    forwardRef(() => WhatsappModule),
   ],
   controllers: [AuthController],
   providers: [
@@ -59,6 +59,6 @@ import { WhatsappModule } from 'src/wa/whatsapp.module';
     // WhatsappService,
     SystemService,
   ],
-  exports: [JwtStrategy, PassportModule],
+  exports: [JwtStrategy, PassportModule, AuthService],
 })
 export class AuthModule {}

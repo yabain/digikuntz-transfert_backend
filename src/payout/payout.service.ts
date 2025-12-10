@@ -7,6 +7,8 @@ import {
   HttpException,
   HttpStatus,
   NotFoundException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type mongoose from 'mongoose';
@@ -31,6 +33,7 @@ export class PayoutService {
     @InjectModel(Payout.name)
     private readonly payoutModel: mongoose.Model<PayoutDocument>,
     private transactionService: TransactionService,
+    @Inject(forwardRef(() => WhatsappService))
     private whatsappService: WhatsappService,
   ) {
     this.fwSecret = this.config.get<string>('FLUTTERWAVE_SECRET_KEY');

@@ -151,7 +151,7 @@ export class FlutterwaveController {
   // @UseGuards(AuthGuard('jwt'))
   // @UsePipes(ValidationPipe)
   createPaymentPlan(@Body() planPayload: any, @Req() req) {
-    console.log('Payload', planPayload)
+    console.log('Payload', planPayload);
     // if (!req.user.isAdmin) {
     //   throw new NotFoundException('Unautorised');
     // }
@@ -175,7 +175,6 @@ export class FlutterwaveController {
     return this.fw.createVirtualCard(countryWallet, cardPayload);
   }
 
-
   @Get('get-cards-list/:countryWallet')
   // @UseGuards(AuthGuard('jwt'))
   // @UsePipes(ValidationPipe)
@@ -184,5 +183,13 @@ export class FlutterwaveController {
     //   throw new NotFoundException('Unautorised');
     // }
     return this.fw.getVirtualCards(countryWallet);
+  }
+
+
+  /// Test handling
+  @Post('test-withdrawal')
+  handleWithdrawal(@Body() transactionData: any) {
+    console.log('(fw controller) withdrawal: ', transactionData);
+    return this.fw.handleTestWithdrawal(transactionData);
   }
 }

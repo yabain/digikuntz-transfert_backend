@@ -11,6 +11,8 @@ import {
   Injectable,
   NotFoundException,
   UnauthorizedException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
@@ -58,8 +60,9 @@ export class FlutterwaveService {
     private transactionService: TransactionService,
     private balanceService: BalanceService,
     private subscriptionService: SubscriptionService,
-    private servicePaymentService: ServicePaymentService,
-    private whatsappService: WhatsappService,
+  private servicePaymentService: ServicePaymentService,
+  @Inject(forwardRef(() => WhatsappService))
+  private whatsappService: WhatsappService,
   ) {
     this.secretHash = this.config.get<string>('FLUTTERWAVE_SECRET_HASH');
     this.fwSecret = this.config.get<string>('FLUTTERWAVE_SECRET_KEY');
@@ -469,6 +472,7 @@ export class FlutterwaveService {
         transaction.senderCurrency,
       );
 
+      this.whatsappService.sendNewSubscriberMessage(transaction.userId, transaction.planId);
       // Send notification
     } catch (err) {
       // console.log('(fw service: handleSubscription) Error: ', err);
@@ -488,9 +492,8 @@ export class FlutterwaveService {
         Number(transaction.estimation),
         transaction.senderCurrency,
       );
+      this.whatsappService.sendServiceMessage(transaction);
       return creditBalance;
-
-      // Send notification
     } catch (err) {
       // console.log('(fw service: handleSubscription) Error: ', err);
       return {
@@ -503,7 +506,6 @@ export class FlutterwaveService {
   handleWithdrawal(transaction) {
     try {
       this.whatsappService.sendWithdrawalMessage(transaction);
-      // Send notification to user
       console.log('(fw service: handleWithdrawal) handleWithdrawal');
     } catch (err) {
       // console.log('(fw service: handleWithdrawal) Error: ', err);
@@ -1365,4 +1367,14 @@ export class FlutterwaveService {
       .trim();
   }
 
+  async handleTestWithdrawal(transactionData: any) {
+    try {
+      this.handleWithdrawal(transactionData);
+    } catch (err) {
+      return {
+        message: '(fw service: handleTestWithdrawal) Error: ' + err,
+        status: 'error',
+      };
+    }
+  }
 }

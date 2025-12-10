@@ -102,7 +102,7 @@ export class CountryService {
     countryData: CreateCountryDto,
   ): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(countryId)) {
-      throw new NotFoundException('Invalid event ID');
+      throw new NotFoundException('Invalid country ID');
     }
 
     const user = await this.countryModel.findByIdAndUpdate(

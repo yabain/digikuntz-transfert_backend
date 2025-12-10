@@ -6,7 +6,7 @@
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { Query } from 'express-serve-static-core';
 import { InjectModel } from '@nestjs/mongoose';
 import { Subscription } from './subscription.schema';
@@ -25,6 +25,7 @@ export class SubscriptionService {
     private subscriptionModel: mongoose.Model<Subscription>,
     private itemService: ItemService,
     private optionsService: OptionsService,
+    @Inject(forwardRef(() => WhatsappService))
     private whatsappService: WhatsappService,
     private userService: UserService,
   ) {}

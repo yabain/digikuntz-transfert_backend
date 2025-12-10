@@ -289,7 +289,7 @@ export class TransactionService {
 
   async findById(transactionId: string): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(transactionId)) {
-      throw new NotFoundException('Invalid event ID');
+      throw new NotFoundException('Invalid transaction ID');
     }
 
     // Find the transaction and populate related data (user and event)
@@ -727,7 +727,7 @@ export class TransactionService {
   // ------------------- User transactions statistic
   async getTransactionsStatisticsOfUser(userId: string): Promise<any>{
     if (!mongoose.Types.ObjectId.isValid(userId)) {
-      throw new NotFoundException('Invalid event ID');
+      throw new NotFoundException('Invalid user ID');
     }
     const totalTransactions = await this.getTotalTransferTransactionOfUser(userId);
     const totalPayinTransactions = await this.payinService.getTotalTransactionOfUser(userId);
@@ -750,7 +750,7 @@ export class TransactionService {
 
   async getTotalWithdrawalTransactionOfUser(userId: string): Promise<number> {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
-      throw new NotFoundException('Invalid event ID');
+      throw new NotFoundException('Invalid user ID');
     }
     return await this.transactionModel.countDocuments({
       transactionType: 'withdrawal',
@@ -760,7 +760,7 @@ export class TransactionService {
 
   async getTotalTransactionOfUser(userId: string): Promise<number> {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
-      throw new NotFoundException('Invalid event ID');
+      throw new NotFoundException('Invalid user ID');
     }
     return await this.transactionModel.countDocuments({
       userId: userId

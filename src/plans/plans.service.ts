@@ -6,7 +6,7 @@
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { Query } from 'express-serve-static-core';
 import { InjectModel } from '@nestjs/mongoose';
 import * as mongoose from 'mongoose';
@@ -29,8 +29,10 @@ export class PlansService {
     private itemService: ItemService,
     private optionsService: OptionsService,
     private fwService: FlutterwaveService,
+    @Inject(forwardRef(() => AuthService))
     private authService: AuthService,
     private subscriptionService: SubscriptionService,
+    @Inject(forwardRef(() => WhatsappService))
     private waService: WhatsappService,
     private userService: UserService,
   ) {}

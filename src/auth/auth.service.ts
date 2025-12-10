@@ -11,6 +11,8 @@ import {
   ConflictException,
   NotFoundException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -31,6 +33,7 @@ export class AuthService {
     private revokedTokenModel: Model<RevokedToken>, // Injectez le modèle pour les tokens révoqués
     private jwtService: JwtService, // Injecting the JwtService for token generation
     private emailService: EmailService,
+    @Inject(forwardRef(() => WhatsappService))
     private whatsappService: WhatsappService,
   ) { }
 
