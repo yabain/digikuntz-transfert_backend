@@ -894,12 +894,22 @@ export class SubscriptionController {
     return this.subscriptionService.getSubscriptionsOfPlan(planId);
   }
 
-  @Get('get-user-subscription/:userId')
+  @Get('get-user-subscription/:planId')
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getSubscriptionsOfUser(
-    @Param('userId') planId: any,
+    @Param('planId') planId: any,
   ): Promise<any> {
     return this.subscriptionService.getSubscriptionsOfUser(planId);
+  }
+
+  @Get('get-items/:ids')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async getSubscriptionsItemsOfUser(
+    @Param('ids') ids: any,
+  ): Promise<any> {
+    const [subscriptionId, subscriberId] = ids.split('AAA');
+    return this.subscriptionService.getSubscriptionsItemsOfUser(subscriptionId, subscriberId);
   }
 }

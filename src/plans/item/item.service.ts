@@ -39,7 +39,8 @@ export class ItemService {
       subscriptionId = new mongoose.Types.ObjectId(subscriptionId);
     }
 
-    const items = await this.itemModel.find({ subscriptionId }).exec();
+    const items = await this.itemModel.find({ subscriptionId }).populate('plansId');
+
     if (!items) {
       throw new NotFoundException('items not found');
     }

@@ -17,6 +17,7 @@ import { UpdateSubscriptionDto } from './update-subscription.dto';
 import { ItemService } from '../item/item.service';
 import { WhatsappService } from 'src/wa/whatsapp.service';
 import { UserService } from 'src/user/user.service';
+import { Item } from '../item/item.shema';
 
 @Injectable()
 export class SubscriptionService {
@@ -613,6 +614,13 @@ export class SubscriptionService {
 
   async getSubscriptionsOfUser(userId: string): Promise<Subscription[]> {
     return await this.subscriptionModel.find({ userId }).populate('planId');
+  }
+
+  async getSubscriptionsItemsOfUser(subscriptionId, subscriberId): Promise<Item[]> {
+    const allItems = await this.itemService.getItemBySubscriptionId(subscriptionId);
+    console.log('allItems: ', allItems);
+    const items = allItems.filter(item => item.userId.toString() === subscriberId.toString());
+    return items;
   }
 
   // Retrieves all subscriptions, those where dateStart != dateEnd (because if dateStart === dateEnd, it's a subscription without payment, created by the plan owner),

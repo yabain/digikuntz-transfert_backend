@@ -18,10 +18,10 @@ export class Item extends Document {
   subscriptionId: Subscription;
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
-  userId: User;
+  userId: User; // Subscriber Id
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
-  receiverId: User;
+  receiverId: User; // PlanAuthor Id
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Transaction' })
   transactionId: Transaction;
