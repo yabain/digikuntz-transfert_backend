@@ -614,4 +614,28 @@ export class SubscriptionService {
   async getSubscriptionsOfUser(userId: string): Promise<Subscription[]> {
     return await this.subscriptionModel.find({ userId }).populate('planId');
   }
+
+  // Retrieves all subscriptions, those where dateStart != dateEnd (because if dateStart === dateEnd, it's a subscription without payment, created by the plan owner),
+  // Checks if one or more items exist where subscriptionId = subscription_id
+  // If they exist, do nothing; if they don't exist, create an item for the subscription
+  async updateItemList(): Promise<any>{
+    const subscriptions = await this.subscriptionModel.find();
+    for (const subscription of subscriptions) {
+      const itemList = await this.itemService.getItemBySubscriptionId(subscription._id);
+      console.log('itemList length: ', itemList.length);
+      if (itemList && itemList.length > 0) console.log('itemList exist');
+      else {
+        if (subscription.startDate.getTime() === subscription.endDate.getTime()) continue;
+        console.log('createItemForUpdate start with: ', subscription);
+        await this.itemService.createItemForUpdate({
+          plansId: subscription.planId,
+          subscriptionId: subscription._id,
+          userId: subscription.userId,
+          receiverId: subscription.receiverId,
+          dateStart: subscription.startDate.toISOString(),
+          dateEnd: subscription.endDate.toISOString()
+        });
+      }
+    }
+  }
 }

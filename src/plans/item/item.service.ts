@@ -21,6 +21,32 @@ export class ItemService {
     private emailService: EmailService,
   ) {}
 
+  async getItemById(itemId: any): Promise<any> {
+    if (!mongoose.Types.ObjectId.isValid(itemId)) {
+      itemId = new mongoose.Types.ObjectId(itemId);
+    }
+
+    const item = await this.itemModel.findById({ itemId }).exec();
+    if (!item) {
+      throw new NotFoundException('items not found');
+    }
+
+    return item;
+  }
+
+  async getItemBySubscriptionId(subscriptionId: any): Promise<any> {
+    if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {
+      subscriptionId = new mongoose.Types.ObjectId(subscriptionId);
+    }
+
+    const items = await this.itemModel.find({ subscriptionId }).exec();
+    if (!items) {
+      throw new NotFoundException('items not found');
+    }
+
+    return items;
+  }
+
   async getAllItemOfPlans(plansId: any): Promise<Item[]> {
     if (!mongoose.Types.ObjectId.isValid(plansId)) {
       plansId = new mongoose.Types.ObjectId(plansId);
@@ -133,5 +159,21 @@ export class ItemService {
         cover: plansData.imageUrl,
       },
     });
+  }
+
+
+  async createItemForUpdate(
+    item: CreateItemDto,
+  ): Promise<any> {
+    console.log('Enter createItemForUpdate: ', item);
+
+    const itemData = {
+      ...item,
+    };
+
+    const createdItemt = await this.itemModel.create(itemData);
+    if (createdItemt) console.log('createItemForUpdate done for: ',createdItemt);
+
+    return createdItemt;
   }
 }

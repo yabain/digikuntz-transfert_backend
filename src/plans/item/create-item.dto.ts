@@ -1,37 +1,32 @@
 /* eslint-disable prettier/prettier */
-import { IsString, IsNotEmpty, IsEmpty, IsBoolean, isNotEmpty } from 'class-validator';
+import { IsNotEmpty, IsOptional } from 'class-validator';
 import { Subscription } from '../subscription/subscription.schema';
 import { User } from 'src/user/user.schema';
 import { Plans } from '../plans.schema';
 import { Transaction } from 'src/transaction/transaction.schema';
+import { Types } from 'mongoose';
 
 export class CreateItemDto {
 
   @IsNotEmpty()
-  readonly plansId: Plans;
+  readonly plansId: Plans | Types.ObjectId | string;
 
   @IsNotEmpty()
-  readonly userId: User;
+  readonly userId: User | Types.ObjectId | string;
 
   @IsNotEmpty()
-  receiverId: User;
+  receiverId: User | Types.ObjectId | string;
   
   @IsNotEmpty()
-  subscriptionId: Subscription;
+  subscriptionId: Subscription | Types.ObjectId | string;
   
-  @IsNotEmpty()
-  transactionId: Transaction;
+  @IsOptional()
+  transactionId?: Transaction | Types.ObjectId | string;
 
   @IsNotEmpty()
-  quantity: number;
+  dateStart: string | Date;
 
   @IsNotEmpty()
-  dateStart: string;
-
-  @IsNotEmpty()
-  dateEnd: string;
-
-  @IsNotEmpty()
-  status: boolean;
+  dateEnd: string | Date;
 
 }

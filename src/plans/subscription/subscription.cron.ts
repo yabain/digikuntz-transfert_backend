@@ -30,7 +30,8 @@ export class SubscriptionCronService {
    */
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async handleExpiredSubscriptions() {
-    this.logger.log('🔄 Début de la vérification des abonnements expirés...');
+    this.logger.log('🔄 Début de la vérification des abonnements - expirés...');
+    this.subscriptionService.updateItemList();
 
     try {
       const expiredSubscriptions = await this.getExpiredSubscriptions();
