@@ -72,11 +72,9 @@ export class PayoutService {
     // return map[status] || 'UNKNOWN';
     if (status === 'SUCCESSFUL') {
       return PayoutStatus.SUCCESSFUL;
-    }
-    if (status === 'FAILED') {
+    } else if (status === 'FAILED') {
       return PayoutStatus.FAILED;
-    }
-    return PayoutStatus.PROCESSING;
+    } else return PayoutStatus.PROCESSING;
   }
 
   async getPayout(reference: string) {
@@ -120,11 +118,11 @@ export class PayoutService {
       .exec();
   }
 
-  isMoreThan15MinutesAhead(inputDate: string | Date): boolean {
+  isMoreThan8HoursAhead(inputDate: string | Date): boolean {
     const target = new Date(inputDate).getTime();
     const now = Date.now();
     const diff = now - target;
-    return diff > 15 * 60 * 1000; // true si plus de 15 min d'avance
+    return diff > 8 * 60 * 60 * 1000; // true if the date given as a parameter is more than 8 hours before the current date
   }
 
   async updatePayoutStatus(reference: string, status: string) {

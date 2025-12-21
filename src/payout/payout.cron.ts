@@ -28,11 +28,14 @@ export class PayoutCron {
     try {
       // this.logger.debug('Cron check processing Payout');
     const processings: any = await this.payoutService.findPending(1000);
-    // console.log('(payout cron) Processings resp: ', processings);
+    console.log('(payout cron) Processings resp: ', processings);
       for (const p of processings) {
         try {
             await this.payoutService.verifyPayout(p.reference);
         } catch (err) {
+          if(this.payoutService.isMoreThan8HoursAhead(p.updatedAt)){
+            this.payoutService.updatePayoutStatus(p.reference, 'FAILED');
+          }
           this.logger.warn('(payout cron)Error verifying payout ' + p.reference + ' : ' + err.message);
         }
       }

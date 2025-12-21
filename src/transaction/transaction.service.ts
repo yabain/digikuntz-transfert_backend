@@ -195,8 +195,8 @@ export class TransactionService {
     const currentPage = Number(query?.page) || 1;
     const skip = resPerPage * (currentPage - 1);
 
-    const sixtyMinutesAgo = new Date();
-    sixtyMinutesAgo.setMinutes(sixtyMinutesAgo.getMinutes() - 300);
+    const eightHoursAgo = new Date();
+    eightHoursAgo.setMinutes(eightHoursAgo.getMinutes() - 300);
 
     const res = await this.transactionModel.aggregate([
       {
@@ -211,7 +211,7 @@ export class TransactionService {
               transactionType: { $in: ['transfer', 'withdrawal'] }
             },
             {
-              updatedAt: { $lt: sixtyMinutesAgo },
+              updatedAt: { $lt: eightHoursAgo },
             },
           ],
         },
@@ -228,8 +228,8 @@ export class TransactionService {
     const currentPage = Number(query?.page) || 1;
     const skip = resPerPage * (currentPage - 1);
 
-    const sixtyMinutesAgo = new Date();
-    sixtyMinutesAgo.setMinutes(sixtyMinutesAgo.getMinutes() - 300);
+    const eightHoursAgo = new Date();
+    eightHoursAgo.setMinutes(eightHoursAgo.getMinutes() - 480); // 8 hours
 
     const res = await this.transactionModel.aggregate([
       {
@@ -239,7 +239,7 @@ export class TransactionService {
               status: 'transaction_payin_pending',
             },
             {
-              updatedAt: { $lt: sixtyMinutesAgo },
+              updatedAt: { $lt: eightHoursAgo },
             },
           ],
         },
@@ -343,8 +343,13 @@ export class TransactionService {
     if (!payout) {
       console.log('no Payout found using txRef');
       payout = await this.getPayout(transactionData.txRef);
+      console.log('verifyTransactionPayoutStatus payout 000', payout);
       if (!payout) {
-      return false;
+        console.log('no Payout found using txRef (Closing transaction):', payout);
+        return this.updateTransactionStatus(
+          transactionData._id,
+          TStatus.PAYOUTCLOSED,
+        );
       }
     }
     if (payout.status === 'SUCCESSFUL') {
@@ -356,6 +361,16 @@ export class TransactionService {
       return this.updateTransactionStatus(
         transactionData._id,
         TStatus.PAYOUTERROR,
+      );
+    } else if (payout.status === 'PENDING') {
+      return this.updateTransactionStatus(
+        transactionData._id,
+        TStatus.PAYOUTPENDING,
+      );
+    } else if (payout.status === 'INITIATED') {
+      return this.updateTransactionStatus(
+        transactionData._id,
+        TStatus.PAYOUTPENDING,
       );
     } else return false;
   }

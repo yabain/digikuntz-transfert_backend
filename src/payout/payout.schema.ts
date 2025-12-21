@@ -9,7 +9,7 @@ import { User } from 'src/user/user.schema';
 export type PayoutDocument = HydratedDocument<Payout>;
 export enum PayoutStatus {
   INITIATED = 'INITIATED' ,
-  // PROCESSING = 'PROCESSING',
+  NEW = 'PENDING',
   PROCESSING = 'PENDING',
   SUCCESSFUL = 'SUCCESSFUL',
   FAILED = 'FAILED',

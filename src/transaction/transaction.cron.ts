@@ -29,8 +29,8 @@ export class TransactionCron {
       resPerPage: 500,
       page: 1,
     };
-    this.handlePayoutPendinding(resPerPage);
     this.handlePayinPendinding(resPerPage);
+    this.handlePayoutPendinding(resPerPage);
     } finally {
       this.isRunning = false;
     }
