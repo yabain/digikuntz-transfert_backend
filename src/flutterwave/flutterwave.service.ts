@@ -209,7 +209,7 @@ export class FlutterwaveService {
       transactionType: 'withdrawal',
       status: 'transaction_payin_success',
     };
-    console.log('withdrawal raw: ', raw);
+    // console.log('withdrawal raw: ', raw);
 
     try {
       const balance = await this.balanceService.debitBalance(
@@ -449,6 +449,7 @@ export class FlutterwaveService {
   }
 
   async handleSubscription(transaction) {
+    console.log('In handleSubscription')
     try {
       const subscriptionStatus =
         await this.subscriptionService.verifySubscription(
@@ -461,6 +462,7 @@ export class FlutterwaveService {
         await this.subscriptionService.upgradeSubscription(
           subscriptionStatus.id,
           Number(transaction.quantity),
+          transaction._id
         );
       } else {
         await this.createSubscription(transaction);
@@ -506,7 +508,7 @@ export class FlutterwaveService {
   handleWithdrawal(transaction) {
     try {
       this.whatsappService.sendWithdrawalMessage(transaction);
-      console.log('(fw service: handleWithdrawal) handleWithdrawal');
+      // console.log('(fw service: handleWithdrawal) handleWithdrawal');
     } catch (err) {
       // console.log('(fw service: handleWithdrawal) Error: ', err);
       return {
@@ -644,7 +646,7 @@ export class FlutterwaveService {
         ],
       };
 
-      console.log('payload for sending: ', payload);
+      // console.log('payload for sending: ', payload);
 
       const res = await firstValueFrom(
         this.http.post(`${this.fwBaseUrlV3}/transfers`, payload, {
@@ -673,7 +675,7 @@ export class FlutterwaveService {
         newTxRef,
       );
       
-      console.log('update: ', update)
+      // console.log('update: ', update)
       return update;
     } catch (err) {
       if (err.response) {
@@ -687,7 +689,7 @@ export class FlutterwaveService {
 
   async retryPayout(transactionId: string, userId) {
     const transaction = await this.transactionService.findById(transactionId);
-    console.log('transactionData', transaction);
+    // console.log('transactionData', transaction);
     if (!transaction || transaction.status !== TStatus.PAYOUTERROR) {
       throw new NotFoundException('Transaction not found or not payin success or not in payout error');
     }
@@ -698,7 +700,7 @@ export class FlutterwaveService {
         TStatus.PAYINSUCCESS,
       );
 
-      console.log('update: ', update);
+      // console.log('update: ', update);
 
       return this.payout(transactionId, userId, true);
     } catch (err) {
@@ -861,7 +863,7 @@ export class FlutterwaveService {
     duration?: number | null;
     description?: string;
   }) {
-    console.log('Payload', planDto);
+    // console.log('Payload', planDto);
     // Accept JSON string payloads (common with some clients)
     if (typeof planDto === 'string') {
       try {
@@ -946,7 +948,7 @@ export class FlutterwaveService {
         }),
       );
 
-      console.log('FW createPaymentPlan response: ', res.data);
+      // console.log('FW createPaymentPlan response: ', res.data);
       return res.data; // direct FW response (status, message, data)
     } catch (err: any) {
       if (err.response) {
@@ -1229,8 +1231,8 @@ export class FlutterwaveService {
         this.http.post(url, cardPayload, { headers }),
       );
       // res.data contient le JSON renvoyé par FW
-      console.log('FW res: ', res);
-      console.log('FW createVirtualCard response: ', res.data);
+      // console.log('FW res: ', res);
+      // console.log('FW createVirtualCard response: ', res.data);
       return res.data;
     } catch (err: any) {
       if (err.response) {

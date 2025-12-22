@@ -37,14 +37,16 @@ export class SubscriptionService {
       subscriptionData.planId.toString(),
     );
 
-    if (subscriptionStatus.existingSubscription) {
-      await this.upgradeSubscription(
-        subscriptionStatus.id,
-        subscriptionData.quantity,
-      );
-    } else {
+    // if (subscriptionStatus.existingSubscription) {
+    //   await this.upgradeSubscription(
+    //     subscriptionStatus.id,
+    //     subscriptionData.quantity,
+    //     transactionId
+    //   );
+
+    // } else {
       if (subscriptionData) await this.createSubscription(subscriptionData);
-    }
+    // }
   }
   
   async getSubscriptionsStatistic(): Promise<{
@@ -144,7 +146,6 @@ export class SubscriptionService {
           receiverId: subscription.receiverId, // plan author Id
           subscriptionId: subscription._id as any,
           transactionId: transactionId as any || '',
-          quantity: subscription.quantity,
           dateStart: startDate.toISOString(),
           dateEnd: endDate.toISOString(),
           status: true,
@@ -277,6 +278,7 @@ export class SubscriptionService {
         id: subscription._id,
         startDate: subscription.startDate,
         endDate: subscription.endDate,
+        data: subscription
       }; // 'Subscription expired';
     }
 
@@ -324,7 +326,8 @@ export class SubscriptionService {
     }
   }
 
-  async upgradeSubscription(subscriptionId: any, additionalQuantity: number) {
+  async upgradeSubscription(subscriptionId: any, additionalQuantity: number, transactionId) {
+    console.log('upgradeSubscription : ', subscriptionId, additionalQuantity, transactionId);
     if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {
       throw new NotFoundException('Invalid subscription ID');
     }
@@ -366,6 +369,26 @@ export class SubscriptionService {
     if (!updated) {
       throw new NotFoundException('Error upgrading subscription');
     }
+
+    const startDate = subscriptionData.endDate || new Date(); // le début du nouveau item commence à la l'ancienne fin de subscription 
+    const endDate = this.calculateEndDate(
+      startDate,
+      subscriptionData.cycle,
+      subscriptionData.quantity,
+    );
+
+      const item = {
+          plansId: subscriptionData.planId,
+          userId: subscriptionData.userId,
+          receiverId: subscriptionData.receiverId, // plan author Id
+          subscriptionId: subscriptionData._id as any,
+          transactionId: transactionId as any || '',
+          dateStart: startDate.toISOString(),
+          dateEnd: endDate.toISOString(),
+          status: true,
+        }
+      const itemUpdate = await this.itemService.createItem(item, subscriptionData.userId);
+      console.log('itemUpdate: ', itemUpdate);
 
     return updated;
   }

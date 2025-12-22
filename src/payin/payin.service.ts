@@ -244,10 +244,10 @@ export class PayinService {
    * Save FW webhook/result payload into local DB
    */
   async saveFlutterwaveResult(raw: unknown) {
-    console.log('saveFlutterwaveResult in: ', raw);
+    // console.log('saveFlutterwaveResult in: ', raw);
     const { data, status, txRef, flwId } = this.extractFWPayload(raw);
 
-    console.log('saveFlutterwaveResult out:', this.extractFWPayload(raw));
+    // console.log('saveFlutterwaveResult out:', this.extractFWPayload(raw));
 
     if (!txRef) {
       this.logger.warn('saveFlutterwaveResult: missing tx_ref in payload');
@@ -436,17 +436,17 @@ export class PayinService {
         });
       }
 
-      console.log(
-        `Flutterwave response for ${idOrTxRef}: ${resp.data}`,
-      );
+      // console.log(
+      //   `Flutterwave response for ${idOrTxRef}: ${resp.data}`,
+      // );
       const respData = resp.data;
-      console.log('resp.data: ', respData);
+      // console.log('resp.data: ', respData);
       if (respData.data.status === 'successful' || respData.data.status === 'pending') {
-        console.log('Rewrite payin: respData.data.status is successful or pending');
+        // console.log('Rewrite payin: respData.data.status is successful or pending');
         return this.handleVerifyPayin(idOrTxRef, true, resp.data);
       }
 
-      console.log('Not Rewrite payin: respData.data.status is successful or pending');
+      // console.log('Not Rewrite payin: respData.data.status is successful or pending');
       return this.handleVerifyPayin(idOrTxRef, saveLocal, resp.data);
     } catch (error: unknown) {
       const { fwData, message } = this.unwrapAxiosError(error);

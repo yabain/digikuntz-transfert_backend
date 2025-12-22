@@ -868,18 +868,18 @@ export class SubscriptionController {
    * @param data - Subscription upgrade data
    * @returns Upgraded subscription
    */
-  @Post('upgrade')
-  @UseGuards(AuthGuard('jwt'))
-  @UsePipes(ValidationPipe)
-  async upgrateSubscription(
-    @Body() data: any,
-    @Req() req
-  ): Promise<any> {
-    if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorized');
-    }
-    return this.subscriptionService.upgradeSubscription(data.subscriptionId, data.quantity);
-  }
+  // @Post('upgrade')
+  // @UseGuards(AuthGuard('jwt'))
+  // @UsePipes(ValidationPipe)
+  // async upgrateSubscription(
+  //   @Body() data: any,
+  //   @Req() req
+  // ): Promise<any> {
+  //   if (!req.user.isAdmin) {
+  //     throw new NotFoundException('Unauthorized');
+  //   }
+  //   return this.subscriptionService.upgradeSubscription(data.subscriptionId, data.quantity);
+  // }
 
 
   /**
