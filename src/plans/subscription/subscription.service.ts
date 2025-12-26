@@ -421,8 +421,8 @@ export class SubscriptionService {
   }
 
   async updateSubscription(
-    subscriptionId: any,
-    subscriptionData: any,
+    subscriptionId,
+    subscriptionData,
   ): Promise<any> {
     try {
       return await this.subscriptionModel.findByIdAndUpdate(
@@ -436,7 +436,7 @@ export class SubscriptionService {
     }
   }
 
-  async upgradeSubscription(subscriptionId: string, transactionId) {
+  async upgradeSubscription(subscriptionId, transactionId) {
     const transactionData = await this.transactionService.findById(transactionId);
     if (!transactionData) {
       throw new NotFoundException('Transaction not found');
@@ -509,8 +509,8 @@ export class SubscriptionService {
       throw new NotFoundException('Error upgrading subscription');
     }
 
-    await this.whatsappService.sendNewSubscriberMessageFromPlanAuthor(subscriptionData.planId.toString(), subscriptionData.userId.toString());
-    await this.whatsappService.sendNewSubscriberMessage(subscriptionData.planId.toString(), subscriptionData.receiverId.toString(), transactionId.toString());
+    await this.whatsappService.sendNewSubscriberMessageFromPlanAuthor(subscriptionData.planId, subscriptionData.userId);
+    await this.whatsappService.sendNewSubscriberMessage(subscriptionData.planId, subscriptionData.receiverId, transactionId.toString());
     return updated;
   }
 
