@@ -399,13 +399,16 @@ export class UserService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    const status = user.isActive === false ? false : true
+    console.log('updating status: ', user);
+
+    const status = user.isActive === true ? false : true
     const updatedUser = await this.userModel
       .findByIdAndUpdate(
         userId,
-        { isActive: !status },
+        { isActive: status },
         { new: true, runValidators: true },
       )
+      console.log('status updated: ', updatedUser);
 
     if (!updatedUser) {
       throw new NotFoundException('User not found');
@@ -426,11 +429,11 @@ export class UserService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    const status = user.isAdmin === false ? false : true
+    const status = user.isAdmin === true ? false : true
     const updatedUser = await this.userModel
       .findByIdAndUpdate(
         userId,
-        { isAdmin: !status },
+        { isAdmin: status },
         { new: true, runValidators: true },
       )
 
@@ -453,11 +456,11 @@ export class UserService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    const status = user.verified === false ? false : true
+    const status = user.verified === true ? false : true
     const updatedUser = await this.userModel
       .findByIdAndUpdate(
         userId,
-        { verified: !status },
+        { verified: status },
         { new: true, runValidators: true },
       )
 

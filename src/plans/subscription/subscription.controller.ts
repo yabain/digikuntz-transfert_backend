@@ -195,10 +195,7 @@ export class SubscriptionController {
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async updateStatus(@Param('id') subscriptionId: string, @Req() req): Promise<any> {
-    if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorized');
-    }
-    return this.subscriptionService.updateStatus(subscriptionId, true);
+    return this.subscriptionService.updateStatus(subscriptionId);
   }
 
   // ========== USER ROUTES ==========
@@ -911,5 +908,12 @@ export class SubscriptionController {
   ): Promise<any> {
     const [subscriptionId, subscriberId] = ids.split('AAA');
     return this.subscriptionService.getSubscriptionsItemsOfUser(subscriptionId, subscriberId);
+  }
+
+  @Post('verify')
+  async verifyExistingSubscription(
+    @Body() subscription: any,
+  ): Promise<any> {
+    return this.subscriptionService.verifySubscription(subscription.userId, subscription.planId);
   }
 }

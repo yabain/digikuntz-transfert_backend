@@ -29,4 +29,7 @@ export class CreateItemDto {
   @IsNotEmpty()
   dateEnd: string | Date;
 
+  @IsNotEmpty()
+  quantity: number;
+
 }

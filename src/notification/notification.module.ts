@@ -20,5 +20,6 @@ import { TransactionSchema } from '../transaction/transaction.schema';
   ],
   providers: [NotificationService],
   controllers: [NotificationController],
+  exports: [NotificationService],
 })
 export class NotificationModule {}

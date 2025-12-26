@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { PayinService } from './payin.service';
 import { PayinController } from './payin.controller';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -18,15 +18,12 @@ import { BalanceService } from 'src/balance/balance.service';
 import { Balance, BalanceSchema } from 'src/balance/balance.schema';
 import { UserService } from 'src/user/user.service';
 import { User, UserSchema } from 'src/user/user.schema';
-import { SubscriptionService } from 'src/plans/subscription/subscription.service';
-import {
-  Subscription,
-  SubscriptionSchema,
-} from 'src/plans/subscription/subscription.schema';
 import { ItemService } from 'src/plans/item/item.service';
 import { OptionsService } from 'src/plans/options/options.service';
 import { Item, ItemSchema } from 'src/plans/item/item.shema';
 import { Plans, PlansSchema } from 'src/plans/plans.schema';
+import { PlansModule } from 'src/plans/plans.module';
+import { SubscriptionModule } from 'src/plans/subscription/subscription.module';
 import { Email, EmailSchema } from 'src/email/email.schema';
 import { EmailService } from 'src/email/email.service';
 import { Options, OptionsSchema } from 'src/plans/options/options.shema';
@@ -43,6 +40,8 @@ import { AppCacheModule } from '../cache/cache.module';
     ConfigModule,
     HttpModule,
     WhatsappModule,
+    forwardRef(() => PlansModule),
+    forwardRef(() => SubscriptionModule),
     AppCacheModule,
     MongooseModule.forFeature([
       { name: Payin.name, schema: PayinSchema },
@@ -50,7 +49,6 @@ import { AppCacheModule } from '../cache/cache.module';
       { name: Transaction.name, schema: TransactionSchema },
       { name: Balance.name, schema: BalanceSchema },
       { name: User.name, schema: UserSchema },
-      { name: Subscription.name, schema: SubscriptionSchema },
       { name: Item.name, schema: ItemSchema },
       { name: Plans.name, schema: PlansSchema },
       { name: Email.name, schema: EmailSchema },
@@ -67,7 +65,6 @@ import { AppCacheModule } from '../cache/cache.module';
     PayoutService,
     BalanceService,
     UserService,
-    SubscriptionService,
     ItemService,
     OptionsService,
     EmailService,

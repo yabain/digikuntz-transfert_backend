@@ -381,17 +381,17 @@ export class PayinService {
     const now = Date.now();
     const diff = now - target;
 
-    console.log(
-      '[DEBUG hasExpired60Minutes]',
-      'input:',
-      inputDate,
-      'parsed:',
-      new Date(inputDate).toISOString(),
-      'now:',
-      new Date(now).toISOString(),
-      'diff (minutes):',
-      diff / 60000,
-    );
+    // console.log(
+    //   '[DEBUG hasExpired60Minutes]',
+    //   'input:',
+    //   inputDate,
+    //   'parsed:',
+    //   new Date(inputDate).toISOString(),
+    //   'now:',
+    //   new Date(now).toISOString(),
+    //   'diff (minutes):',
+    //   diff / 60 * 1000,
+    // );
 
     return diff > 60 * 60 * 1000;
   }

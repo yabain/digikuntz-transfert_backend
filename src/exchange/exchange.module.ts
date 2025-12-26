@@ -22,5 +22,6 @@ import { AppCacheModule } from '../cache/cache.module';
   ],
   providers: [ExchangeService, UserService, CountryService],
   controllers: [ExchangeController],
+  exports: [ExchangeService],
 })
 export class ExchangeModule {}

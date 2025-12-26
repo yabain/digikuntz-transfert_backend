@@ -56,7 +56,6 @@ import { WhatsappModule } from 'src/wa/whatsapp.module';
     EmailService,
     DateService,
     SmtpService,
-    // WhatsappService,
     SystemService,
   ],
   exports: [JwtStrategy, PassportModule, AuthService],

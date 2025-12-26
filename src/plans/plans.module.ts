@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { PlansService } from './plans.service';
 import { PlansController } from './plans.controller';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -45,11 +45,13 @@ import { ConfigService } from '@nestjs/config';
 import { ServicePaymentService } from 'src/service/service-payment/service-payment.service';
 import { ServicePayment, ServicePaymentSchema } from 'src/service/service-payment/service-payment.schema';
 import { AppCacheModule } from '../cache/cache.module';
+import { SubscriptionModule } from './subscription/subscription.module';
 
 @Module({
   imports: [
-    AuthModule,
-    WhatsappModule,
+    forwardRef(() => AuthModule),
+    forwardRef(() => WhatsappModule),
+    forwardRef(() => SubscriptionModule),
     AppCacheModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
@@ -92,10 +94,10 @@ import { AppCacheModule } from '../cache/cache.module';
     PayoutService,
     TransactionService,
     BalanceService,
-    SubscriptionService,
     AuthService,
     ServicePaymentService,
   ],
   controllers: [PlansController],
+  exports: [PlansService],
 })
 export class PlansModule {}

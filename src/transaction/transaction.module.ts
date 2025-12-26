@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TransactionService } from './transaction.service';
 import { HttpModule } from '@nestjs/axios';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -25,7 +25,6 @@ import {
   Subscription,
   SubscriptionSchema,
 } from 'src/plans/subscription/subscription.schema';
-import { SubscriptionService } from 'src/plans/subscription/subscription.service';
 import { ItemService } from 'src/plans/item/item.service';
 import { OptionsService } from 'src/plans/options/options.service';
 import { Item, ItemSchema } from 'src/plans/item/item.shema';
@@ -35,12 +34,14 @@ import { WhatsappModule } from 'src/wa/whatsapp.module';
 import { ServicePaymentService } from 'src/service/service-payment/service-payment.service';
 import { ServicePayment, ServicePaymentSchema } from 'src/service/service-payment/service-payment.schema';
 import { AppCacheModule } from '../cache/cache.module';
+import { SubscriptionModule } from 'src/plans/subscription/subscription.module';
 
 @Module({
   imports: [
     HttpModule,
-    WhatsappModule,
+    forwardRef(() => WhatsappModule),
     AppCacheModule,
+    forwardRef(() => SubscriptionModule),
     MongooseModule.forFeature([
       { name: Transaction.name, schema: TransactionSchema },
       { name: City.name, schema: CitySchema },
@@ -70,7 +71,6 @@ import { AppCacheModule } from '../cache/cache.module';
     TransactionCron,
     BalanceService,
     UserService,
-    SubscriptionService,
     ServicePaymentService,
     ItemService,
     OptionsService,

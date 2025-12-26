@@ -31,6 +31,12 @@ export class Item extends Document {
 
   @Prop()
   dateEnd: string;
+  
+  @Prop()
+  quantity: number;
+  
+  @Prop()
+  isActive: boolean = true;
 }
 
 export const ItemSchema = SchemaFactory.createForClass(Item);

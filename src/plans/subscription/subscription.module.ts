@@ -1,8 +1,7 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { SubscriptionService } from './subscription.service';
 import { SubscriptionController } from './subscription.controller';
 import { SubscriptionCronService } from './subscription.cron';
-import { AuthModule } from 'src/auth/auth.module';
 import { MongooseModule } from '@nestjs/mongoose';
 import { User, UserSchema } from '../../user/user.schema';
 import { UserService } from '../../user/user.service';
@@ -19,12 +18,15 @@ import { SmtpService } from 'src/email/smtp/smtp.service';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
 import { WhatsappModule } from 'src/wa/whatsapp.module';
 import { AppCacheModule } from '../../cache/cache.module';
+import { PlansModule } from '../plans.module';
+import { TransactionModule } from 'src/transaction/transaction.module';
 
 @Module({
   imports: [
-    AuthModule,
-    WhatsappModule,
+    forwardRef(() => WhatsappModule),
     AppCacheModule,
+    forwardRef(() => PlansModule),
+    forwardRef(() => TransactionModule),
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: Options.name, schema: OptionsSchema },

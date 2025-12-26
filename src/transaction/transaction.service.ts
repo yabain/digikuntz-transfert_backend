@@ -196,7 +196,7 @@ export class TransactionService {
     const skip = resPerPage * (currentPage - 1);
 
     const eightHoursAgo = new Date();
-    eightHoursAgo.setMinutes(eightHoursAgo.getMinutes() - 300);
+    eightHoursAgo.setMinutes(eightHoursAgo.getMinutes() - 480);
 
     const res = await this.transactionModel.aggregate([
       {

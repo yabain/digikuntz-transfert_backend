@@ -21,5 +21,6 @@ import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
   ],
   providers: [NewsletterService, EmailService, DateService, SmtpService],
   controllers: [NewsletterController],
+  exports: [NewsletterService],
 })
 export class NewsletterModule {}

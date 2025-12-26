@@ -144,7 +144,7 @@ export class CreateUserDto {
   @IsOptional()
   readonly phone2: string;
 
-  @ApiProperty({ example: 'http://wa.me/1234567890' })
+  @ApiProperty({ example: '+237 123456789' })
   @IsString()
   @IsOptional()
   readonly whatsapp: string;

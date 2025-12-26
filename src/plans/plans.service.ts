@@ -175,7 +175,7 @@ export class PlansService {
 
     const plan = await this.plansModel.findById(planId).populate('author');
     if (!plan) {
-      throw new NotFoundException('Plan not found');
+      throw new NotFoundException('Plan with this id not found');
     }
 
     const planOption = await this.optionsService.getAllOptionsOfPlans(plan._id);
@@ -212,27 +212,24 @@ export class PlansService {
 
   async addSubscriber(data: any): Promise<any> {
     const dataBackup = structuredClone(data);
-    const user: any = this.sanitizeForUser(data);
+    let user: any = this.parseUserToObject(data);
+    user.password = "12345678";
     try {
-      data = await this.authService.signUp(user);
-      if (!data) {
+      let newUser = await this.authService.signUp(user, false);
+      if (!newUser) {
         throw new NotFoundException('Unable to add this user');
       }
-      console.log('new user: ', data);
 
       const plan = await this.getPlansById(dataBackup.planId);
       if (!plan) {
         throw new NotFoundException('Plan not found');
       }
-      // if (plan.author != currentUser._id && currentUser.isAdmin != true) {
-      //   throw new NotFoundException('Unauthorized');
-      // }
+      console.log('addSubscriber - getPlansById : ', plan);
 
-      const userWithCountryDetails = await this.userService.getUserById(data.userData._id.toString());
 
-      const subscription = await this.subscriptionService.createSubscription({
-        userId: userWithCountryDetails._id,
-        receiverId: plan.author,
+      const subscription = await this.subscriptionService.subscribe({
+        userId: newUser.userData._id,
+        receiverId: plan.author._id,
         planId: plan._id,
         quantity: 0,
         cycle: plan.cycle,
@@ -240,12 +237,11 @@ export class PlansService {
         endDate: dataBackup.subscriptionStartDate,
         status: false,
       });
+
+      console.log('addSubscriber - subscribe : ', subscription);
       if (!subscription) {
         throw new NotFoundException('Unable to add this subscription');
       }
-      
-      // Récupérer les informations complètes de l'utilisateur avec les détails du pays
-      await this.waService.sendNewSubscriberMessageFromPlanAuthor(plan, userWithCountryDetails);
 
       return subscription;
     } catch (err) {
@@ -254,7 +250,17 @@ export class PlansService {
     }
   }
 
-  private sanitizeForUser(data: any): any {
+  async incrementSubscriberNumber(plansId: string): Promise<any> {
+    return this.plansModel
+      .findByIdAndUpdate(
+        plansId,
+        { $inc: { subscriberNumber: 1 } },
+        { new: true },
+      )
+      .exec();
+  }
+
+  private parseUserToObject(data: any): any {
     const obj = data.toObject ? data.toObject() : data; // convert mongoose doc to object if needed
     delete obj.planId;
     delete obj.subscriptionStartDate;

@@ -20,8 +20,8 @@ export class PayinCron {
     // console.log('(Payin cron) pendings resp : ', pendings);
     for (const p of pendings) {
       try {
-        if (this.payinService.hasExpired60Minutes(p.createdAt)) {
-          // console.log('(Payin cron) verifying after 60mn txRef: ', p.txRef);
+        if (this.payinService.hasExpiredInMinutes(p.createdAt, 480)) {
+          // console.log('(Payin cron) verifying after 480 minutes txRef: ', p.txRef);
           await this.fw.verifyAndClosePayin(p.txRef);
         } else {
           // console.log('(Payin cron) Direct verifying txRef: ', p.txRef);

@@ -415,6 +415,12 @@ export class FlutterwaveService {
         if (transaction.transactionType === this.transactionType.SUBSCRIPTION) {
           await this.handleSubscription(transaction);
         }
+        if (transaction.transactionType === this.transactionType.SERVICE) {
+          await this.handleService(transaction);
+        }
+        if (transaction.transactionType === this.transactionType.WITHDRAWAL) {
+          await this.handleWithdrawal(transaction);
+        }
         // console.log('updating transaction data')
         await this.transactionService.updateTransactionStatus(
           String(payin.transactionId),
@@ -432,7 +438,7 @@ export class FlutterwaveService {
 
     if (
       payin.status === 'pending' &&
-      this.payinService.hasExpired60Minutes(payin.createdAt)
+      this.payinService.hasExpiredInMinutes(payin.createdAt, 480) // 480mn = 8hours expiredt
     ) {
       await this.payinService.updatePayinStatus(txRef, 'cancelled');
       await this.transactionService.updateTransactionStatus(
@@ -453,29 +459,27 @@ export class FlutterwaveService {
     try {
       const subscriptionStatus =
         await this.subscriptionService.verifySubscription(
-          transaction.userId,
-          transaction.planId,
+          transaction.userId.toString(),
+          transaction.planId.toString(),
         );
 
+      console.log('handleSubscription - subscriptionStatus: ', subscriptionStatus)
       // update existing suscription
-      if (subscriptionStatus.existingSubscription) {
-        await this.subscriptionService.upgradeSubscription(
-          subscriptionStatus.id,
-          Number(transaction.quantity),
-          transaction._id
-        );
+      if (subscriptionStatus.existingSubscription === false) {
+        throw new NotFoundException('Subscription not found');
       } else {
-        await this.createSubscription(transaction);
+        await this.subscriptionService.subscribe(subscriptionStatus.data, transaction._id);
       }
 
-      const creditBalance = await this.balanceService.creditBalance(
+      await this.balanceService.creditBalance(
         transaction.receiverId,
         Number(transaction.estimation),
         transaction.senderCurrency,
       );
 
-      this.whatsappService.sendNewSubscriberMessage(transaction.userId, transaction.planId);
       // Send notification
+      // this.whatsappService.sendNewSubscriberMessage(transaction.planId.toString(), transaction.userId.toString(), transaction._id.toString());
+      return 
     } catch (err) {
       // console.log('(fw service: handleSubscription) Error: ', err);
       return {
@@ -497,9 +501,9 @@ export class FlutterwaveService {
       this.whatsappService.sendServiceMessage(transaction);
       return creditBalance;
     } catch (err) {
-      // console.log('(fw service: handleSubscription) Error: ', err);
+      // console.log('(fw service: handleService) Error: ', err);
       return {
-        message: '(fw service: handleSubscription) Error: ' + err,
+        message: '(fw service: handleService) Error: ' + err,
         status: 'error',
       };
     }
@@ -518,9 +522,9 @@ export class FlutterwaveService {
     }
   }
 
-  async createSubscription(transaction) {
+  async createSubscriptionOfTransaction(transaction) {
     const payload = this.subscriptionService.parseTransactionToSubscription(transaction)
-    await this.subscriptionService.createSubscription(payload, transaction._id);
+    await this.subscriptionService.subscribe(payload, transaction._id);
   }
 
   async createServicePayment(transaction) {

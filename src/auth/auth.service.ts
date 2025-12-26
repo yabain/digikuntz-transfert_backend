@@ -44,7 +44,11 @@ export class AuthService {
    * @throws ConflictException if the email already exists.
    * @throws UnauthorizedException if user creation fails.
    */
-  async signUp(userData: CreateUserDto): Promise<any> {
+  async signUp(
+    userData: CreateUserDto,
+    sendWelcomeEmail: boolean = true,
+    sendWelcomeWhatsapp: boolean = true,
+    sendCredentials: boolean = false): Promise<any> {
     try {
       let datas: any = { ...userData }; // Create a copy of userData to avoid mutation
 
@@ -78,20 +82,21 @@ export class AuthService {
         .populate('countryId');
 
       if (!user) {
-        throw new UnauthorizedException('Email or password invalid'); // Handle case where user creation fails
+        throw new UnauthorizedException('Email or password invalid or user already exist'); // Handle case where user creation fails
       }
 
       user = this.sanitizeUser(user); // Remove the resetPasswordToken from the response for security
 
       const userName = user.name ? user.name : user.firstName + ' ' + user.lastName;;
 
-      this.emailService.sendWelcomeEmailAccountCreation(
+      sendWelcomeEmail ? this.emailService.sendWelcomeEmailAccountCreation(
         user.email,
         user.language,
         userName,
-      );
+      ) : null;
 
-      this.whatsappService.sendWelcomeMessage(user, user.countryId.code);
+      sendWelcomeWhatsapp ? this.whatsappService.sendWelcomeMessage(user, user.countryId.code) : null;
+
 
       // Return the user data and a JWT token for authentication
       return { userData: user, token: this.jwtService.sign({ id: user._id }) };

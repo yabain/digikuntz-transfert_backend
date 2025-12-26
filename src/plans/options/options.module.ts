@@ -11,5 +11,6 @@ import { OptionsSchema } from './options.shema';
     ]),
   ],
   providers: [OptionsService],
+  exports: [OptionsService],
 })
 export class OptionsModule {}

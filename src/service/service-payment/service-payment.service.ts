@@ -12,7 +12,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import * as mongoose from 'mongoose';
 import { CreateServicePaymentDto } from './create-service-payment.dto';
 import { UpdateServicePaymentDto } from './update-service-payment.dto';
-import { WhatsappService } from 'src/wa/whatsapp.service';
+// import { WhatsappService } from 'src/wa/whatsapp.service';
 import { UserService } from 'src/user/user.service';
 import { ServicePayment } from './service-payment.schema';
 
@@ -21,8 +21,8 @@ export class ServicePaymentService {
   constructor(
     @InjectModel(ServicePayment.name)
     private serviceModel: mongoose.Model<ServicePayment>,
-    private whatsappService: WhatsappService,
-    private userService: UserService,
+    // private whatsappService: WhatsappService,
+    // private userService: UserService,
   ) {}
 
   async getServicePaymentsStatistic(): Promise<{

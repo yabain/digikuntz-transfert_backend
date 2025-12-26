@@ -18,6 +18,8 @@ import { ItemService } from '../item/item.service';
 import { WhatsappService } from 'src/wa/whatsapp.service';
 import { UserService } from 'src/user/user.service';
 import { Item } from '../item/item.shema';
+import { PlansService } from '../plans.service';
+import { TransactionService } from 'src/transaction/transaction.service';
 
 @Injectable()
 export class SubscriptionService {
@@ -29,26 +31,43 @@ export class SubscriptionService {
     @Inject(forwardRef(() => WhatsappService))
     private whatsappService: WhatsappService,
     private userService: UserService,
-  ) {}
+    @Inject(forwardRef(() => PlansService))
+    private plansService: PlansService,
+    private transactionService: TransactionService
+  ) { }
 
-  async subscribe(subscriptionData: CreateSubscriptionDto) {
+  async subscribe(subscriptionData: CreateSubscriptionDto, transactionId = undefined) {
+    console.log('subscribr-subscriptionData: ', subscriptionData);
+
+    console.log('subscribr-transactionId param: ', transactionId ? transactionId : 'No transactionId');
+
     const subscriptionStatus = await this.verifySubscription(
-      subscriptionData.userId.toString(),
-      subscriptionData.planId.toString(),
+      subscriptionData.userId,
+      subscriptionData.planId,
     );
 
-    // if (subscriptionStatus.existingSubscription) {
-    //   await this.upgradeSubscription(
-    //     subscriptionStatus.id,
-    //     subscriptionData.quantity,
-    //     transactionId
-    //   );
-
-    // } else {
-      if (subscriptionData) await this.createSubscription(subscriptionData);
-    // }
+    console.log('subscribr-verifySubscription: ', subscriptionStatus);
+    if (subscriptionStatus.existingSubscription === true) {
+      if (transactionId !== undefined) {
+        console.log('starting upgrade');
+        return await this.upgradeSubscription(
+          subscriptionStatus.id,
+          transactionId
+        );
+      } else {
+        throw new NotFoundException('Subscription already exists and need transactionId to upgrade');
+      }
+    } else {
+      if (transactionId !== undefined) {
+        console.log('starting createSubscriptionWithTransaction');
+        return await this.createSubscriptionWithTransaction(subscriptionData, transactionId);
+      } else {
+        console.log('starting createSubscriptionWithoutTransaction');
+        return await this.createSubscriptionWithoutTransaction(subscriptionData)
+      };
+    }
   }
-  
+
   async getSubscriptionsStatistic(): Promise<{
     subscribersNumber: number;
     pourcentage: number;
@@ -104,12 +123,40 @@ export class SubscriptionService {
     return endDate;
   }
 
-  async createSubscription(
+  calculateNewStartDate(startDate: string, cycle: string): Date {
+    const newStartDate = new Date(startDate);
+
+    if (isNaN(newStartDate.getTime())) {
+      throw new Error('startDate invalide');
+    }
+
+    switch (cycle) {
+      case 'dayly':
+        newStartDate.setHours(newStartDate.getHours() + 1);
+        break;
+
+      case 'monthly':
+        newStartDate.setDate(newStartDate.getDate() + 1);
+        break;
+
+      case 'yearly':
+        newStartDate.setMonth(newStartDate.getMonth() + 1);
+        break;
+
+      default:
+        throw new Error(`Cycle non supporté: ${cycle}`);
+    }
+
+    return newStartDate;
+  }
+
+  async createSubscriptionWithoutTransaction(
     subscriptionData: CreateSubscriptionDto,
-    transactionId?: string,
   ): Promise<Subscription> {
     // Calculate subscrioption date
-    const startDate = subscriptionData.startDate || new Date();
+    const startDate = subscriptionData.startDate
+      ? new Date(subscriptionData.startDate)
+      : new Date();
     const endDate = this.calculateEndDate(
       startDate,
       subscriptionData.cycle,
@@ -122,11 +169,9 @@ export class SubscriptionService {
       startDate,
       endDate,
     };
-    
-    // Constroct item payload
 
     const res = await this.subscriptionModel.create(subscriptionWithDates);
-    // console.log('(subscription service: createSubscription) res: ', res);
+    console.log('(subscriptionService - createSubscriptionWhitoutTransaction) res: ', res);
     if (!res) {
       throw new NotFoundException('Subscription not created');
     }
@@ -135,28 +180,101 @@ export class SubscriptionService {
       .populate('userId')
       .populate('receiverId')
       .populate('planId');
-      if (!subscription) {
-        throw new NotFoundException('Subscription not found');
-      }
+    if (!subscription) {
+      throw new NotFoundException('Subscription not found');
+    }
 
-      if(startDate != endDate){
-        const item = {
-          plansId: subscription.planId,
-          userId: subscription.userId,
-          receiverId: subscription.receiverId, // plan author Id
-          subscriptionId: subscription._id as any,
-          transactionId: transactionId as any || '',
-          dateStart: startDate.toISOString(),
-          dateEnd: endDate.toISOString(),
-          status: true,
-        }
-        await this.itemService.createItem(item, subscription.userId)
-      }
+    const incrementSubscriberOnPlan = await this.plansService.incrementSubscriberNumber(subscriptionWithDates.planId.toString());
 
-    this.whatsappService.sendNewSubscriberMessageForPlanAuthor(
+    console.log('incrementSubscriberOnPlan: ', incrementSubscriberOnPlan);
+
+    void this.whatsappService.sendNewSubscriberMessageForPlanAuthor(
       subscription.planId,
       subscription.receiverId,
     );
+
+    void this.whatsappService.sendNewSubscriberMessageFromPlanAuthor(
+      subscription.planId,
+      subscription.userId,
+    );
+
+    return res;
+  }
+
+  async createSubscriptionWithTransaction(
+    subscriptionData: CreateSubscriptionDto,
+    transactionId: any,
+  ): Promise<Subscription> {
+    const startDate = subscriptionData.startDate
+      ? new Date(subscriptionData.startDate)
+      : new Date();
+    const endDate = this.calculateEndDate(
+      startDate,
+      subscriptionData.cycle,
+      subscriptionData.quantity,
+    );
+
+    // Construct subscription with calculeted data
+    const subscriptionWithDates = {
+      ...subscriptionData,
+      startDate,
+      endDate,
+    };
+
+    const res = await this.subscriptionModel.create(subscriptionWithDates);
+    if (!res) {
+      throw new NotFoundException('Subscription not created');
+    }
+    const subscription = await this.subscriptionModel
+      .findById(res._id)
+      .populate('userId')
+      .populate('receiverId')
+      .populate('planId');
+    if (!subscription) {
+      throw new NotFoundException('Subscription not found');
+    }
+    await this.plansService.incrementSubscriberNumber(subscription.planId.toString());
+
+    if (startDate != endDate) {
+      const item = {
+        plansId: subscription.planId,
+        userId: subscription.userId,
+        receiverId: subscription.receiverId, // plan author Id
+        subscriptionId: subscription._id as any,
+        transactionId: transactionId as any || '',
+        quantity: subscriptionData.quantity,
+        dateStart: startDate.toISOString(),
+        dateEnd: endDate.toISOString(),
+        status: true,
+      };
+      await this.itemService.createItem(item, subscription.userId);
+    }
+
+    const receiverId =
+      subscription.receiverId && subscription.receiverId.toString();
+    const userId = subscription.userId && subscription.userId.toString();
+    if (
+      receiverId &&
+      mongoose.Types.ObjectId.isValid(receiverId) &&
+      subscription.planId
+    ) {
+      void this.whatsappService.sendNewSubscriberMessageForPlanAuthor(
+        subscription.planId.toString(),
+        receiverId,
+      );
+    }
+
+    if (
+      receiverId &&
+      mongoose.Types.ObjectId.isValid(receiverId) &&
+      subscription.planId
+    ) {
+      void this.whatsappService.sendNewSubscriberMessage(
+        subscription.planId.toString(),
+        receiverId,
+        transactionId,
+      );
+    }
 
     return res;
   }
@@ -168,11 +286,11 @@ export class SubscriptionService {
 
     const keyword = query.keyword
       ? {
-          title: {
-            $regex: query.keyword,
-            $options: 'i',
-          },
-        }
+        title: {
+          $regex: query.keyword,
+          $options: 'i',
+        },
+      }
       : {};
     const optionsList = await this.subscriptionModel
       .find({ ...keyword })
@@ -189,11 +307,11 @@ export class SubscriptionService {
 
     const keyword = query.keyword
       ? {
-          title: {
-            $regex: query.keyword,
-            $options: 'i',
-          },
-        }
+        title: {
+          $regex: query.keyword,
+          $options: 'i',
+        },
+      }
       : {};
     const optionsList = await this.subscriptionModel
       .find({ ...keyword, status: true })
@@ -252,7 +370,7 @@ export class SubscriptionService {
     return subscriptionData;
   }
 
-  async verifySubscription(userId: string, planId: string): Promise<any> {
+  async verifySubscription(userId, planId, activateSubscription: boolean = false): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new NotFoundException('Invalid user ID');
     }
@@ -260,21 +378,23 @@ export class SubscriptionService {
       throw new NotFoundException('Invalid subscription ID');
     }
     const subscription = await this.subscriptionModel.findOne({
-      userId: userId,
-      planId: planId,
+      userId,
+      planId,
     });
-    if (!subscription || !subscription.status) {
-      return { existingSubscription: false }; // 'Subscription not found' or expired;
+    if (!subscription) {
+      return { existingSubscription: false }; // Subscription not found
     }
+    console.log('verifySubscription: ', subscription)
     const currentDate = new Date();
-    if (currentDate > subscription.endDate) {
+    if (currentDate > subscription.endDate && subscription.status === true) {
       // Update subscription status to inactive
-      await this.subscriptionModel.findByIdAndUpdate(subscription._id, {
-        status: false,
+      const statusUpdated = await this.subscriptionModel.findByIdAndUpdate(subscription._id, {
+        status: activateSubscription,
       });
+      console.log('statusUpdated: ', statusUpdated);
       return {
         existingSubscription: true,
-        status: false,
+        status: activateSubscription,
         id: subscription._id,
         startDate: subscription.startDate,
         endDate: subscription.endDate,
@@ -282,139 +402,141 @@ export class SubscriptionService {
       }; // 'Subscription expired';
     }
 
-    return {
+    console.log('no statusUpdated: ', {
       existingSubscription: true,
-      status: true,
+      status: subscription.status,
       id: subscription._id,
       startDate: subscription.startDate,
       endDate: subscription.endDate,
+      data: subscription
+    });
+    return {
+      existingSubscription: true,
+      status: subscription.status,
+      id: subscription._id,
+      startDate: subscription.startDate,
+      endDate: subscription.endDate,
+      data: subscription
     };
   }
 
   async updateSubscription(
-    subscriptionId: string,
-    subscriptionData: UpdateSubscriptionDto,
+    subscriptionId: any,
+    subscriptionData: any,
   ): Promise<any> {
-    if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {
-      throw new NotFoundException('Invalid subscription ID');
-    }
-
-    const existingSubscription =
-      await this.subscriptionModel.findById(subscriptionId);
-
-    if (existingSubscription) {
-      // Extend existing long
-      const newQuantity =
-        existingSubscription.quantity + subscriptionData.quantity;
-      const newEndDate = this.calculateEndDate(
-        existingSubscription.startDate,
-        existingSubscription.cycle,
-        newQuantity,
-      );
-
+    try {
       return await this.subscriptionModel.findByIdAndUpdate(
         subscriptionId,
-        {
-          quantity: newQuantity,
-          endDate: newEndDate,
-        },
+        { subscriptionData },
         { new: true, runValidators: true },
       );
-    } else {
-      // Create a new subscription
-      return await this.createSubscription(subscriptionData);
+    }
+    catch (error) {
+      throw new NotFoundException('Error updating subscription');
     }
   }
 
-  async upgradeSubscription(subscriptionId: any, additionalQuantity: number, transactionId) {
-    console.log('upgradeSubscription : ', subscriptionId, additionalQuantity, transactionId);
-    if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {
-      throw new NotFoundException('Invalid subscription ID');
+  async upgradeSubscription(subscriptionId: string, transactionId) {
+    const transactionData = await this.transactionService.findById(transactionId);
+    if (!transactionData) {
+      throw new NotFoundException('Transaction not found');
     }
-
+    const additionalQuantity = transactionData.quantity;
     if (typeof additionalQuantity !== 'number' || additionalQuantity <= 0) {
       throw new NotFoundException('Invalid quantity to add');
     }
 
-    // Récupérer la souscription
     const subscriptionData: any =
       await this.subscriptionModel.findById(subscriptionId);
     if (!subscriptionData) {
       throw new NotFoundException('Subscription not found');
     }
+    console.log('upgradeSubscription-subscriptionData: ', subscriptionData);
 
-    // Nouveau total de cycles
+    let newStartDate = new Date();
+    if (subscriptionData.status === true) {
+      newStartDate = subscriptionData.endDate;
+    } else {
+      if (subscriptionData.endDate === subscriptionData.startDate) {
+        newStartDate = subscriptionData.startDate
+      }
+    }
+
+    console.log('newStartDate: ', newStartDate);
+
     const newQuantityTotal =
       (subscriptionData.quantity || 0) + additionalQuantity;
 
-    // Nouvelle endDate calculée à partir de startDate et du total de cycles
     const newEndDate = this.calculateEndDate(
-      new Date(subscriptionData.startDate),
+      new Date(newStartDate),
       subscriptionData.cycle,
-      newQuantityTotal,
+      additionalQuantity,
     );
 
     const newStatus: boolean = newEndDate.getTime() > Date.now();
 
+    const item = {
+      plansId: subscriptionData.planId,
+      userId: subscriptionData.userId,
+      receiverId: subscriptionData.receiverId, // plan author Id
+      subscriptionId: subscriptionData._id as any,
+      transactionId: transactionId as any || '',
+      quantity: subscriptionData.quantity,
+      dateStart: newStartDate.toISOString(),
+      dateEnd: newEndDate.toISOString(),
+      status: true,
+    }
+    const itemCreate = await this.itemService.createItem(item, subscriptionData.userId);
+    console.log('upgradeSubscription-itemCreate: ', itemCreate);
+
+    if (!itemCreate) {
+      throw new NotFoundException('Error creating item');
+    }
+
     const updated = await this.subscriptionModel.findByIdAndUpdate(
       subscriptionData._id,
       {
-        quantity: newQuantityTotal, // on met le total directement
+        quantity: newQuantityTotal,
         endDate: newEndDate,
         status: newStatus,
       },
       { new: true, runValidators: true },
     );
 
+    console.log('upgradeSubscription-updatedSubscription: ', updated);
+
     if (!updated) {
       throw new NotFoundException('Error upgrading subscription');
     }
 
-    const startDate = subscriptionData.endDate || new Date(); // le début du nouveau item commence à la l'ancienne fin de subscription 
-    const endDate = this.calculateEndDate(
-      startDate,
-      subscriptionData.cycle,
-      subscriptionData.quantity,
-    );
-
-      const item = {
-          plansId: subscriptionData.planId,
-          userId: subscriptionData.userId,
-          receiverId: subscriptionData.receiverId, // plan author Id
-          subscriptionId: subscriptionData._id as any,
-          transactionId: transactionId as any || '',
-          dateStart: startDate.toISOString(),
-          dateEnd: endDate.toISOString(),
-          status: true,
-        }
-      const itemUpdate = await this.itemService.createItem(item, subscriptionData.userId);
-      console.log('itemUpdate: ', itemUpdate);
-
+    await this.whatsappService.sendNewSubscriberMessageFromPlanAuthor(subscriptionData.planId.toString(), subscriptionData.userId.toString());
+    await this.whatsappService.sendNewSubscriberMessage(subscriptionData.planId.toString(), subscriptionData.receiverId.toString(), transactionId.toString());
     return updated;
   }
 
-  async updateStatus(subscriptionId: any, status): Promise<any> {
+  async updateStatus(subscriptionId: any): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {
       throw new NotFoundException('Invalid subscription ID');
     }
 
     const subscription = await this.subscriptionModel.findById(subscriptionId);
     if (!subscription) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException('subscription not found');
     }
+    const status = subscription.status === true ? false : true;
     const updatedSubscription = await this.subscriptionModel.findByIdAndUpdate(
       subscriptionId,
-      { status: status },
+      { status },
       { new: true, runValidators: true },
     );
 
     if (!updatedSubscription) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException('subscription not found');
     }
     return true;
   }
 
-  async downgrateSubscription() {}
+  async downgrateSubscription() { }
 
   async stopSubscription(
     subscriptionId: string,
@@ -539,8 +661,8 @@ export class SubscriptionService {
     // Define the keyword search criteria
     const keyword = query.keyword
       ? {
-          $or: [{ title: { $regex: query.keyword, $options: 'i' } }],
-        }
+        $or: [{ title: { $regex: query.keyword, $options: 'i' } }],
+      }
       : {};
 
     // Find users matching the keyword with pagination
@@ -616,8 +738,8 @@ export class SubscriptionService {
 
   parseTransactionToSubscription(transaction) {
     return {
-      userId: transaction.senderId,
-      receiverId: transaction.receiverId,
+      userId: transaction.senderId, // Subscriber
+      receiverId: transaction.receiverId, // Plan author
       planId: transaction.planId,
       quantity: Number(transaction.quantity),
       cycle: transaction.cycle,
@@ -649,24 +771,24 @@ export class SubscriptionService {
   // Retrieves all subscriptions, those where dateStart != dateEnd (because if dateStart === dateEnd, it's a subscription without payment, created by the plan owner),
   // Checks if one or more items exist where subscriptionId = subscription_id
   // If they exist, do nothing; if they don't exist, create an item for the subscription
-  async updateItemList(): Promise<any>{
-    const subscriptions = await this.subscriptionModel.find();
-    for (const subscription of subscriptions) {
-      const itemList = await this.itemService.getItemBySubscriptionId(subscription._id);
-      console.log('itemList length: ', itemList.length);
-      if (itemList && itemList.length > 0) console.log('itemList exist');
-      else {
-        if (subscription.startDate.getTime() === subscription.endDate.getTime()) continue;
-        console.log('createItemForUpdate start with: ', subscription);
-        await this.itemService.createItemForUpdate({
-          plansId: subscription.planId,
-          subscriptionId: subscription._id,
-          userId: subscription.userId,
-          receiverId: subscription.receiverId,
-          dateStart: subscription.startDate.toISOString(),
-          dateEnd: subscription.endDate.toISOString()
-        });
-      }
-    }
-  }
+  // async updateItemList(): Promise<any> {
+  //   const subscriptions = await this.subscriptionModel.find();
+  //   for (const subscription of subscriptions) {
+  //     const itemList = await this.itemService.getItemBySubscriptionId(subscription._id);
+  //     console.log('itemList length: ', itemList.length);
+  //     if (itemList && itemList.length > 0) console.log('itemList exist');
+  //     else {
+  //       if (subscription.startDate.getTime() === subscription.endDate.getTime()) continue;
+  //       console.log('createItemForUpdate start with: ', subscription);
+  //       await this.itemService.createItemForUpdate({
+  //         plansId: subscription.planId,
+  //         subscriptionId: subscription._id,
+  //         userId: subscription.userId,
+  //         receiverId: subscription.receiverId,
+  //         dateStart: subscription.startDate.toISOString(),
+  //         dateEnd: subscription.endDate.toISOString()
+  //       });
+  //     }
+  //   }
+  // }
 }

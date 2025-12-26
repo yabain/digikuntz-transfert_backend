@@ -12,5 +12,6 @@ import { UserSchema } from 'src/user/user.schema';
     MongooseModule.forFeature([{ name: 'City', schema: CitySchema }]),
   ],
   providers: [EventsGateway], // Fournir EventsGateway et EventService
+  exports: [EventsGateway],
 })
 export class GatewayModule {}

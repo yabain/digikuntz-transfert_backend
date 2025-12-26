@@ -85,11 +85,7 @@ export class ItemService {
     const plansData: any = await this.plansModel
       .findById(item.plansId)
     if (!plansData) {
-      throw new NotFoundException('Itemt class not found');
-    }
-
-    if (!plansData.isActive) {
-      throw new NotFoundException('Event ended');
+      throw new NotFoundException('Plan not found');
     }
 
     const itemData = {
@@ -99,10 +95,8 @@ export class ItemService {
 
     const createdItemt = await this.itemModel.create(itemData);
 
-    await this.incrementSubscriberNumber(plansData._id);
-
     // Envoi d'email non-bloquant et indépendant
-    if (sendMail && user.email) {
+    // if (sendMail) {
       this.sendEmailNonBlocking(plansData._id, user).catch(
         (error) => {
           console.error(
@@ -111,19 +105,9 @@ export class ItemService {
           );
         },
       );
-    }
+    // }
 
     return createdItemt;
-  }
-
-  async incrementSubscriberNumber(plansId: string): Promise<any> {
-    return this.plansModel
-      .findByIdAndUpdate(
-        plansId,
-        { $inc: { subscriberNumber: 1 } },
-        { new: true },
-      )
-      .exec();
   }
 
   async decrementSubscriberNumber(plansId: string): Promise<any> {
@@ -170,6 +154,7 @@ export class ItemService {
 
     const itemData = {
       ...item,
+      isActive: true,
     };
 
     const createdItemt = await this.itemModel.create(itemData);

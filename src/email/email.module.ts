@@ -21,5 +21,6 @@ import { Email, EmailSchema } from './email.schema';
   ],
   providers: [EmailService, DateService, SmtpService],
   controllers: [EmailController],
+  exports: [EmailService, DateService, SmtpService],
 })
 export class EmailModule {}

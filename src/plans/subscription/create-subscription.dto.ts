@@ -12,6 +12,7 @@ import {
   IsBoolean,
   IsNumber,
   IsEmpty,
+  IsOptional,
 } from 'class-validator';
 
 export class CreateSubscriptionDto {
@@ -25,7 +26,7 @@ export class CreateSubscriptionDto {
   @IsNotEmpty()
   planId: Plans;
 
-  @IsNotEmpty()
+  @IsOptional()
   quantity: number;
 
   @IsNotEmpty()

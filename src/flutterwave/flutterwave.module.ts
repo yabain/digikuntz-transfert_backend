@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule } from '@nestjs/config';
@@ -36,12 +36,14 @@ import { WhatsappModule } from 'src/wa/whatsapp.module';
 import { ServicePaymentService } from 'src/service/service-payment/service-payment.service';
 import { ServicePayment, ServicePaymentSchema } from 'src/service/service-payment/service-payment.schema';
 import { AppCacheModule } from '../cache/cache.module';
+import { PlansModule } from 'src/plans/plans.module';
 
 @Module({
   imports: [
     ConfigModule,
     HttpModule,
     WhatsappModule,
+    forwardRef(() => PlansModule),
     AppCacheModule,
     MongooseModule.forFeature([
       { name: Payin.name, schema: PayinSchema },

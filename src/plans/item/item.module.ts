@@ -21,5 +21,6 @@ import { SubscriptionSchema } from '../subscription/subscription.schema';
     EmailService,
     PlansService,
   ],
+  exports: [ItemService],
 })
 export class ItemModule {}

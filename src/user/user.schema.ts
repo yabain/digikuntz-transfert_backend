@@ -12,7 +12,7 @@ export enum UserType {
   timestamps: true,
 })
 export class User extends Document {
-  @Prop()
+  @Prop({ unique: true })
   email: string;
 
   @Prop()
@@ -87,7 +87,7 @@ export class User extends Document {
   @Prop()
   phone2: string;
 
-  @Prop()
+  @Prop({ unique: true, required: true })
   whatsapp: string;
 
   @Prop()
@@ -116,7 +116,7 @@ export const UserSchema = SchemaFactory.createForClass(User);
 
 // Index pour optimiser les recherches
 UserSchema.index({ email: 1 }, { unique: true });
-UserSchema.index({ whatsapp: 1 }, { unique: true, sparse: true });
+UserSchema.index({ whatsapp: 1 }, { unique: true });
 UserSchema.index({ isActive: 1, verified: 1 }); // Index composé
 UserSchema.index({ createdAt: -1 });
 UserSchema.index({ countryId: 1, cityId: 1 }); // Index composé pour les populate
