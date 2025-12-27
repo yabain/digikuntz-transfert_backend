@@ -891,6 +891,13 @@ export class SubscriptionController {
     return this.subscriptionService.getSubscriptionsOfPlan(planId);
   }
 
+  @Get('get-item-by-transactionId/:transactionId')
+  async getItemSubscriptionByTransactionId(
+    @Param('transactionId') transactionId: any,
+  ): Promise<any> {
+    return this.subscriptionService.getItemSubscriptionByTransactionId(transactionId);
+  }
+
   @Get('get-user-subscription/:planId')
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)

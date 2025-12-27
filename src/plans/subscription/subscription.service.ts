@@ -757,6 +757,10 @@ export class SubscriptionService {
     return await this.subscriptionModel.find({ planId }).populate('userId');
   }
 
+  async getItemSubscriptionByTransactionId(transactionId): Promise<Subscription[]> {
+    return await this.itemService.getItemSubscriptionByTransactionId(transactionId);
+  }
+
   async getSubscriptionsOfUser(userId: string): Promise<Subscription[]> {
     return await this.subscriptionModel.find({ userId }).populate('planId');
   }

@@ -48,6 +48,20 @@ export class ItemService {
     return items;
   }
 
+  async getItemSubscriptionByTransactionId(transactionId: any): Promise<any> {
+    if (!mongoose.Types.ObjectId.isValid(transactionId)) {
+      transactionId = new mongoose.Types.ObjectId(transactionId);
+    }
+
+    const item = await this.itemModel.findOne({ transactionId });
+
+    if (!item) {
+      throw new NotFoundException('items not found');
+    }
+
+    return item;
+  }
+
   async getAllItemOfPlans(plansId: any): Promise<Item[]> {
     if (!mongoose.Types.ObjectId.isValid(plansId)) {
       plansId = new mongoose.Types.ObjectId(plansId);
