@@ -277,7 +277,7 @@ export class EmailService {
         subject,
         from,
         status: false,
-        body: error + '  \n ' + html,
+        body: error + ' : \n \n ' + html,
       });
       throw error;
     }
