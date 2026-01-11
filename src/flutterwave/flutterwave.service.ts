@@ -321,14 +321,14 @@ export class FlutterwaveService {
       return { message: 'Payin pending', status: 'pending' };
     } else if (payin.status === 'successful') {
       try {
-        // console.log('(fw service: verifyPayin) in handle successful ');
-        if (transaction.transactionType === this.transactionType.SUBSCRIPTION) {
+        console.log('(fw service: verifyPayin) in handle successful transaction: ', transaction);
+        if (transaction.transactionType === 'subscription') {
           await this.handleSubscription(transaction);
         }
-        if (transaction.transactionType === this.transactionType.SERVICE) {
+        if (transaction.transactionType === 'service') {
           await this.handleService(transaction);
         }
-        if (transaction.transactionType === this.transactionType.WITHDRAWAL) {
+        if (transaction.transactionType === 'withdrawal') {
           await this.handleWithdrawal(transaction);
         }
         // console.log('updating transaction data')
@@ -455,8 +455,11 @@ export class FlutterwaveService {
   }
 
   async handleSubscription(transaction) {
-    console.log('In handleSubscription')
+    console.log('In handleSubscription transaction: ', transaction);
     try {
+
+      console.log('handleSubscription - userId: ', transaction.userId.toString());
+      console.log('handleSubscription - planId: ', transaction.planId.toString());
       const subscriptionStatus =
         await this.subscriptionService.verifySubscription(
           transaction.userId.toString(),

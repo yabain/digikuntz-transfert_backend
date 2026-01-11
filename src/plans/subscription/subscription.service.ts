@@ -157,6 +157,7 @@ export class SubscriptionService {
     const startDate = subscriptionData.startDate
       ? new Date(subscriptionData.startDate)
       : new Date();
+
     const endDate = this.calculateEndDate(
       startDate,
       subscriptionData.cycle,
@@ -175,6 +176,7 @@ export class SubscriptionService {
     if (!res) {
       throw new NotFoundException('Subscription not created');
     }
+    
     const subscription = await this.subscriptionModel
       .findById(res._id)
       .populate('userId')
@@ -184,6 +186,7 @@ export class SubscriptionService {
       throw new NotFoundException('Subscription not found');
     }
 
+    console.log('createSubscriptionWithoutTransaction - subscription populated: ', subscription);
     const incrementSubscriberOnPlan = await this.plansService.incrementSubscriberNumber(subscriptionWithDates.planId.toString());
 
     console.log('incrementSubscriberOnPlan: ', incrementSubscriberOnPlan);
@@ -371,6 +374,8 @@ export class SubscriptionService {
   }
 
   async verifySubscription(userId, planId, activateSubscription: boolean = false): Promise<any> {
+    console.log('verifySubscription - userId: ', userId);
+    console.log('verifySubscription - planId: ', planId);
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new NotFoundException('Invalid user ID');
     }
@@ -381,10 +386,11 @@ export class SubscriptionService {
       userId,
       planId,
     });
+    console.log('verifySubscription - subscriptionModel.findOne: ', subscription);
     if (!subscription) {
       return { existingSubscription: false }; // Subscription not found
     }
-    console.log('verifySubscription: ', subscription)
+
     const currentDate = new Date();
     if (currentDate > subscription.endDate && subscription.status === true) {
       // Update subscription status to inactive
@@ -457,7 +463,7 @@ export class SubscriptionService {
     if (subscriptionData.status === true) {
       newStartDate = subscriptionData.endDate;
     } else {
-      if (subscriptionData.endDate === subscriptionData.startDate) {
+      if (subscriptionData.endDate.getTime() === subscriptionData.startDate.getTime()) {
         newStartDate = subscriptionData.startDate
       }
     }

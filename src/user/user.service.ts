@@ -40,7 +40,7 @@ export class UserService {
 
   async getAllUsers(query: any): Promise<any> {
     const page = Number(query.page) > 0 ? Number(query.page) : 1;
-    const limit = 10;
+    const limit = 25;
     const skip = (page - 1) * limit;
 
     // Requête optimisée sans populate
