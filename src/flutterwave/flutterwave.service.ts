@@ -291,7 +291,7 @@ export class FlutterwaveService {
       throw new NotFoundException('Transaction not found');
     }
 
-    // console.log('(fw service: verifyPayin) resp payin data: ', payin);
+    console.log('(fw service: verifyPayin) resp payin data: ', payin);
     if (payin.status === 'cancelled') {
       /* Keep the transaction "pending" because the user can
       relaunch new payment attempts on the flutterwave front
@@ -345,12 +345,12 @@ export class FlutterwaveService {
         };
       }
     } else {
-      if (transaction.status !== this.tStatus.PAYINPENDING) {
-        await this.transactionService.updateTransactionStatus(
-          String(payin.transactionId),
-          this.tStatus.PAYINPENDING,
-        );
-      }
+      // if (transaction.status !== this.tStatus.PAYINPENDING) {
+      //   await this.transactionService.updateTransactionStatus(
+      //     String(payin.transactionId),
+      //     this.tStatus.PAYINPENDING,
+      //   );
+      // }
       return { message: 'Payin pending', status: 'pending' };
     }
   }
@@ -412,13 +412,13 @@ export class FlutterwaveService {
     if (payin.status === 'successful') {
       try {
         // console.log('(fw service: verifyPayin) in handle successful ');
-        if (transaction.transactionType === this.transactionType.SUBSCRIPTION) {
+        if (transaction.transactionType === 'subscription') {
           await this.handleSubscription(transaction);
         }
-        if (transaction.transactionType === this.transactionType.SERVICE) {
+        if (transaction.transactionType === 'service') {
           await this.handleService(transaction);
         }
-        if (transaction.transactionType === this.transactionType.WITHDRAWAL) {
+        if (transaction.transactionType === 'withdrawal') {
           await this.handleWithdrawal(transaction);
         }
         // console.log('updating transaction data')
@@ -458,27 +458,31 @@ export class FlutterwaveService {
     console.log('In handleSubscription transaction: ', transaction);
     try {
 
-      console.log('handleSubscription - userId: ', transaction.userId.toString());
-      console.log('handleSubscription - planId: ', transaction.planId.toString());
+      console.log('handleSubscription - userId: ', transaction.userId._id.toString() || transaction.userId.toString());
+      console.log('handleSubscription - planId: ', transaction.planId);
       const subscriptionStatus =
         await this.subscriptionService.verifySubscription(
-          transaction.userId.toString(),
-          transaction.planId.toString(),
+          transaction.userId._id.toString() || transaction.userId.toString(),
+          transaction.planId,
         );
 
       console.log('handleSubscription - subscriptionStatus: ', subscriptionStatus)
       // update existing suscription
+
+      let resp: any = '';
       if (subscriptionStatus.existingSubscription === false) {
         throw new NotFoundException('Subscription not found');
       } else {
-        await this.subscriptionService.subscribe(subscriptionStatus.data, transaction._id);
+        resp = await this.subscriptionService.subscribe(subscriptionStatus.data, transaction._id);
       }
 
-      await this.balanceService.creditBalance(
+      console.log('handleSubscription - resp: ', resp);
+      const newBalence = await this.balanceService.creditBalance(
         transaction.receiverId,
         Number(transaction.estimation),
         transaction.senderCurrency,
       );
+      console.log('newBalence: ', newBalence);
 
       // Send notification
       // this.whatsappService.sendNewSubscriberMessage(transaction.planId.toString(), transaction.userId.toString(), transaction._id.toString());

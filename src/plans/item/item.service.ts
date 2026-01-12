@@ -149,14 +149,12 @@ export class ItemService {
   
   async senMail(plansData: any, user: any): Promise<any> {
     return await this.emailService.sendPlansEmail(user, {
-      plansData: {
-        _id: plansData._id,
-        title: plansData.title,
-        subTitle: plansData.subTitle,
-        cycle: plansData.cycle,
-        description: plansData.description,
-        cover: plansData.imageUrl,
-      },
+      _id: plansData._id,
+      title: plansData.title,
+      subTitle: plansData.subTitle,
+      cycle: plansData.cycle,
+      description: plansData.description,
+      imageUrl: plansData.imageUrl,
     });
   }
 

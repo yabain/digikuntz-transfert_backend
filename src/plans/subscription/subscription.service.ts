@@ -374,14 +374,13 @@ export class SubscriptionService {
   }
 
   async verifySubscription(userId, planId, activateSubscription: boolean = false): Promise<any> {
-    console.log('verifySubscription - userId: ', userId);
-    console.log('verifySubscription - planId: ', planId);
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new NotFoundException('Invalid user ID');
     }
     if (!mongoose.Types.ObjectId.isValid(planId)) {
       throw new NotFoundException('Invalid subscription ID');
     }
+
     const subscription = await this.subscriptionModel.findOne({
       userId,
       planId,
@@ -452,8 +451,9 @@ export class SubscriptionService {
       throw new NotFoundException('Invalid quantity to add');
     }
 
-    const subscriptionData: any =
-      await this.subscriptionModel.findById(subscriptionId);
+    const subscriptionData: any = await this.subscriptionModel
+      .findById(subscriptionId)
+      .populate('userId');
     if (!subscriptionData) {
       throw new NotFoundException('Subscription not found');
     }
@@ -515,8 +515,8 @@ export class SubscriptionService {
       throw new NotFoundException('Error upgrading subscription');
     }
 
-    await this.whatsappService.sendNewSubscriberMessageFromPlanAuthor(subscriptionData.planId, subscriptionData.userId);
-    await this.whatsappService.sendNewSubscriberMessage(subscriptionData.planId, subscriptionData.receiverId, transactionId.toString());
+    this.whatsappService.sendNewSubscriberMessageFromPlanAuthor(subscriptionData.planId, subscriptionData.userId);
+    this.whatsappService.sendNewSubscriberMessage(subscriptionData.planId, subscriptionData.receiverId, transactionId.toString());
     return updated;
   }
 

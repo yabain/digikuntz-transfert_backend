@@ -326,18 +326,33 @@ export class EmailService {
 
   async sendPlansEmail(user: any, plansData: any): Promise<boolean> {
     const userName = user.name || `${user.firstName} ${user.lastName}`;
-    const templateName = 'subscribe';
+    const templateName = 'subscribe_MailForSubscriber';
+    const language = user?.language === 'fr' ? 'fr' : 'en';
     const subject =
-      user.language === 'fr'
+      language === 'fr'
         ? 'Abonnement: ' + plansData.title
         : 'Subscription: ' + plansData.title;
 
-    const templatePath = path.join(
+    let templatePath = path.join(
       this.templateFolder,
-      `${templateName}_${user.language}.hbs`,
+      `${templateName}_${language}.hbs`,
     );
 
-    const templateSource = fs.readFileSync(templatePath, 'utf8');
+    let templateSource: string;
+    try {
+      templateSource = fs.readFileSync(templatePath, 'utf8');
+    } catch (err) {
+      // fallback to fr template if language file is missing
+      if (language !== 'fr') {
+        templatePath = path.join(
+          this.templateFolder,
+          `${templateName}_fr.hbs`,
+        );
+        templateSource = fs.readFileSync(templatePath, 'utf8');
+      } else {
+        throw err;
+      }
+    }
     const template = handlebars.compile(templateSource);
     const front = this.configService.get<string>('FRONT_URL') || this.frontUrl;
 
@@ -358,6 +373,57 @@ export class EmailService {
       subject,
       html,
       'Subscription: ' + context.plans_url,
+    );
+  }
+
+  async sendPaymentConfirmationEmail(userData, plansData, transactionData): Promise<boolean> {
+    const userName = userData.name || `${userData.firstName} ${userData.lastName}`;
+    const templateName = 'payment-confirmation';
+    const language = userData?.language === 'fr' ? 'fr' : 'en';
+    const subject =
+      language === 'fr'
+        ? 'Abonnement: ' + plansData.title
+        : 'Subscription: ' + plansData.title;
+
+    let templatePath = path.join(
+      this.templateFolder,
+      `${templateName}_${language}.hbs`,
+    );
+
+    let templateSource: string;
+    try {
+      templateSource = fs.readFileSync(templatePath, 'utf8');
+    } catch (err) {
+      // fallback to fr template if language file is missing
+      if (language !== 'fr') {
+        templatePath = path.join(
+          this.templateFolder,
+          `${templateName}_fr.hbs`,
+        );
+        templateSource = fs.readFileSync(templatePath, 'utf8');
+      } else {
+        throw err;
+      }
+    }
+    const template = handlebars.compile(templateSource);
+    const front = this.configService.get<string>('FRONT_URL') || this.frontUrl;
+
+    const context = {
+      userName,
+      plans_title: plansData.title,
+      plans_subTitle: plansData.subTitle,
+      invoice_url: `${front}/invoice/${transactionData._id.toString()}`,
+      amount: transactionData.estimation,
+      transactionDate: this.dateService.formatDate(transactionData.createdAt, 'short', userData.language),
+    };
+
+    const html = template(context);
+
+    return await this.proceedToSendEmail(
+      userData.email,
+      subject,
+      html,
+      'Subscription invoice: ' + context.invoice_url,
     );
   }
 
