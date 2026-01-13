@@ -10,6 +10,7 @@ import { CreateItemDto } from './create-item.dto';
 import { User } from 'src/user/user.schema';
 import { Plans } from '../plans.schema';
 import { EmailService } from 'src/email/email.service';
+import { TransactionService } from 'src/transaction/transaction.service';
 
 @Injectable()
 export class ItemService {
@@ -19,6 +20,7 @@ export class ItemService {
     @InjectModel(Plans.name)
     private plansModel: mongoose.Model<Plans>,
     private emailService: EmailService,
+    private transactionService: TransactionService
   ) {}
 
   async getItemById(itemId: any): Promise<any> {
@@ -93,7 +95,7 @@ export class ItemService {
 
   async createItem(
     item: CreateItemDto,
-    user: User,
+    userData: User,
     sendMail?: boolean,
   ): Promise<any> {
     const plansData: any = await this.plansModel
@@ -111,7 +113,7 @@ export class ItemService {
 
     // Envoi d'email non-bloquant et indépendant
     // if (sendMail) {
-      this.sendEmailNonBlocking(plansData._id, user).catch(
+      this.sendEmailNonBlocking(userData, plansData, item).catch(
         (error) => {
           console.error(
             'Failed to send plans email (non-blocking):',
@@ -134,28 +136,23 @@ export class ItemService {
       .exec();
   }
   
-  private async sendEmailNonBlocking(
-    plansData: string,
-    user: User,
-  ): Promise<void> {
+  private async sendEmailNonBlocking(userData, plansData, itemData): Promise<void> {
+    const transactionData: any = await this.transactionService.findById(itemData.transactionId.toString())
+    if (!plansData) {
+      throw new NotFoundException('Plan not found');
+    }
+
     try {
       if (plansData) {
-        await this.senMail(plansData, user);
+        await this.senMail(userData, plansData, transactionData);
       }
     } catch (error) {
       console.error('Error in non-blocking email sending:', error);
     }
   }
   
-  async senMail(plansData: any, user: any): Promise<any> {
-    return await this.emailService.sendPlansEmail(user, {
-      _id: plansData._id,
-      title: plansData.title,
-      subTitle: plansData.subTitle,
-      cycle: plansData.cycle,
-      description: plansData.description,
-      imageUrl: plansData.imageUrl,
-    });
+  async senMail(userData, plansData, transactionData): Promise<any> {
+    return await this.emailService.sendPaymentConfirmationEmail(userData, plansData, transactionData);
   }
 
 

@@ -324,57 +324,57 @@ export class EmailService {
     }
   }
 
-  async sendPlansEmail(user: any, plansData: any): Promise<boolean> {
-    const userName = user.name || `${user.firstName} ${user.lastName}`;
-    const templateName = 'subscribe_MailForSubscriber';
-    const language = user?.language === 'fr' ? 'fr' : 'en';
-    const subject =
-      language === 'fr'
-        ? 'Abonnement: ' + plansData.title
-        : 'Subscription: ' + plansData.title;
+  // async sendPlansEmail(user: any, plansData: any): Promise<boolean> {
+  //   const userName = user.name || `${user.firstName} ${user.lastName}`;
+  //   const templateName = 'subscribe_MailForSubscriber';
+  //   const language = user?.language === 'fr' ? 'fr' : 'en';
+  //   const subject =
+  //     language === 'fr'
+  //       ? 'Abonnement: ' + plansData.title
+  //       : 'Subscription: ' + plansData.title;
 
-    let templatePath = path.join(
-      this.templateFolder,
-      `${templateName}_${language}.hbs`,
-    );
+  //   let templatePath = path.join(
+  //     this.templateFolder,
+  //     `${templateName}_${language}.hbs`,
+  //   );
 
-    let templateSource: string;
-    try {
-      templateSource = fs.readFileSync(templatePath, 'utf8');
-    } catch (err) {
-      // fallback to fr template if language file is missing
-      if (language !== 'fr') {
-        templatePath = path.join(
-          this.templateFolder,
-          `${templateName}_fr.hbs`,
-        );
-        templateSource = fs.readFileSync(templatePath, 'utf8');
-      } else {
-        throw err;
-      }
-    }
-    const template = handlebars.compile(templateSource);
-    const front = this.configService.get<string>('FRONT_URL') || this.frontUrl;
+  //   let templateSource: string;
+  //   try {
+  //     templateSource = fs.readFileSync(templatePath, 'utf8');
+  //   } catch (err) {
+  //     // fallback to fr template if language file is missing
+  //     if (language !== 'fr') {
+  //       templatePath = path.join(
+  //         this.templateFolder,
+  //         `${templateName}_fr.hbs`,
+  //       );
+  //       templateSource = fs.readFileSync(templatePath, 'utf8');
+  //     } else {
+  //       throw err;
+  //     }
+  //   }
+  //   const template = handlebars.compile(templateSource);
+  //   const front = this.configService.get<string>('FRONT_URL') || this.frontUrl;
 
-    const context = {
-      userName,
-      cover_img: plansData.imageUrl,
-      plans_title: plansData.title,
-      plans_subTitle: plansData.subTitle,
-      plans_cycle: plansData.cycle,
-      plans_description: this.cleanString(plansData.description),
-      plans_url: `${front}/plans/${plansData._id}_shared`,
-    };
+  //   const context = {
+  //     userName,
+  //     cover_img: plansData.imageUrl,
+  //     plans_title: plansData.title,
+  //     plans_subTitle: plansData.subTitle,
+  //     plans_cycle: plansData.cycle,
+  //     plans_description: this.cleanString(plansData.description),
+  //     plans_url: `${front}/plans/${plansData._id}_shared`,
+  //   };
 
-    const html = template(context);
+  //   const html = template(context);
 
-    return await this.proceedToSendEmail(
-      user.email,
-      subject,
-      html,
-      'Subscription: ' + context.plans_url,
-    );
-  }
+  //   return await this.proceedToSendEmail(
+  //     user.email,
+  //     subject,
+  //     html,
+  //     'Subscription: ' + context.plans_url,
+  //   );
+  // }
 
   async sendPaymentConfirmationEmail(userData, plansData, transactionData): Promise<boolean> {
     const userName = userData.name || `${userData.firstName} ${userData.lastName}`;
@@ -415,6 +415,7 @@ export class EmailService {
       invoice_url: `${front}/invoice/${transactionData._id.toString()}`,
       amount: transactionData.estimation,
       transactionDate: this.dateService.formatDate(transactionData.createdAt, 'short', userData.language),
+      transactionRef: transactionData.transactionRef
     };
 
     const html = template(context);

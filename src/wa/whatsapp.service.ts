@@ -639,6 +639,43 @@ export class WhatsappService implements OnModuleInit {
   }
 
   // NEW SUBSCRIBER OF PLAN
+  async sendupgradeSubscriberMessage(planId: string, userId: string, transactionId: string) {
+    const plan = await this.planService.getPlansById(planId);
+    const user = await this.userService.getUserById(userId);
+    const message = this.buildUpgradeSubscriberMessage(plan, user, transactionId);
+
+    console.log('sendNewSubscriberMessage user: ', user);
+    console.log('sendNewSubscriberMessage plan: ', plan);
+    console.log('Sending to: ', user.countryId.code + user.phone);
+    console.log('message: ', message);
+    return await this.sendText(user.phone, message, user.countryId.code);
+  }
+  private buildUpgradeSubscriberMessage(plan: any, user: any, transactionId: string): string {
+    if (user.language === 'fr')
+      return (
+        `*Confirmation de votre paiement !*\n\n` +
+        `Hello ${this.showName(user)},\n` +
+        `Nous vous confirmons votre paiement. \n` +
+        `Vous trouverez ci-dessous les informations relatives à votre transaction.\n\n` +
+        `Motif du paiement : *${plan.title}* (${plan.subTitle}).\n` +
+        `Consulter votre reçu: ${this.frontUrl}/invoice/${transactionId}\n\n` +
+        `Merci d'utiliser digiKUNTZ Payments.\n` +
+        `\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
+      );
+    else
+      return (
+        `*Confirmation of your payment !*\n\n` +
+        `Hello ${this.showName(user)},\n` +
+        `We confirm your payment. \n` +
+        `You will find your transaction details below.\n\n` +
+        `Reason for payment : *${plan.title}* (${plan.subTitle}).\n` +
+        `View your receipt : ${this.frontUrl}/invoice/${transactionId}\n\n` +
+        `Thank you for using digiKUNTZ Payments.\n` +
+        `\n\n> This is an automatic message from digiKUNTZ Payments.`
+      );
+  }
+
+  // NEW SUBSCRIBER OF PLAN
   async sendNewSubscriberMessage(planId: string, userId: string, transactionId: string) {
     const plan = await this.planService.getPlansById(planId);
     const user = await this.userService.getUserById(userId);

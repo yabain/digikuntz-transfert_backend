@@ -515,7 +515,7 @@ export class SubscriptionService {
       throw new NotFoundException('Error upgrading subscription');
     }
 
-    this.whatsappService.sendNewSubscriberMessageFromPlanAuthor(subscriptionData.planId, subscriptionData.userId);
+    this.whatsappService.sendupgradeSubscriberMessage(subscriptionData.planId, subscriptionData.userId, transactionId.toString());
     this.whatsappService.sendNewSubscriberMessage(subscriptionData.planId, subscriptionData.receiverId, transactionId.toString());
     return updated;
   }
