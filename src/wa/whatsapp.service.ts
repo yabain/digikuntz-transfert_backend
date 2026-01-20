@@ -227,6 +227,7 @@ export class WhatsappService implements OnModuleInit {
 
   /** Envoi d'un message texte */
   async sendText(to: string, message: string, countryCode?: string) {
+    
     this.assertClient();
 
     try {
@@ -410,7 +411,6 @@ export class WhatsappService implements OnModuleInit {
   private formatPhone(to: string, cc?: string) {
     let s = to.replace(/\D/g, '');
     if (cc && !s.startsWith(cc)) s = cc + s;
-    console.log('formatted phone: ', s);
     return s;
   }
 
@@ -855,14 +855,14 @@ export class WhatsappService implements OnModuleInit {
   }
 
   async sendWithdrawalMessage(transaction: any) {
-    const user = await this.userService.getUserById(transaction.senderId);
+    const user = await this.userService.getUserById(transaction.receiverId);
     const language = user.language || 'fr';
     const message = this.buildWithdrawalMessage(transaction, language);
     const countryCode = user.countryId?.code || user.countryId;
     return await this.sendText(
       user.whatsapp || user.phone,
       message,
-      user.whatsapp ? null : countryCode,
+      countryCode,
     );
   }
 
@@ -876,8 +876,7 @@ export class WhatsappService implements OnModuleInit {
         `Un retrait a été effectué avec succès depuis votre compte. \n\n` +
         `Montant : *${transaction.estimation} ${transaction.receiverCurrency}*\n` +
         `Référence : ${transaction.transactionRef}\n\n` +
-        `Vous troverez votre reçu téléchargeable: ` +
-        `${this.frontUrl}/invoice/${transaction._id}` +
+        `Vous troverez votre reçu téléchargeable: ` + `${this.frontUrl}/invoice/${transaction._id}` +
         `\n\n> Ceci est message automatique du service WhatsApp de digiKUNTZ Payments.`
       );
     else

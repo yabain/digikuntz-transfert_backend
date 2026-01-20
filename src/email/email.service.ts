@@ -428,14 +428,14 @@ export class EmailService {
     );
   }
 
-  async sendWithdrawalConfirmationEmail(userData, plansData, transactionData): Promise<boolean> {
+  async sendWithdrawalConfirmationEmail(userData, transactionData): Promise<boolean> {
     const userName = userData.name || `${userData.firstName} ${userData.lastName}`;
     const templateName = 'withdrawal-confirmation';
     const language = userData?.language === 'fr' ? 'fr' : 'en';
     const subject =
       language === 'fr'
-        ? 'Abonnement: ' + plansData.title
-        : 'Subscription: ' + plansData.title;
+        ? 'Retrait effectué '
+        : 'Success withdrawal ';
 
     let templatePath = path.join(
       this.templateFolder,
@@ -478,6 +478,57 @@ export class EmailService {
     );
   }
   
+
+  async sendTransferConfirmationEmail(userData, transactionData): Promise<boolean> {
+    const userName = userData.name || `${userData.firstName} ${userData.lastName}`;
+    const templateName = 'withdrawal-confirmation';
+    const language = userData?.language === 'fr' ? 'fr' : 'en';
+    const subject =
+      language === 'fr'
+        ? `Confirmation de transfert`
+        : 'Transfer confirmation';
+
+    let templatePath = path.join(
+      this.templateFolder,
+      `${templateName}_${language}.hbs`,
+    );
+
+    let templateSource: string;
+    try {
+      templateSource = fs.readFileSync(templatePath, 'utf8');
+    } catch (err) {
+      // fallback to fr template if language file is missing
+      if (language !== 'fr') {
+        templatePath = path.join(
+          this.templateFolder,
+          `${templateName}_fr.hbs`,
+        );
+        templateSource = fs.readFileSync(templatePath, 'utf8');
+      } else {
+        throw err;
+      }
+    }
+    const template = handlebars.compile(templateSource);
+    const front = this.configService.get<string>('FRONT_URL') || this.frontUrl;
+
+    const context = {
+      userName,
+      invoice_url: `${front}/invoice/${transactionData._id.toString()}`,
+      amount: transactionData.estimation,
+      transactionDate: this.dateService.formatDate(transactionData.createdAt, 'short', userData.language),
+      transactionRef: transactionData.transactionRef
+    };
+
+    const html = template(context);
+
+    return await this.proceedToSendEmail(
+      userData.email,
+      subject,
+      html,
+      'Subscription invoice: ' + context.invoice_url,
+    );
+  }
+
   async sendWhatsappAlert(
     subject: string,
     templateName: string,

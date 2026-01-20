@@ -27,6 +27,7 @@ import { PayinModule } from './payin/payin.module';
 import { PayoutModule } from './payout/payout.module';
 import { FlutterwaveModule } from './flutterwave/flutterwave.module';
 import { SmtpModule } from './email/smtp/smtp.module';
+import { DevModule } from './dev/dev.module';
 import { WhatsappModule } from './wa/whatsapp.module';
 import { UserSettingsModule } from './userSettings/userSettings.module';
 import { ServiceModule } from './service/service.module';
@@ -93,6 +94,7 @@ import { AppCacheModule } from './cache/cache.module';
     UserSettingsModule,
     ServiceModule,
     AppCacheModule,
+    DevModule,
   ],
   controllers: [AppController],
   providers: [AppService],

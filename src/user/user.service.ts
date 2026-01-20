@@ -157,7 +157,7 @@ export class UserService {
    * @returns The user data with follower and following counts.
    * @throws NotFoundException if the user ID is invalid or the user is not found.
    */
-  async getUserById(userId: string): Promise<any> {
+  async getUserById(userId): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new NotFoundException('Invalid user ID');
     }

@@ -472,7 +472,7 @@ export class PayinService {
   }
 
 
-  private async handleVerifyPayin(idOrTxRef: string, saveLocal = false, resData?: any) {
+  private async handleVerifyPayin(txRef: string, saveLocal = false, resData?: any) {
 
     if (resData && saveLocal) {
       this.logger.debug('handleVerifyPayin: saving FW result and returning');
@@ -480,7 +480,7 @@ export class PayinService {
     }
 
     this.logger.debug('handleVerifyPayin: returning local record only');
-    return this.payinModel.findOne({ txRef: idOrTxRef }).lean().exec();
+    return this.payinModel.findOne({ txRef: txRef }).lean().exec();
   }
 
   /**
