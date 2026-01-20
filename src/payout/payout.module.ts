@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { PayoutService } from './payout.service';
 import { PayoutController } from './payout.controller';
 import { HttpModule } from '@nestjs/axios';
@@ -14,12 +14,18 @@ import { TransactionService } from 'src/transaction/transaction.service';
 import { PayoutCron } from './payout.cron';
 import { PayinService } from 'src/payin/payin.service';
 import { WhatsappModule } from 'src/wa/whatsapp.module';
+import { EmailModule } from 'src/email/email.module';
+import { PlansModule } from 'src/plans/plans.module';
+import { UserModule } from 'src/user/user.module';
 
 @Module({
   imports: [
     ConfigModule,
     HttpModule,
     WhatsappModule,
+    forwardRef(() => EmailModule),
+    forwardRef(() => PlansModule),
+    forwardRef(() => UserModule),
     MongooseModule.forFeature([
       { name: Payin.name, schema: PayinSchema },
       { name: Payout.name, schema: PayoutSchema },

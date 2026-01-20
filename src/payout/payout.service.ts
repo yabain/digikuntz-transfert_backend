@@ -20,6 +20,8 @@ import { TStatus } from 'src/transaction/transaction.schema';
 import { TransactionService } from 'src/transaction/transaction.service';
 import { randomBytes } from 'crypto';
 import { WhatsappService } from 'src/wa/whatsapp.service';
+import { EmailService } from 'src/email/email.service';
+import { UserService } from 'src/user/user.service';
 
 @Injectable()
 export class PayoutService {
@@ -28,34 +30,36 @@ export class PayoutService {
   private fwBaseUrlV3 = 'https://api.flutterwave.com/v3';
 
   constructor(
-      private readonly http: HttpService,
+    private readonly http: HttpService,
     private readonly config: ConfigService,
     @InjectModel(Payout.name)
     private readonly payoutModel: mongoose.Model<PayoutDocument>,
     private transactionService: TransactionService,
     @Inject(forwardRef(() => WhatsappService))
     private whatsappService: WhatsappService,
+    private emailService: EmailService,
+    private userService: UserService
   ) {
     this.fwSecret = this.config.get<string>('FLUTTERWAVE_SECRET_KEY');
     this.fwSecretNGN = this.config.get<string>('FLUTTERWAVE_SECRET_KEY_NGN');
   }
 
-  async createPayout(payloadPayout, fwData)  {
-    return  await this.payoutModel.create({
-        reference: payloadPayout.reference,
-        txRef: payloadPayout.txRef,
-        transactionId: payloadPayout.transactionId,
-        userId: payloadPayout.userId,
-        type: payloadPayout.type, // 'bank' | 'mobile_money' | 'wallet'
-        amount: payloadPayout.amount,
-        sourceCurrency: payloadPayout.sourceCurrency,
-        destinationCurrency: payloadPayout.destinationCurrency,
-        accountBankCode: payloadPayout.accountBankCode,
-        accountNumber: payloadPayout.accountNumber,
-        narration: this.toAlphanumeric(payloadPayout.narration),
-        status: this.normalizeStatus(fwData.data?.data?.status),
-        raw: fwData.data,
-      })
+  async createPayout(payloadPayout, fwData) {
+    return await this.payoutModel.create({
+      reference: payloadPayout.reference,
+      txRef: payloadPayout.txRef,
+      transactionId: payloadPayout.transactionId,
+      userId: payloadPayout.userId,
+      type: payloadPayout.type, // 'bank' | 'mobile_money' | 'wallet'
+      amount: payloadPayout.amount,
+      sourceCurrency: payloadPayout.sourceCurrency,
+      destinationCurrency: payloadPayout.destinationCurrency,
+      accountBankCode: payloadPayout.accountBankCode,
+      accountNumber: payloadPayout.accountNumber,
+      narration: this.toAlphanumeric(payloadPayout.narration),
+      status: this.normalizeStatus(fwData.data?.data?.status),
+      raw: fwData.data,
+    })
   }
 
   /**
@@ -149,7 +153,7 @@ export class PayoutService {
 
   async verifyPayout(reference: string) {
     const oldStatus = 'PENDING';
-    
+
     const url = `${this.fwBaseUrlV3}/transfers?reference=${reference}`;
     const res: any = await this.http
       .get(url, {
@@ -162,7 +166,12 @@ export class PayoutService {
       console.log('payout from FW', payout);
 
       if (oldStatus !== payout.status) {
-        await this.updatePayout(payout);
+        const updatedPayout = await this.updatePayout(payout);
+
+        if (!updatedPayout) {
+          throw new NotFoundException('payout not found');
+        }
+
         if (payout.status === 'SUCCESSFUL') {
           const transaction =
             await this.transactionService.updateTransactionStatus(
@@ -170,15 +179,16 @@ export class PayoutService {
               TStatus.PAYOUTSUCCESS,
               payout,
             );
-            console.log('transaction SUCCESSFUL', transaction);
+          console.log('transaction SUCCESSFUL', transaction);
           // send Email payment success
-          if(transaction.transactionType === 'transfer'){
-          this.whatsappService.sendMessageForTransferReceiver(transaction);
-          this.whatsappService.sendMessageForTransferSender(transaction);
-        } else if (transaction.transactionType === 'withdrawal') {
-          this.whatsappService.sendWithdrawalMessage(transaction);
-        }
-
+          if (transaction.transactionType === 'transfer') {
+            this.whatsappService.sendMessageForTransferReceiver(transaction);
+            this.whatsappService.sendMessageForTransferSender(transaction);
+          } else if (transaction.transactionType === 'withdrawal') {
+            this.whatsappService.sendWithdrawalMessage(transaction);
+            const userData = await this.userService.getUserById(transaction.receiverId)
+            this.sendWithdrawalConfirmationEmail(userData, transaction);
+          }
           console.log('verify payout and update SUCCESS')
         }
         if (payout.status === 'FAILED') {
@@ -188,7 +198,7 @@ export class PayoutService {
               TStatus.PAYOUTERROR,
               payout
             );
-            console.log('transaction FAILED', transaction);
+          console.log('transaction FAILED', transaction);
           // send Email payment failed to admin
           // Send Whatsapp to admin
         }
@@ -288,21 +298,25 @@ export class PayoutService {
     return `${prefix}-${Date.now()}-${randomBytes(4).toString('hex')}`;
   }
 
-/**
- * Convert a text to alphanumeric
- * @param {string} text - the sentence in param
- * @returns {string} - Cleared sentence
- */
- toAlphanumeric(text) {
-  if (typeof text !== 'string') return '';
+  async sendWithdrawalConfirmationEmail(userData, transactionData): Promise<any> {
+    return await this.emailService.sendWithdrawalConfirmationEmail(userData, transactionData);
+  }
 
-  return text
-    // 1. Supprimer les accents et normaliser
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // retire les diacritiques
-    // 2. Remplacer les caractères non alphanumériques par rien
-    .replace(/[^a-zA-Z0-9]/g, '')
-    // 3. Supprimer les espaces (facultatif selon besoin)
-    .trim();
-}
+  /**
+   * Convert a text to alphanumeric
+   * @param {string} text - the sentence in param
+   * @returns {string} - Cleared sentence
+   */
+  toAlphanumeric(text) {
+    if (typeof text !== 'string') return '';
+
+    return text
+      // 1. Supprimer les accents et normaliser
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // retire les diacritiques
+      // 2. Remplacer les caractères non alphanumériques par rien
+      .replace(/[^a-zA-Z0-9]/g, '')
+      // 3. Supprimer les espaces (facultatif selon besoin)
+      .trim();
+  }
 }
