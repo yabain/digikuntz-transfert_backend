@@ -223,11 +223,12 @@ export class PayinService {
 
       return {
         status: PayinStatus.PENDING,
+        transactionId: dto.transactionId,
         txRef: dto.txRef,
         amount: dto.amount,
         currency: dto.currency,
         customerEmail: dto.customerEmail,
-        publicKey: this.fwPublic,
+        // publicKey: this.fwPublic,
         redirect_url: (resData as any)?.data?.link,
       };
     } catch (err: unknown) {

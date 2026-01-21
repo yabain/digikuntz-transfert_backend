@@ -240,23 +240,33 @@ export class FlutterwaveService {
   // ---------- Pay-In (Hosted Payment) ----------
   async createPayin(transactionData: any, userId) {
     transactionData.userId = userId;
+    const txRef = this.payinService.generateTxRef('txPayin')
     const raw = {
       ...transactionData,
       userId,
-      txRef: this.payinService.generateTxRef('txPayin'),
+      txRef,
       // transactionType: 'transfer',
     };
 
     try {
+      console.log('in try of createPayin raw:', raw)
       const savedTransaction =
         await this.transactionService.createTransaction(raw);
       if (!savedTransaction) {
         throw new NotFoundException('Error to save transaction details');
       }
 
+      const amount = Number(savedTransaction.paymentWithTaxes);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw new HttpException(
+          { status: HttpStatus.BAD_REQUEST, error: 'Invalid payment amount' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
       return this.payinService.createPayin({
-        amount: savedTransaction.paymentWithTaxes,
-        txRef: savedTransaction.txRef,
+        amount,
+        txRef,
         transactionId: savedTransaction._id,
         currency: savedTransaction.senderCurrency,
         customerEmail: savedTransaction.senderEmail,
@@ -265,6 +275,7 @@ export class FlutterwaveService {
         userId,
       });
     } catch (error) {
+      console.error('Flutterwave createPayin error:', error?.response?.data || error?.message || error);
       throw new HttpException(
         {
           status: HttpStatus.BAD_REQUEST,
@@ -330,6 +341,9 @@ export class FlutterwaveService {
         }
         if (transaction.transactionType === 'withdrawal') {
           await this.handleWithdrawal(transaction);
+        }
+        if (transaction.transactionType === 'apiCall') {
+          await this.handleApiCall(transaction);
         }
         // console.log('updating transaction data')
         await this.transactionService.updateTransactionStatus(
@@ -524,6 +538,23 @@ export class FlutterwaveService {
       // console.log('(fw service: handleWithdrawal) Error: ', err);
       return {
         message: '(fw service: handleWithdrawal) Error: ' + err,
+        status: 'error',
+      };
+    }
+  }
+
+  async handleApiCall(transaction) {
+    try {
+      const newBalence = await this.balanceService.creditBalance(
+        transaction.receiverId,
+        Number(transaction.estimation),
+        transaction.senderCurrency,
+      );
+      return newBalence;
+    } catch (err) {
+      // console.log('(fw service: handleApiCall) Error: ', err);
+      return {
+        message: '(fw service: handleApiCall) Error: ' + err,
         status: 'error',
       };
     }
@@ -734,8 +765,8 @@ export class FlutterwaveService {
     else return 'wallet';
   }
 
-  async verifyPayout(reference: string) {
-    return await this.payoutService.verifyPayout(reference);
+  async verifyPayout(reference: string, verifyPayout = false) {
+    return await this.payoutService.verifyPayout(reference, verifyPayout);
   }
 
   /**

@@ -11,6 +11,7 @@ export enum TransactionType {
   TRANSFER = 'transfer',
   SUBSCRIPTION = 'subscription',
   FUNDRAISING = 'fundraising',
+  APICALL = 'apiCall',
 }
 
 export enum Currency {

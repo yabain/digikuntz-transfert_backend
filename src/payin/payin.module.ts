@@ -24,6 +24,7 @@ import { Item, ItemSchema } from 'src/plans/item/item.shema';
 import { Plans, PlansSchema } from 'src/plans/plans.schema';
 import { PlansModule } from 'src/plans/plans.module';
 import { SubscriptionModule } from 'src/plans/subscription/subscription.module';
+import { SystemModule } from 'src/system/system.module';
 import { Email, EmailSchema } from 'src/email/email.schema';
 import { EmailService } from 'src/email/email.service';
 import { Options, OptionsSchema } from 'src/plans/options/options.shema';
@@ -42,6 +43,7 @@ import { AppCacheModule } from '../cache/cache.module';
     WhatsappModule,
     forwardRef(() => PlansModule),
     forwardRef(() => SubscriptionModule),
+    forwardRef(() => SystemModule),
     AppCacheModule,
     MongooseModule.forFeature([
       { name: Payin.name, schema: PayinSchema },

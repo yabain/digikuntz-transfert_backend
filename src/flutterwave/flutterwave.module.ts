@@ -37,6 +37,7 @@ import { ServicePaymentService } from 'src/service/service-payment/service-payme
 import { ServicePayment, ServicePaymentSchema } from 'src/service/service-payment/service-payment.schema';
 import { AppCacheModule } from '../cache/cache.module';
 import { PlansModule } from 'src/plans/plans.module';
+import { SystemModule } from 'src/system/system.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { PlansModule } from 'src/plans/plans.module';
     HttpModule,
     WhatsappModule,
     forwardRef(() => PlansModule),
+    SystemModule,
     AppCacheModule,
     MongooseModule.forFeature([
       { name: Payin.name, schema: PayinSchema },

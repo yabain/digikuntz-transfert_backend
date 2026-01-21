@@ -46,12 +46,14 @@ import { ServicePaymentService } from 'src/service/service-payment/service-payme
 import { ServicePayment, ServicePaymentSchema } from 'src/service/service-payment/service-payment.schema';
 import { AppCacheModule } from '../cache/cache.module';
 import { SubscriptionModule } from './subscription/subscription.module';
+import { SystemModule } from 'src/system/system.module';
 
 @Module({
   imports: [
     forwardRef(() => AuthModule),
     forwardRef(() => WhatsappModule),
     forwardRef(() => SubscriptionModule),
+    forwardRef(() => SystemModule),
     AppCacheModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({

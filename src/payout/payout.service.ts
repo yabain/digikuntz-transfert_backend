@@ -151,7 +151,7 @@ export class PayoutService {
       .exec();
   }
 
-  async verifyPayout(reference: string) {
+  async verifyPayout(reference: string, updateOnPending: boolean = false) {
     const oldStatus = 'PENDING';
 
     const url = `${this.fwBaseUrlV3}/transfers?reference=${reference}`;
@@ -201,6 +201,14 @@ export class PayoutService {
           console.log('transaction FAILED', transaction);
           // send Email payment failed to admin
           // Send Whatsapp to admin
+        }
+        if (payout.status === 'PENDING' && updateOnPending === true) {
+          const transaction =
+            await this.transactionService.updateTransactionStatus(
+              reference,
+              TStatus.PAYOUTPENDING,
+              payout
+            );
         }
       }
       return payout;

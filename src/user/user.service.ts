@@ -357,6 +357,18 @@ export class UserService {
   }
 
   /**
+   * Returns the user's name formatted for display, with a fallback to the username if no first or last name is provided.
+   * @param userData - The user data object containing name information
+   * @returns Formatted user name or username
+   */
+  showName(userData: any): string {
+    if (userData?.accountType === 'personal') {
+      return `${userData?.firstName} ${userData?.lastName}`
+    }
+    return userData?.name;
+  }
+  
+  /**
    * Get total number of users and the percentage of users registered in the last 7 days.
    * @returns An object with usersNumber and pourcentage.
    */

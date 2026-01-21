@@ -46,6 +46,7 @@ import { Plans, PlansSchema } from 'src/plans/plans.schema';
 import { AppCacheModule } from '../cache/cache.module';
 import { ServicePaymentController } from './service-payment/service-payment.controller';
 import { SubscriptionModule } from 'src/plans/subscription/subscription.module';
+import { SystemModule } from 'src/system/system.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { SubscriptionModule } from 'src/plans/subscription/subscription.module';
     WhatsappModule,
     AppCacheModule,
     forwardRef(() => SubscriptionModule),
+    forwardRef(() => SystemModule),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       inject: [ConfigService],

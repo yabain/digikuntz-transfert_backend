@@ -25,6 +25,7 @@ import { Query } from 'express-serve-static-core';
 import { Payout } from 'src/payout/payout.schema';
 import { PayinService } from 'src/payin/payin.service';
 import { UpdateTransactionDto } from './update-transaction.dto';
+import { SystemService } from 'src/system/system.service';
 // import { CreateTransactionDto } from './create-transaction.dto';
 
 @Injectable()
@@ -38,6 +39,7 @@ export class TransactionService {
     private httpService: HttpService,
     private configService: ConfigService,
     private payinService: PayinService,
+    private systemService: SystemService,
   ) { }
 
   async findAll(query: Query): Promise<Transaction[]> {
@@ -489,7 +491,17 @@ export class TransactionService {
   // }
 
   async createTransaction(transactionData: any): Promise<any> {
-    return await this.transactionModel.create(transactionData);
+    const taxesDetails = await this.calculateTaxesAmount(transactionData.estimation);
+    const payload = {
+      ...transactionData,
+      estimation: String(transactionData.estimation),
+      receiverAmount: String(transactionData.estimation),
+      invoiceTaxes: String(taxesDetails.invoiceTaxes),
+      taxesAmount: String(taxesDetails.taxesAmount),
+      paymentWithTaxes: String(taxesDetails.paymentWithTaxes),
+    };
+    console.log('in createTransaction payload:', payload)
+    return await this.transactionModel.create(payload);
   }
 
   private async chechTransactionStatus(
@@ -528,7 +540,31 @@ export class TransactionService {
     return transaction;
   }
 
-  generateRef(): string {
+  async calculateTaxesAmount(price: number): Promise<any> {
+    const systemData = await this.systemService.getSystemData();
+    const taxesAmount = this.arrondOnExeed(price * (systemData.invoiceTaxes / 100));
+    const paymentWithTaxes = this.arrondOnExeed(price + taxesAmount);
+    return {
+      invoiceTaxes: systemData.invoiceTaxes,
+      price: this.arrondOnExeed(price),
+      taxesAmount,
+      // keep legacy key for backward compatibility
+      paymentWhitTaxes: paymentWithTaxes,
+      paymentWithTaxes,
+    }
+  }
+
+  aroundValue(val) {
+    return Math.ceil(val);
+  }
+
+  // arrondi par exès
+  arrondOnExeed(nombre: number) {
+    if (!Number.isFinite(nombre)) throw new Error("Invalide");
+    return Number.isInteger(nombre) ? nombre : Math.ceil(nombre);
+  }
+
+  generateInRef(): string {
     const now = new Date();
 
     // Generate the components of the date and time

@@ -19,7 +19,7 @@ import { Service } from 'src/service/service.schema';
 export class CreateTransactionDto {
   @IsString()
   @IsEmpty()
-  invoiceRef: string;
+  transactionRef: string;
 
   @IsString()
   @IsOptional()

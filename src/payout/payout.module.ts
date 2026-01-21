@@ -17,12 +17,14 @@ import { WhatsappModule } from 'src/wa/whatsapp.module';
 import { EmailModule } from 'src/email/email.module';
 import { PlansModule } from 'src/plans/plans.module';
 import { UserModule } from 'src/user/user.module';
+import { SystemModule } from 'src/system/system.module';
 
 @Module({
   imports: [
     ConfigModule,
     HttpModule,
-    WhatsappModule,
+    forwardRef(() => WhatsappModule),
+    forwardRef(() => SystemModule),
     forwardRef(() => EmailModule),
     forwardRef(() => PlansModule),
     forwardRef(() => UserModule),
