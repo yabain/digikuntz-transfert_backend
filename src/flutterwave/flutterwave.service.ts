@@ -552,7 +552,6 @@ export class FlutterwaveService {
       );
       return newBalence;
     } catch (err) {
-      // console.log('(fw service: handleApiCall) Error: ', err);
       return {
         message: '(fw service: handleApiCall) Error: ' + err,
         status: 'error',

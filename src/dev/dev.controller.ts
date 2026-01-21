@@ -35,23 +35,26 @@ export class DevController {
   @Get('api-keys/:userId')
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async getData(@Req() req, @Param('userId') userId): Promise<any> {
+  async getDevDataByUserId(@Req() req, @Param('userId') userId): Promise<any> {
     if (!req.user.isAdmin) {
       throw new NotFoundException('Unautorised');
     }
     return this.devService.getDevDataByUserId(userId);
   }
 
-  @Post('api-keys')
+  @Get('my-key')
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async createDevData(
-    @Req() req, 
-    @Body() data): Promise<any> {
-    data.userId = req.user._id.toString();
-    data.secretKey = this.devService.generateKey('SK');
-    data.publicKey = this.devService.generateKey('PK');
-    return this.devService.createDevData(req.user._id, data);
+  async getMyData(@Req() req): Promise<any> {
+    return this.devService.getDevDataByUserId(req.user._id);
+  }
+
+  @Post('generate-key')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async generateKey(
+    @Req() req ): Promise<any> {
+    return this.devService.createDevData(req.user._id);
   }
 
   @Put('api-keys/:publicKey')
