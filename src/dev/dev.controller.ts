@@ -46,6 +46,7 @@ export class DevController {
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getMyData(@Req() req): Promise<any> {
+    console.log("req.user._id: ", req.user._id);
     return this.devService.getDevDataByUserId(req.user._id);
   }
 

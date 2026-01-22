@@ -182,7 +182,7 @@ export class UserService {
 
       // Mettre en cache avec logique conditionnelle
       await this.cacheService.setUserCache(userId, user);
-      console.log('userData: ', user);
+      // console.log('userData: ', user);
       return user;
     } catch (error) {
       if (error instanceof NotFoundException) {

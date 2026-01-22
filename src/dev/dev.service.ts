@@ -30,14 +30,16 @@ export class DevService {
 
   async getDevDataByUserId(userId): Promise<any> {
     let res = await this.devModel.findOne({userId});
-    if (!res) {
+    console.log("res", res);
+    if (res === null) {
       res = await this.createDevData(userId);
       if (!res) return "Dev data already exist";
     };
+    console.log("res 2", res);
 
     return {
-      id: res._id.toString(),
-      userId: res.userId.toString(),
+      id: res.id,
+      userId: userId,
       status: res.status,
       secretKey: this.encryptWithPassphrase(res.secretKey, this.cryptKey),
       publicKey: this.encryptWithPassphrase(res.publicKey, this.cryptKey)
@@ -68,12 +70,9 @@ export class DevService {
 
   async createDevData(userId): Promise<any> {
     const verifUser = await this.verifyUserConditions(userId);
+    console.log("verifUser: ", verifUser);
     if (!verifUser) return false;
 
-    const data = await this.getDevDataByUserId(userId);
-    if (data) {
-      return "Dev data already exist";
-    }
     try {
       let devData: any = {
         status: true,
@@ -83,7 +82,9 @@ export class DevService {
       };
       const res = await this.devModel.create(devData);
       return {
-        ...res,
+        id: res._id,
+        status: res.status,
+        userId: res.userId,
         secretKey: this.encryptWithPassphrase(res.secretKey, this.cryptKey),
         publicKey: this.encryptWithPassphrase(res.publicKey, this.cryptKey)
       }
@@ -121,6 +122,7 @@ export class DevService {
 
   async verifyUserConditions(userId): Promise<boolean> {
     const user = await this.userService.getUserById(userId);
+    console.log("user: ", user);
     if (!user) return false;
     if (user.accountType !== 'organisation' && user.isAdmin !== true) return false;
     if (user.isActive !== true) return false;
