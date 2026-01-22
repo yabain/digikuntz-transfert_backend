@@ -11,13 +11,10 @@ import { PayinService } from 'src/payin/payin.service';
 import { TStatus } from 'src/transaction/transaction.schema';
 import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
 import { UserService } from 'src/user/user.service';
+import { CryptService } from './crypt.service';
 
 @Injectable()
 export class DevService {
-  private static readonly PBKDF2_ITERS = 100_000;
-  private static readonly KEY_LEN = 32;
-  private static readonly DIGEST = 'sha256';
-  private cryptKey: string = process.env.CRYPT_KEY || '';
 
   constructor(
     @InjectModel(Dev.name)
@@ -25,68 +22,93 @@ export class DevService {
     private transactionService: TransactionService,
     private payinService: PayinService,
     private fwService: FlutterwaveService,
-    private userService: UserService
+    private userService: UserService,
+    private cryptService: CryptService,
   ) { }
 
-  async getDevDataByUserId(userId): Promise<any> {
-    let res = await this.devModel.findOne({userId});
-    console.log("res", res);
-    if (res === null) {
-      res = await this.createDevData(userId);
-      if (!res) return "Dev data already exist";
+  async getDevDataById(devId): Promise<any> {
+    let res = await this.devModel.findById(devId);
+    if (!res) {
+      return null;
     };
     console.log("res 2", res);
 
     return {
       id: res.id,
-      userId: userId,
+      userId: res.userId.toString(),
       status: res.status,
-      secretKey: this.encryptWithPassphrase(res.secretKey, this.cryptKey),
-      publicKey: this.encryptWithPassphrase(res.publicKey, this.cryptKey)
+      secretKey: this.cryptService.decryptWithPassphrase(res.secretKey),
+      publicKey: this.cryptService.decryptWithPassphrase(res.publicKey)
     };
   }
 
-  // encryptObject(data: any) {
-  //   if (data == null || data == undefined || data == "") return null;
-  //   data = JSON.stringify(data);
-  //   let xxx = CryptoJS.AES.encrypt(data, this.key).toString();
-  //   xxx = xxx.replaceAll("/", "AaAaAaA");
-  //   return xxx;
-  // }
+  async getDevDataByUserId(userId): Promise<any> {
+    let res = await this.devModel.findOne({ userId });
+    if (!res) {
+      const create = await this.createDevData(userId, false, false);
+      if (create) return create;
+      return null;
+    };
+
+    return {
+      id: res.id,
+      userId: userId,
+      status: res.status,
+      secretKey: this.cryptService.decryptWithPassphrase(res.secretKey),
+      publicKey: this.cryptService.decryptWithPassphrase(res.publicKey)
+    };
+  }
 
   async getDevDataByKey(userId, secretKey: string): Promise<any> {
     try {
-      const res = await this.devModel.findOne({ userId, secretKey });
+      // const sKey = this.cryptService.encryptWithPassphrase(secretKey);
+      const res = await this.devModel.findOne({ userId });
+      console.log("res 3", res);
       if (!res) return null;
+      if (this.cryptService.decryptWithPassphrase(res.secretKey) !== secretKey) return null;
       return {
-        ...res,
-        secretKey: this.encryptWithPassphrase(res.secretKey, this.cryptKey),
-        publicKey: this.encryptWithPassphrase(res.publicKey, this.cryptKey)
+        id: res.id,
+        userId: res.userId.toString(),
+        status: res.status,
+        secretKey: this.cryptService.decryptWithPassphrase(res.secretKey),
+        publicKey: this.cryptService.decryptWithPassphrase(res.publicKey)
       };
     } catch (error: any) {
       throw new ConflictException(error);
     }
   }
 
-  async createDevData(userId): Promise<any> {
+  async createDevData(userId, status: boolean = true, verifyExisting: boolean = true): Promise<any> {
     const verifUser = await this.verifyUserConditions(userId);
-    console.log("verifUser: ", verifUser);
     if (!verifUser) return false;
 
+    if (verifyExisting) {
+      const dev = await this.devModel.findOne({ userId });
+      if (dev) return {
+        id: dev._id,
+        status: dev.status,
+        userId: dev.userId,
+        secretKey: this.cryptService.decryptWithPassphrase(dev.secretKey),
+        publicKey: this.cryptService.decryptWithPassphrase(dev.publicKey)
+      };
+    }
+
     try {
+      const sKey = this.generateKey('SK');
+      const pKey = this.generateKey('PK')
       let devData: any = {
-        status: true,
-        secretKey: this.generateKey('SK'),
-        publicKey: this.generateKey('PK'),
         userId: userId.toString(),
+        status,
+        secretKey: this.cryptService.encryptWithPassphrase(sKey),
+        publicKey: this.cryptService.encryptWithPassphrase(pKey),
       };
       const res = await this.devModel.create(devData);
       return {
         id: res._id,
         status: res.status,
         userId: res.userId,
-        secretKey: this.encryptWithPassphrase(res.secretKey, this.cryptKey),
-        publicKey: this.encryptWithPassphrase(res.publicKey, this.cryptKey)
+        secretKey: sKey,
+        publicKey: pKey
       }
     } catch (error: any) {
       throw new ConflictException(error);
@@ -98,7 +120,7 @@ export class DevService {
       const data = await this.getDevDataByUserId(userId);
       if (data) {
         if (data.userId !== userId && data.userId.toString() !== userId) return 'unauthorized';
-        await this.devModel.findByIdAndUpdate(data._id, devData);
+        await this.devModel.findByIdAndUpdate(data.id, devData);
         return data;
       } else return 'unexisting data'
     } catch (error: any) {
@@ -109,7 +131,7 @@ export class DevService {
   async authKey(userId, secretKey: string, verifyStatus = true): Promise<any> {
     const verifUser = await this.verifyUserConditions(userId);
     if (!verifUser) return false;
-    
+
     try {
       const res = await this.getDevDataByKey(userId, secretKey);
       if (!res) return false;
@@ -122,12 +144,33 @@ export class DevService {
 
   async verifyUserConditions(userId): Promise<boolean> {
     const user = await this.userService.getUserById(userId);
-    console.log("user: ", user);
     if (!user) return false;
     if (user.accountType !== 'organisation' && user.isAdmin !== true) return false;
     if (user.isActive !== true) return false;
-    if (user.verified !== true) return false;
+    if (user.verified !== true && user.isAdmin !== true) return false;
     return true;
+  }
+
+  async updateStatus(userId: string, status: boolean) {
+    console.log('updating status: ', userId, status);
+    const devData = await this.getDevDataByUserId(userId);
+    console.log('devData in updateStatus: ', devData);
+    if (!devData) return 'no developer found with this id';
+    if (devData.userId.toString() !== userId.toString()) return 'unauthorized';
+    try {
+      const res = await this.devModel.findByIdAndUpdate(devData.id, { status }, { new: true });
+      if (!res) return 'error updating data';
+      return {
+        id: res.id,
+        userId: res.userId.toString(),
+        status: res.status,
+        secretKey: this.cryptService.decryptWithPassphrase(res.secretKey),
+        publicKey: this.cryptService.decryptWithPassphrase(res.publicKey)
+      };
+    }
+    catch (error: any) {
+      throw new ConflictException(error);
+    }
   }
 
   generateKey(prefix = 'key'): string {
@@ -140,8 +183,8 @@ export class DevService {
     const transaction = await this.transactionService.findById(transactionId);
     if (!transaction) return 'no transaction found';
     if (!transaction?.userId?.toString().includes(userId)
-    && !transaction?.senderId?.toString().includes(userId)
-    && !transaction?.receiverId?.toString().includes(userId)) return 'Unauthorized';
+      && !transaction?.senderId?.toString().includes(userId)
+      && !transaction?.receiverId?.toString().includes(userId)) return 'Unauthorized';
 
     let status: string = '';
     if (transaction.status === 'transaction_payin_pending') status = 'pending'
@@ -154,22 +197,22 @@ export class DevService {
     if (transaction.status !== 'transaction_payin_success') {
       // payIn = await this.payinService.verifyPayin(transaction.txRef);
       payIn = await this.payinService.getPayinByTransactionId(transactionId);
-      if(!payIn) return 'payin not found';
+      if (!payIn) return 'payin not found';
       setTimeout(async () => {
-        if(transaction.status.include('payin')) {
+        if (transaction.status.include('payin')) {
           await this.fwService.verifyPayin(transaction.txRef);
           await this.transactionService.updateTransactionStatus(transactionId, TStatus.PAYINPENDING);
         }
         else if (transaction.status.includes('payout')) {
           await this.fwService.verifyPayout(transaction.txRef, true);
         }
- 
+
       }, 60 * 1000)
     }
     return {
       id: transaction._id,
       status: status,
-      data: { 
+      data: {
         estimation: transaction.estimation,
         transactionRef: transaction.transactionRef,
         invoiceTaxes: transaction.taxesAmount,
@@ -180,7 +223,7 @@ export class DevService {
         paymentLink: transaction.status !== 'transaction_payin_success' ? (payIn as any)?.raw?.data?.link : '',
         createdAt: transaction.createdAt,
         updatedAt: transaction.updatedAt,
-       }
+      }
     }
   }
 
@@ -217,33 +260,4 @@ export class DevService {
     }
   }
 
-
-  encryptWithPassphrase(plainText: string, passphrase: string): string {
-    const salt = randomBytes(16);
-    const iv = randomBytes(16);
-    const key = pbkdf2Sync(
-      passphrase,
-      salt,
-      DevService.PBKDF2_ITERS,
-      DevService.KEY_LEN,
-      DevService.DIGEST,
-    );
-
-    const cipher = createCipheriv('aes-256-cbc', key, iv);
-    const ciphertext = Buffer.concat([
-      cipher.update(plainText, 'utf8'),
-      cipher.final(),
-    ]);
-
-    const hmac = createHmac('sha256', key)
-      .update(Buffer.concat([salt, iv, ciphertext]))
-      .digest();
-
-    return [
-      salt.toString('base64'),
-      iv.toString('base64'),
-      ciphertext.toString('base64'),
-      hmac.toString('base64'),
-    ].join(':');
-  }
 }

@@ -58,13 +58,23 @@ export class DevController {
     return this.devService.createDevData(req.user._id);
   }
 
-  @Put('api-keys/:publicKey')
+  @Put('update-key/:publicKey')
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async updateDevData(@Req() req, @Body() data, @Param('publicKey') publicKey): Promise<any> {
     const auth = await this.devService.authKey(req.user._id, publicKey, false);
+    if (!auth) return 'invalid credentials';
     data.userId = req.user._id.toString();
     return this.devService.updateDevData(req.user._id, data);
+  }
+
+
+  @Put('update-status')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async updateStatus(@Req() req, @Body() data): Promise<any> {
+    console.log("data status: ", data);
+    return this.devService.updateStatus(String(req.user._id), data.status);
   }
 
   @Get('transaction/:userId/:secretKey')
@@ -81,7 +91,7 @@ export class DevController {
       throw new NotFoundException('userId is required');
     }
     const valid = await this.devService.authKey(userId, secretKey);
-    if (!valid) return 'invalid credentials';
+    if (!valid) return 'invalid credentials or invalid user status or API access desabled';
     return this.devService.getTransactionData(data.transactionId, userId);
   }
 
