@@ -12,6 +12,7 @@ import { TStatus } from 'src/transaction/transaction.schema';
 import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
 import { UserService } from 'src/user/user.service';
 import { CryptService } from './crypt.service';
+import { BalanceService } from 'src/balance/balance.service';
 
 @Injectable()
 export class DevService {
@@ -24,6 +25,7 @@ export class DevService {
     private fwService: FlutterwaveService,
     private userService: UserService,
     private cryptService: CryptService,
+    private balanceService: BalanceService
   ) { }
 
   async getDevDataById(devId): Promise<any> {
@@ -272,4 +274,14 @@ export class DevService {
     }
   }
 
+  async getUserBalance(userId): Promise<any> {
+    const user = await this.userService.getUserById(userId);
+    if (!user) return 'no user found';
+    const balance = await this.balanceService.getBalanceByUserId(userId);
+    return {
+      balance: balance.balance,
+      currency: user.countryId.currency,
+      lastUpdate: balance.updatedAt
+    }
+  }
 }

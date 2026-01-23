@@ -16,5 +16,6 @@ import { AppCacheModule } from '../cache/cache.module';
   ],
   providers: [BalanceService, UserService],
   controllers: [BalanceController],
+  exports: [BalanceService],
 })
 export class BalanceModule {}

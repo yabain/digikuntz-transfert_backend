@@ -10,6 +10,7 @@ import { FlutterwaveModule } from 'src/flutterwave/flutterwave.module';
 import { UserModule } from 'src/user/user.module';
 import { SystemModule } from 'src/system/system.module';
 import { CryptService } from './crypt.service';
+import { BalanceModule } from 'src/balance/balance.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { CryptService } from './crypt.service';
     forwardRef(() => FlutterwaveModule),
     forwardRef(() => UserModule),
     forwardRef(() => SystemModule),
+    forwardRef(() => BalanceModule),
     MongooseModule.forFeature([{ name: 'Dev', schema: DevSchema }]),
   ],
   providers: [DevService, CryptService],

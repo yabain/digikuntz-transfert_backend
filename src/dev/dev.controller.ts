@@ -142,5 +142,20 @@ export class DevController {
     return this.devService.createPayinTransaction(transactionData, userId)
   }
   
+  @Get('balance/:userId/:secretKey')
+  async getUserBalance(
+    @Param('userId') userId: string,
+    @Param('secretKey') secretKey: string,
+  ): Promise<any> {
+    if (!secretKey) {
+      throw new NotFoundException('secretKey is required');
+    }
+    if (!userId) {
+      throw new NotFoundException('userId is required');
+    }
+    const valid = await this.devService.authKey(userId, secretKey);
+    if (!valid) return 'invalid credentials or invalid user status or API access desabled or Unauthorize';
+    return this.devService.getUserBalance(userId);
+  }
 
 }
