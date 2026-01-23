@@ -58,16 +58,12 @@ export class DevController {
     return this.devService.createDevData(req.user._id);
   }
 
-  @Put('update-key/:publicKey')
+  @Put('reset-key')
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async updateDevData(@Req() req, @Body() data, @Param('publicKey') publicKey): Promise<any> {
-    const auth = await this.devService.authKey(req.user._id, publicKey, false);
-    if (!auth) return 'invalid credentials';
-    data.userId = req.user._id.toString();
-    return this.devService.updateDevData(req.user._id, data);
+  async resetKey(@Req() req): Promise<any> {
+    return this.devService.resetKey(req.user._id.toString());
   }
-
 
   @Put('update-status')
   @UseGuards(AuthGuard('jwt'))

@@ -115,14 +115,26 @@ export class DevService {
     }
   }
 
-  async updateDevData(userId, devData: UpdateDevDto): Promise<any> {
+  async resetKey(userId): Promise<any> {
     try {
-      const data = await this.getDevDataByUserId(userId);
+      const sKey = this.generateKey('SK');
+      const pKey = this.generateKey('PK')
+      const data = {
+        secretKey: this.cryptService.encryptWithPassphrase(sKey),
+        publicKey: this.cryptService.encryptWithPassphrase(pKey)
+      };
       if (data) {
-        if (data.userId !== userId && data.userId.toString() !== userId) return 'unauthorized';
-        await this.devModel.findByIdAndUpdate(data.id, devData);
-        return data;
-      } else return 'unexisting data'
+        const res = await this.devModel.findOneAndUpdate({userId}, {...data});
+        if(!res) return null;
+        console.log('reset key true: ', res)
+        return {
+          id: res._id,
+          status: res.status,
+          userId: res.userId,
+          secretKey: sKey,
+          publicKey: pKey
+        }
+      } else return 'Error to reset key'
     } catch (error: any) {
       throw new ConflictException(error);
     }
