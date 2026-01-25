@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>API Dev - Documentation</title>
+    <link rel="stylesheet" href="dev-api.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <div class="hero__content">
+        <p class="hero__eyebrow">Documentation API</p>
+        <h1 class="hero__title">Module Dev</h1>
+        <p class="hero__subtitle">
+          Endpoints pour la gestion des cles API, transactions et balance.
+        </p>
+        <div class="hero__meta">
+          <span>Base URL: <code>/dev</code></span>
+          <span>Format: JSON</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="container layout">
+      <aside class="side-nav">
+        <button class="tab-btn is-active" data-tab="intro">Introduction</button>
+        <button class="tab-btn" data-tab="auth">Authentification</button>
+        <button class="tab-btn" data-tab="transactions">Transactions</button>
+        <button class="tab-btn" data-tab="balance">Balance</button>
+      </aside>
+
+      <section class="content">
+        <div class="tab-panel is-active" id="intro">
+          <h2>Introduction</h2>
+          <p>
+            Cette page documente les points d'entree du module dev exposees par
+            <code>DevController</code>. Les routes sont prefexees par
+            <code>/dev</code>.
+          </p>
+          <div class="endpoint">
+            <div class="endpoint__header">
+              <span class="badge badge--get">GET</span>
+              <code>/dev/api-keys/:userId</code>
+            </div>
+            <p>Recuperer les cles API d'un utilisateur (admin uniquement).</p>
+          </div>
+          <div class="endpoint">
+            <div class="endpoint__header">
+              <span class="badge badge--get">GET</span>
+              <code>/dev/my-key</code>
+            </div>
+            <p>Recuperer ses propres cles API.</p>
+          </div>
+        </div>
+
+        <div class="tab-panel" id="auth">
+          <h2>Authentification</h2>
+          <p>
+            Certains endpoints necessitent un JWT via
+            <code>Authorization: Bearer &lt;token&gt;</code>. Les autres
+            utilisent <code>userId</code> + <code>secretKey</code> dans l'URL.
+          </p>
+
+          <article class="endpoint">
+            <div class="endpoint__header">
+              <span class="badge badge--post">POST</span>
+              <code>/dev/generate-key</code>
+            </div>
+            <p>Generer une nouvelle paire de cles API.</p>
+            <div class="endpoint__grid">
+              <div>
+                <h3>Auth</h3>
+                <p>JWT requis.</p>
+              </div>
+              <div>
+                <h3>Body</h3>
+                <p>Aucun.</p>
+              </div>
+            </div>
+          </article>
+
+          <article class="endpoint">
+            <div class="endpoint__header">
+              <span class="badge badge--put">PUT</span>
+              <code>/dev/reset-key</code>
+            </div>
+            <p>Regenerer les cles existantes.</p>
+            <div class="endpoint__grid">
+              <div>
+                <h3>Auth</h3>
+                <p>JWT requis.</p>
+              </div>
+              <div>
+                <h3>Body</h3>
+                <p>Aucun.</p>
+              </div>
+            </div>
+          </article>
+
+          <article class="endpoint">
+            <div class="endpoint__header">
+              <span class="badge badge--put">PUT</span>
+              <code>/dev/update-status</code>
+            </div>
+            <p>Activer ou desactiver l'acces API.</p>
+            <div class="endpoint__grid">
+              <div>
+                <h3>Auth</h3>
+                <p>JWT requis.</p>
+              </div>
+              <div>
+                <h3>Body</h3>
+                <pre><code>{
+  "status": true
+}</code></pre>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div class="tab-panel" id="transactions">
+          <h2>Transactions</h2>
+
+          <article class="endpoint">
+            <div class="endpoint__header">
+              <span class="badge badge--get">GET</span>
+              <code>/dev/transaction/:userId/:secretKey</code>
+            </div>
+            <p>Recuperer l'etat d'une transaction.</p>
+            <div class="endpoint__grid">
+              <div>
+                <h3>Params</h3>
+                <ul>
+                  <li><code>userId</code> (path)</li>
+                  <li><code>secretKey</code> (path)</li>
+                </ul>
+              </div>
+              <div>
+                <h3>Body</h3>
+                <pre><code>{
+  "transactionId": "..."
+}</code></pre>
+              </div>
+            </div>
+          </article>
+
+          <article class="endpoint">
+            <div class="endpoint__header">
+              <span class="badge badge--post">POST</span>
+              <code>/dev/transaction/:userId/:secretKey</code>
+            </div>
+            <p>Creer un paiement (payin) via API.</p>
+            <div class="endpoint__grid">
+              <div>
+                <h3>Params</h3>
+                <ul>
+                  <li><code>userId</code> (path)</li>
+                  <li><code>secretKey</code> (path)</li>
+                </ul>
+              </div>
+              <div>
+                <h3>Body</h3>
+                <pre><code>{
+  "estimation": 100,
+  "raisonForTransfer": "Test",
+  "userEmail": "email@example.com",
+  "userPhone": "691224472",
+  "userCountry": "Cameroon",
+  "senderName": "Junior"
+}</code></pre>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div class="tab-panel" id="balance">
+          <h2>Balance</h2>
+
+          <article class="endpoint">
+            <div class="endpoint__header">
+              <span class="badge badge--get">GET</span>
+              <code>/dev/balance/:userId/:secretKey</code>
+            </div>
+            <p>Consulter le solde d'un utilisateur.</p>
+            <div class="endpoint__grid">
+              <div>
+                <h3>Params</h3>
+                <ul>
+                  <li><code>userId</code> (path)</li>
+                  <li><code>secretKey</code> (path)</li>
+                </ul>
+              </div>
+              <div>
+                <h3>Body</h3>
+                <p>Aucun.</p>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>Documentation generee pour le module dev.</p>
+    </footer>
+
+    <script>
+      const tabs = document.querySelectorAll('.tab-btn');
+      const panels = document.querySelectorAll('.tab-panel');
+
+      tabs.forEach((tab) => {
+        tab.addEventListener('click', () => {
+          const target = tab.getAttribute('data-tab');
+          tabs.forEach((t) => t.classList.remove('is-active'));
+          panels.forEach((p) => p.classList.remove('is-active'));
+          tab.classList.add('is-active');
+          document.getElementById(target).classList.add('is-active');
+        });
+      });
+    </script>
+  </body>
+</html>
