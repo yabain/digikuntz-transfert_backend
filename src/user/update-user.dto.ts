@@ -130,4 +130,12 @@ export class UpdateUserDto {
   @IsString()
   @IsOptional()
   readonly address: string;
+
+  @IsString()
+  @IsOptional()
+  headTitlePortal: string;
+
+  @IsString()
+  @IsOptional()
+  headTextPortal: string;
 }

@@ -110,6 +110,12 @@ export class User extends Document {
 
   @Prop()
   address: string;
+
+  @Prop()
+  headTitlePortal: string;
+
+  @Prop()
+  headTextPortal: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

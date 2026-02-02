@@ -34,6 +34,15 @@ export class UserSettings extends Document {
 
   @Prop()
   layoutSidebarView: number;
+
+  @Prop()
+  enableServices: boolean; // Enable Service section on user home page
+
+  @Prop()
+  enablePlan: boolean; // Enable Plan section on user's home page 
+
+  @Prop()
+  enableFundrasing: boolean; // Enable Fundraising section on user's home page 
 }
 
 export const UserSettingsSchema = SchemaFactory.createForClass(UserSettings);
