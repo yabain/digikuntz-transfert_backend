@@ -82,7 +82,7 @@ export class User extends Document {
   pictureUrl: string;
 
   @Prop()
-  coverUrl: string;
+  cover: string;
 
   @Prop()
   phone2: string;

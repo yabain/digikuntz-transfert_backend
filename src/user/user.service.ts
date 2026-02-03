@@ -281,6 +281,49 @@ export class UserService {
     return this.sanitizeUser(updatedUser);
   }
 
+  async updateUserCover(
+    req: any,
+    files: Array<Express.Multer.File>,
+  ): Promise<any> {
+    // Check if the user ID is valid
+    if (!mongoose.Types.ObjectId.isValid(req.user._id)) {
+      throw new NotFoundException('Invalid user');
+    }
+
+    // Find the user by ID
+    const user = await this.userModel.findById(req.user._id);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    } else {
+      user.password = '';
+      user.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
+    }
+
+    // Generate URLs for the uploaded files
+    const fileUrls = files.map((file) => {
+      return `${this.configService.get<string>('BACK_URL')}/assets/images/${file.filename}`;
+    });
+
+    // Update the user's profile picture in the database
+    const updatedUser = await this.userModel
+      .findByIdAndUpdate(
+        req.user._id,
+        { cover: fileUrls[0] },
+        { new: true, runValidators: true },
+      )
+      .populate('cityId')
+      .populate('countryId');
+
+    if (!updatedUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Invalider le cache
+    await this.cacheService.invalidateUserCache(req.user._id);
+
+    return this.sanitizeUser(updatedUser);
+  }
+
   /**
    * Delete a user by ID.
    * @param userId - The ID of the user to delete.

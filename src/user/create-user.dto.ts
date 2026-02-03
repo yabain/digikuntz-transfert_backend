@@ -137,7 +137,7 @@ export class CreateUserDto {
   @ApiProperty({ example: 'http://example.com/cover.jpg' })
   @IsString()
   @IsOptional()
-  readonly coverUrl: string;
+  readonly cover: string;
 
   @ApiProperty({ example: '0987654321' })
   @IsString()

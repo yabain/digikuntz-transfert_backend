@@ -97,7 +97,7 @@ export class UpdateUserDto {
 
   @IsString()
   @IsOptional()
-  readonly coverUrl: string;
+  readonly cover: string;
 
   @IsString()
   @IsOptional()

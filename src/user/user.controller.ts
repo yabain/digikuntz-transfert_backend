@@ -28,7 +28,7 @@ import { Query as ExpressQuery } from 'express-serve-static-core';
 import { UpdateUserDto } from './update-user.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { multerConfigForUser } from '..//multer.config';
+import { multerConfigForUser, multerConfigForCover } from '..//multer.config';
 import { Response } from 'express';
 import {
   ApiBearerAuth,
@@ -176,6 +176,42 @@ export class UserController {
       throw new BadRequestException('No file uploaded');
     }
     return this.userService.updateUserPicture(req, picture);
+  }
+
+
+  /**
+   * Update the profile cover of the authenticated user.
+   */
+  @Put('cover')
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Update the profile cover of the authenticated user',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        pictureFile: {
+          type: 'string',
+          format: 'binary',
+          description: 'Profile cover file',
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'User profile cover updated.' })
+  @UseInterceptors(FilesInterceptor('coverFile', 1, multerConfigForCover))
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async updateCover(
+    @Req() req,
+    @UploadedFiles() picture: Array<Express.Multer.File>,
+  ): Promise<any> {
+    if (!picture || picture.length === 0) {
+      throw new BadRequestException('No file uploaded');
+    }
+    return this.userService.updateUserCover(req, picture);
   }
 
   /**

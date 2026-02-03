@@ -49,6 +49,22 @@ export const multerConfigForUser = {
 };
 
 // Configuration for Multer to handle file uploads
+export const multerConfigForCover = {
+  storage: diskStorage({
+    destination: getUploadPath(),
+    filename: (req: any, file, callback) => {
+      const userId = req.user._id;
+      const fileExt = path.extname(file.originalname);
+      const fileName = `coverFile_${userId}${fileExt}`;
+      callback(null, fileName);
+    },
+  }),
+  limits: {
+    fileSize: 2 * 1024 * 1024, // 2 MB
+  },
+};
+
+// Configuration for Multer to handle file uploads
 export const multerConfigForEvent = {
   storage: diskStorage({
     destination: getUploadPath(),
