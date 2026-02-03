@@ -115,7 +115,13 @@ export class User extends Document {
   headTitlePortal: string;
 
   @Prop()
+  headTitlePortalColor: string
+
+  @Prop()
   headTextPortal: string;
+
+  @Prop()
+  headTextPortalColor: string
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

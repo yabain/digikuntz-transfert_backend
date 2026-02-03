@@ -137,5 +137,13 @@ export class UpdateUserDto {
 
   @IsString()
   @IsOptional()
+  headTitlePortalColor: string
+
+  @IsString()
+  @IsOptional()
   headTextPortal: string;
+
+  @IsString()
+  @IsOptional()
+  headTextPortalColor: string
 }
