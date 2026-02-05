@@ -34,6 +34,9 @@ export class User extends Document {
   verified: boolean;
 
   @Prop()
+  portal: boolean;
+
+  @Prop()
   inVerification: boolean;
 
   @Prop()

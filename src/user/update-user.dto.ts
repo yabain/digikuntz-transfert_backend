@@ -27,6 +27,10 @@ export class UpdateUserDto {
   @IsOptional()
   readonly agreeTerms: boolean;
 
+  @IsEmpty()
+  @IsOptional()
+  readonly portal: boolean;
+
   @IsEmpty({ message: 'isActive must been empty' })
   @IsOptional()
   readonly isActive: string;

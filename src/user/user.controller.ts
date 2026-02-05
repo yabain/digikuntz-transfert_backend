@@ -263,6 +263,17 @@ export class UserController {
     return this.userService.updateStatus(userId);
   }
 
+  @Put('update-portalStatus/:id')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update user status' })
+  @ApiBody({ type: UpdateUserDto })
+  @ApiResponse({ status: 200, description: 'User profile updated.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async updatePortalStatus(@Param('id') userId: string, @Req() req): Promise<any> {
+    return this.userService.updatePortalStatus(userId);
+  }
+
   @Put('update-adminStatus/:id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update admin profile status' })

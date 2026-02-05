@@ -37,6 +37,11 @@ export class CreateUserDto {
   @IsNotEmpty()
   readonly agreeTerms: boolean;
 
+  @ApiProperty({ example: true })
+  @IsBoolean()
+  @IsNotEmpty()
+  readonly portal: boolean;
+
   @ApiProperty({ example: false })
   @IsBoolean()
   @IsEmpty({ message: 'You cannot pass verified' })
