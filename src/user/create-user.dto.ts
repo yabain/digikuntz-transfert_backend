@@ -39,8 +39,20 @@ export class CreateUserDto {
 
   @ApiProperty({ example: true })
   @IsBoolean()
-  @IsNotEmpty()
+  @IsOptional()
   readonly portal: boolean;
+
+  @IsEmpty()
+  @IsOptional()
+  portalServices: boolean;
+
+  @IsEmpty()
+  @IsOptional()
+  portalSubscription: boolean;
+
+  @IsEmpty()
+  @IsOptional()
+  portalFundraising: boolean;
 
   @ApiProperty({ example: false })
   @IsBoolean()

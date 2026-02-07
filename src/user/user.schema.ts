@@ -37,6 +37,15 @@ export class User extends Document {
   portal: boolean;
 
   @Prop()
+  portalServices: boolean;
+
+  @Prop()
+  portalSubscription: boolean;
+
+  @Prop()
+  portalFundraising: boolean;
+
+  @Prop()
   inVerification: boolean;
 
   @Prop()

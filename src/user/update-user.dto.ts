@@ -31,6 +31,20 @@ export class UpdateUserDto {
   @IsOptional()
   readonly portal: boolean;
 
+  @IsEmpty()
+  @IsOptional()
+  portalServices: boolean;
+
+
+  @IsEmpty()
+  @IsOptional()
+  portalSubscription: boolean;
+
+
+  @IsEmpty()
+  @IsOptional()
+  portalFundraising: boolean;
+
   @IsEmpty({ message: 'isActive must been empty' })
   @IsOptional()
   readonly isActive: string;
