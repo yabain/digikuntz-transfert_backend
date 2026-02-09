@@ -11,14 +11,14 @@ import {
   Param,
   Body,
   Put,
+  Headers,
+  Query,
 } from '@nestjs/common';
 import { Dev } from './dev.schema';
 import { DevService } from './dev.service';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { UserService } from 'src/user/user.service';
-import { SystemService } from 'src/system/system.service';
-import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
 import { TransactionService } from 'src/transaction/transaction.service';
 
 @ApiTags('dev')
@@ -27,8 +27,6 @@ export class DevController {
   constructor(
     private devService: DevService,
     private userService: UserService,
-    private systemService: SystemService,
-    private fwService: FlutterwaveService,
     private transactionService: TransactionService,
   ) { }
 
@@ -46,7 +44,6 @@ export class DevController {
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getMyData(@Req() req): Promise<any> {
-    console.log("req.user._id: ", req.user._id);
     return this.devService.getDevDataByUserId(req.user._id);
   }
 
@@ -69,16 +66,15 @@ export class DevController {
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async updateStatus(@Req() req, @Body() data): Promise<any> {
-    console.log("data status: ", data);
     return this.devService.updateStatus(String(req.user._id), data.status);
   }
 
-  @Get('transaction/:userId/:secretKey')
+  @Get('transaction')
   @UsePipes(ValidationPipe)
   async getTransactionData(
-    @Param('userId') userId: string,
-    @Param('secretKey') secretKey: string,
-    @Body() data: any,
+    @Headers('x-user-id') userId: string,
+    @Headers('x-secret-key') secretKey: string,
+    @Query('transactionId') transactionId: string,
   ): Promise<any> {
     if (!secretKey) {
       throw new NotFoundException('secretKey is required');
@@ -88,14 +84,37 @@ export class DevController {
     }
     const valid = await this.devService.authKey(userId, secretKey);
     if (!valid) return 'invalid credentials or invalid user status or API access desabled';
-    return this.devService.getTransactionData(data.transactionId, userId);
+    if (!transactionId) {
+      throw new NotFoundException('transactionId is required');
+    }
+    return this.devService.getTransactionData(transactionId, userId);
   }
 
-  @Post('transaction/:userId/:secretKey')
+  @Get('transactions-list')
+  @UsePipes(ValidationPipe)
+  async getTransactions(
+    @Headers('x-user-id') userId: string,
+    @Headers('x-secret-key') secretKey: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ): Promise<any> {
+    if (!secretKey) {
+      throw new NotFoundException('secretKey is required');
+    }
+    if (!userId) {
+      throw new NotFoundException('userId is required');
+    }
+    const valid = await this.devService.authKey(userId, secretKey);
+    if (!valid) return 'invalid credentials or invalid user status or API access desabled';
+
+    return this.devService.getTransactions(userId, { page, limit });
+  }
+
+  @Post('transaction')
   @UsePipes(ValidationPipe)
   async createPayinTransaction(
-    @Param('userId') userId: string,
-    @Param('secretKey') secretKey: string,
+    @Headers('x-user-id') userId: string,
+    @Headers('x-secret-key') secretKey: string,
     @Body() data: {
       estimation: number,
       raisonForTransfer: string,
@@ -111,7 +130,6 @@ export class DevController {
     if (!userId) {
       throw new NotFoundException('userId is required');
     }
-    console.log("data: ", data);
     const valid = await this.devService.authKey(userId, secretKey);
     if (!valid) return 'invalid credentials';
     const userData = await this.userService.getUserById(userId);
@@ -139,13 +157,13 @@ export class DevController {
       status: 'transaction_payin_pending'
     }
 
-    return this.devService.createPayinTransaction(transactionData, userId)
+    return this.devService.createPayinTransaction(transactionData, userId);
   }
   
-  @Get('balance/:userId/:secretKey')
+  @Get('balance')
   async getUserBalance(
-    @Param('userId') userId: string,
-    @Param('secretKey') secretKey: string,
+    @Headers('x-user-id') userId: string,
+    @Headers('x-secret-key') secretKey: string,
   ): Promise<any> {
     if (!secretKey) {
       throw new NotFoundException('secretKey is required');

@@ -203,7 +203,39 @@ export class UserService {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new NotFoundException('Invalid user');
     }
+    console.log('userData: ', userData);
+    try {
+      const user = await this.userModel
+        .findByIdAndUpdate(userId, userData, {
+          new: true,
+          runValidators: true,
+        })
+        .select('-password -resetPasswordToken -balance')
+        .populate('countryId', 'name')
+        .populate('cityId', 'name')
+        .lean();
 
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+
+      // Invalider le cache
+      await this.cacheService.invalidateUserCache(userId);
+
+      return user;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new NotFoundException('Error updating user');
+    }
+  }
+
+  async updateItems(userId: any, userData: any): Promise<any> {
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new NotFoundException('Invalid user ID');
+    }
+    console.log('userData: ', userData);
     try {
       const user = await this.userModel
         .findByIdAndUpdate(userId, userData, {
@@ -554,6 +586,7 @@ export class UserService {
 
     return this.sanitizeUser(updatedUser);
   }
+
 
   async getUserStatsByMonth(currentUser): Promise<any[]> {
     const result: any[] = [];

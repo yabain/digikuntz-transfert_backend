@@ -144,6 +144,20 @@ export class UserController {
   }
 
   /**
+   * Update the profile of the authenticated user.
+   */
+  @Put('update-items')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update the profile of the authenticated user' })
+  @ApiBody({ type: UpdateUserDto })
+  @ApiResponse({ status: 200, description: 'User profile updated.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async updateItems(@Body() userData: any, @Req() req): Promise<any> {
+    return this.userService.updateItems(req.user._id, userData);
+  }
+
+  /**
    * Update the profile picture of the authenticated user.
    */
   @Put('picture')

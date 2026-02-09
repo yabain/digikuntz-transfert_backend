@@ -8,7 +8,6 @@ import { TransactionModule } from 'src/transaction/transaction.module';
 import { PayinModule } from 'src/payin/payin.module';
 import { FlutterwaveModule } from 'src/flutterwave/flutterwave.module';
 import { UserModule } from 'src/user/user.module';
-import { SystemModule } from 'src/system/system.module';
 import { CryptService } from './crypt.service';
 import { BalanceModule } from 'src/balance/balance.module';
 
@@ -19,7 +18,6 @@ import { BalanceModule } from 'src/balance/balance.module';
     forwardRef(() => PayinModule),
     forwardRef(() => FlutterwaveModule),
     forwardRef(() => UserModule),
-    forwardRef(() => SystemModule),
     forwardRef(() => BalanceModule),
     MongooseModule.forFeature([{ name: 'Dev', schema: DevSchema }]),
   ],

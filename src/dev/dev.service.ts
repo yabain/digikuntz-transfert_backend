@@ -1,14 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { ConflictException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { createCipheriv, createHmac, pbkdf2Sync, randomBytes } from 'crypto';
+import { randomBytes } from 'crypto';
 import { Dev } from './dev.schema';
 import * as mongoose from 'mongoose';
-import { CreateDevDto } from './create-dev.dto';
-import { UpdateDevDto } from './update-dev.dto';
 import { TransactionService } from 'src/transaction/transaction.service';
 import { PayinService } from 'src/payin/payin.service';
-import { TStatus } from 'src/transaction/transaction.schema';
 import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
 import { UserService } from 'src/user/user.service';
 import { CryptService } from './crypt.service';
@@ -33,7 +30,6 @@ export class DevService {
     if (!res) {
       return null;
     };
-    console.log("res 2", res);
 
     return {
       id: res.id,
@@ -65,7 +61,6 @@ export class DevService {
     try {
       // const sKey = this.cryptService.encryptWithPassphrase(secretKey);
       const res = await this.devModel.findOne({ userId });
-      console.log("res 3", res);
       if (!res) return null;
       if (this.cryptService.decryptWithPassphrase(res.secretKey) !== secretKey) return null;
       return {
@@ -126,9 +121,8 @@ export class DevService {
         publicKey: this.cryptService.encryptWithPassphrase(pKey)
       };
       if (data) {
-        const res = await this.devModel.findOneAndUpdate({userId}, {...data});
+        const res = await this.devModel.findOneAndUpdate({ userId }, { ...data });
         if(!res) return null;
-        console.log('reset key true: ', res)
         return {
           id: res._id,
           status: res.status,
@@ -166,9 +160,7 @@ export class DevService {
   }
 
   async updateStatus(userId: string, status: boolean) {
-    console.log('updating status: ', userId, status);
     const devData = await this.getDevDataByUserId(userId);
-    console.log('devData in updateStatus: ', devData);
     if (!devData) return 'no developer found with this id';
     if (devData.userId.toString() !== userId.toString()) return 'unauthorized';
     try {
@@ -196,9 +188,7 @@ export class DevService {
 
     const transaction = await this.transactionService.findById(transactionId);
     if (!transaction) return 'no transaction found';
-    if (!transaction?.userId?.toString().includes(userId)
-      && !transaction?.senderId?.toString().includes(userId)
-      && !transaction?.receiverId?.toString().includes(userId)) return 'Unauthorized';
+    if (!this.isUserInTransaction(transaction, userId)) return 'Unauthorized';
 
     let status: string = '';
     if (transaction.status === 'transaction_payin_pending') status = 'pending'
@@ -212,16 +202,13 @@ export class DevService {
       // payIn = await this.payinService.verifyPayin(transaction.txRef);
       payIn = await this.payinService.getPayinByTransactionId(transactionId);
       if (!payIn) return 'payin not found';
-      setTimeout(async () => {
-        if (transaction.status.include('payin')) {
-          await this.fwService.verifyPayin(transaction.txRef);
-          await this.transactionService.updateTransactionStatus(transactionId, TStatus.PAYINPENDING);
-        }
-        else if (transaction.status.includes('payout')) {
-          await this.fwService.verifyPayout(transaction.txRef, true);
-        }
-
-      }, 60 * 1000)
+      if (transaction.status.includes('payin')) {
+        await this.fwService.verifyPayin(transaction.txRef);
+        const refreshedPayin = await this.payinService.getPayinByTransactionId(transactionId);
+        if (refreshedPayin) payIn = refreshedPayin;
+      } else if (transaction.status.includes('payout')) {
+        await this.fwService.verifyPayout(transaction.txRef, true);
+      }
     }
     return {
       id: transaction._id,
@@ -242,8 +229,6 @@ export class DevService {
   }
 
   async createPayinTransaction(transactionData: any, userId): Promise<any> {
-    console.log('in dev - createPayinTransaction: ', transactionData)
-
     const createPayin = await this.fwService.createPayin(transactionData, userId);
     // return createPayin;
     // const transaction = await this.transactionService.create({
@@ -269,7 +254,7 @@ export class DevService {
       transactionRef: createPayin.txRef,
       amount: transactionData.estimation,
       paymentCurrency: createPayin.currency,
-      paymentWithTaxe: createPayin.amount,
+      paymentWithTaxes: createPayin.amount,
       paymentLink: createPayin?.redirect_url
     }
   }
@@ -283,5 +268,49 @@ export class DevService {
       currency: user.countryId.currency,
       lastUpdate: balance.updatedAt
     }
+  }
+
+  async getTransactions(userId: string, query: { page?: number; limit?: number }): Promise<any> {
+    const page = Number(query?.page) > 0 ? Number(query.page) : 1;
+    const limit = Number(query?.limit) > 0 ? Number(query.limit) : 20;
+
+    const res = await this.transactionService.getAllTransactionsOfUser(userId, {
+      page,
+      limit,
+    });
+
+    return {
+      data: res?.data || [],
+      pagination: res?.pagination || {
+        currentPage: page,
+        limit,
+        totalPages: 0,
+        totalItems: 0,
+        hasNextPage: false,
+      },
+    };
+  }
+
+  private toIdString(value: unknown): string {
+    if (!value) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'object' && value !== null && '_id' in value) {
+      const raw = (value as { _id: unknown })._id;
+      return raw ? String(raw) : '';
+    }
+    return String(value);
+  }
+
+  private isUserInTransaction(transaction: any, userId: string): boolean {
+    const normalizedUserId = String(userId);
+    const userIdFromTx = this.toIdString(transaction?.userId);
+    const senderId = this.toIdString(transaction?.senderId);
+    const receiverId = this.toIdString(transaction?.receiverId);
+
+    return (
+      userIdFromTx === normalizedUserId ||
+      senderId === normalizedUserId ||
+      receiverId === normalizedUserId
+    );
   }
 }

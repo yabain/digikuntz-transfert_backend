@@ -100,7 +100,8 @@ export class TransactionService {
       throw new NotFoundException('Invalid transaction ID');
     }
     const page = Number(query.page) > 0 ? Number(query.page) : 1;
-    const limit = 20;
+    const requestedLimit = Number(query.limit || query.resPerPage);
+    const limit = requestedLimit > 0 ? Math.min(requestedLimit, 100) : 20;
     const skip = (page - 1) * limit;
   
     const filter = {
@@ -123,6 +124,7 @@ export class TransactionService {
       data: transactions,
       pagination: {
         currentPage: page,
+        limit,
         totalPages: Math.ceil(total / limit),
         totalItems: total,
         hasNextPage: page * limit < total,

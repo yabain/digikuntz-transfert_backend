@@ -42,21 +42,17 @@ export class CreateUserDto {
   @IsOptional()
   readonly portal: boolean;
 
-  @IsEmpty()
   @IsOptional()
   portalServices: boolean;
 
-  @IsEmpty()
   @IsOptional()
   portalSubscription: boolean;
 
-  @IsEmpty()
   @IsOptional()
   portalFundraising: boolean;
 
   @ApiProperty({ example: false })
   @IsBoolean()
-  @IsEmpty({ message: 'You cannot pass verified' })
   @IsOptional()
   readonly verified: boolean;
 
@@ -66,19 +62,16 @@ export class CreateUserDto {
 
   @ApiProperty({ example: false })
   @IsBoolean()
-  @IsEmpty({ message: 'You cannot pass vip' })
   @IsOptional()
   readonly vip: boolean;
 
   @ApiProperty({ example: false })
   @IsBoolean()
-  @IsEmpty({ message: 'You cannot pass warning' })
   @IsOptional()
   readonly warning: boolean;
 
   @ApiProperty({ example: false })
   @IsBoolean()
-  @IsEmpty({ message: 'You cannot pass isAdmin' })
   @IsOptional()
   readonly isAdmin: boolean;
 
@@ -89,13 +82,11 @@ export class CreateUserDto {
 
   @ApiProperty({ example: true })
   @IsBoolean()
-  @IsEmpty({ message: 'You cannot pass isAdmin' })
   @IsOptional()
   readonly isActive: boolean;
 
   @ApiProperty({ example: false })
   @IsBoolean()
-  @IsEmpty({ message: 'You cannot pass premium' })
   @IsOptional()
   readonly premium: boolean;
 
