@@ -42,6 +42,18 @@ export class UserSettings extends Document {
   portalServices: boolean;
 
   @Prop()
+  portalFooter: boolean
+
+  @Prop()
+  portalDescription: boolean
+
+  @Prop()
+  portalContact: boolean
+
+  @Prop()
+  portalSupportInfo: boolean
+
+  @Prop()
   portalSubscription: boolean;
 
   @Prop()

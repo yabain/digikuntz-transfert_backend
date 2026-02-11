@@ -35,7 +35,7 @@ export class UserSettingsService {
     });
   }
 
-  async getUserSettingd(userId: string): Promise<any> {
+  async getUserSettings(userId: string): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new NotFoundException('Invalid user ID');
     }
@@ -49,16 +49,24 @@ export class UserSettingsService {
         layoutWidth: 1,
         layoutPositionScroll: 1,
         layoutSidebarSize: 1,
-        layoutSidebarView: 1
+        layoutSidebarView: 1,
+        portal: false,
+        portalServices: false,
+        portalDescription: false,
+        portalSupportInfo: false,
+        portalFooter: false,
+        portalContact: false,
+        portalSubscription: false,
+        portalFundraising: false,
       });
     }
-    // console.log('res getUserSettingd: ', settings);
+    // console.log('res getUserSettings: ', settings);
     return settings;
   }
 
   async updateUserSettings(userId: string, userSettings: any): Promise<any> {
 
-    const settings = await this.getUserSettingd(userId);
+    const settings = await this.getUserSettings(userId);
     if (!settings) {
       return await this.creatUserSettingd(userId, userSettings);
     }
@@ -67,7 +75,7 @@ export class UserSettingsService {
       userSettings,
       { new: true },
     );
-    // console.log('res getUserSettingd: ', resp);
+    // console.log('res getUserSettings: ', resp);
     return resp;
   }
 
@@ -87,6 +95,10 @@ export class UserSettingsService {
       'layoutSidebarView',
       'portal',
       'portalServices',
+      'portalDescription',
+      'portalSupportInfo',
+      'portalFooter',
+      'portalContact',
       'portalSubscription',
       'portalFundraising',
       'headTitlePortal',
@@ -123,7 +135,7 @@ export class UserSettingsService {
         throw new NotFoundException('User settings not found');
       }
 
-      return settings;
+      return this.normalizeSettingsResponse(settings);
     } catch (error: any) {
       if (error instanceof NotFoundException) {
         throw error;
@@ -133,5 +145,21 @@ export class UserSettingsService {
       }
       throw new ConflictException(error?.message || 'Error updating settings');
     }
+  }
+
+  private normalizeSettingsResponse(settings: any): any {
+    if (!settings) return settings;
+
+    return {
+      ...settings,
+      portal: settings.portal ?? false,
+      portalServices: settings.portalServices ?? false,
+      portalDescription: settings.portalDescription ?? false,
+      portalSupportInfo: settings.portalSupportInfo ?? false,
+      portalFooter: settings.portalFooter ?? false,
+      portalContact: settings.portalContact ?? false,
+      portalSubscription: settings.portalSubscription ?? false,
+      portalFundraising: settings.portalFundraising ?? false,
+    };
   }
 }

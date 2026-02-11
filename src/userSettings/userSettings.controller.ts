@@ -30,8 +30,14 @@ export class UserSettingsController {
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async getUsersStatistic( @Req() req): Promise<any> {
-    return this.userSettingsService.getUserSettingd(req.user._id);
+  async getMySettings(@Req() req): Promise<any> {
+    return this.userSettingsService.getUserSettings(req.user._id);
+  }
+
+  @Get('get-user/:id')
+  @ApiBearerAuth()
+  async getUserSettings(@Param('id') userId: string): Promise<any> {
+    return this.userSettingsService.getUserSettings(userId);
   }
   
   @Put('update/:id')
