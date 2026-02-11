@@ -36,13 +36,28 @@ export class UserSettings extends Document {
   layoutSidebarView: number;
 
   @Prop()
-  enableServices: boolean; // Enable Service section on user home page
+  portal: boolean;
 
   @Prop()
-  enablePlan: boolean; // Enable Plan section on user's home page 
+  portalServices: boolean;
 
   @Prop()
-  enableFundrasing: boolean; // Enable Fundraising section on user's home page 
+  portalSubscription: boolean;
+
+  @Prop()
+  portalFundraising: boolean;
+
+  @Prop()
+  headTitlePortal: string;
+
+  @Prop()
+  headTitlePortalColor: string
+
+  @Prop()
+  headTextPortal: string;
+
+  @Prop()
+  headTextPortalColor: string
 }
 
 export const UserSettingsSchema = SchemaFactory.createForClass(UserSettings);

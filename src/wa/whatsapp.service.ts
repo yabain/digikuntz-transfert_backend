@@ -116,11 +116,6 @@ export class WhatsappService implements OnModuleInit {
             : [],
         executablePath: chromePath,
       },
-      webVersionCache: {
-        type: 'remote',
-        remotePath:
-          'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/last.json',
-      },
       restartOnAuthFail: true,
     });
 

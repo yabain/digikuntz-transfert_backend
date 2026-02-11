@@ -31,6 +31,9 @@ import { SystemService } from 'src/system/system.service';
 @Injectable()
 export class TransactionService {
   private readonly logger = new Logger(TransactionService.name);
+  private readonly listProjection =
+    '-raw -message -token -reqErrorCode -reqStatusCode';
+
   constructor(
     @InjectModel(Transaction.name)
     private transactionModel: mongoose.Model<Transaction>,
@@ -43,7 +46,8 @@ export class TransactionService {
   ) { }
 
   async findAll(query: Query): Promise<Transaction[]> {
-    const resPerPage = 10;
+    const requestedLimit = Number((query as any)?.limit || (query as any)?.resPerPage);
+    const resPerPage = requestedLimit > 0 ? Math.min(requestedLimit, 100) : 10;
     const currentPage = Number(query.page) || 1;
     const skip = resPerPage * (currentPage - 1);
 
@@ -57,9 +61,11 @@ export class TransactionService {
       : {};
     const transactions = await this.transactionModel
       .find({ ...keyword })
+      .select(this.listProjection)
       .limit(resPerPage)
       .sort({ createdAt: -1 }) // Sort recent to old
-      .skip(skip);
+      .skip(skip)
+      .lean();
     return transactions;
   }
 
@@ -86,6 +92,15 @@ export class TransactionService {
       { $sort: { createdAt: -1 } },
       { $skip: skip },
       { $limit: resPerPage },
+      {
+        $project: {
+          raw: 0,
+          message: 0,
+          token: 0,
+          reqErrorCode: 0,
+          reqStatusCode: 0,
+        },
+      },
     ]);
 
     return res;
@@ -103,23 +118,43 @@ export class TransactionService {
     const requestedLimit = Number(query.limit || query.resPerPage);
     const limit = requestedLimit > 0 ? Math.min(requestedLimit, 100) : 20;
     const skip = (page - 1) * limit;
-  
-    const filter = {
+
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    const matchFilter = {
       $or: [
         { receiverId: userId },
-        { senderId: userId },
+        { senderId: userObjectId },
+        { userId: userObjectId },
       ],
     };
-  
-    const transactions = await this.transactionModel
-      .find(filter)
-      .sort({ createdAt: -1 }) // tri décroissant par date
-      .skip(skip)
-      .limit(limit)
-      .lean();
-  
-    const total = await this.transactionModel.countDocuments(filter);
-  
+
+    const aggregated = await this.transactionModel.aggregate([
+      { $match: matchFilter },
+      { $sort: { createdAt: -1 } },
+      {
+        $facet: {
+          data: [
+            { $skip: skip },
+            { $limit: limit },
+            {
+              $project: {
+                raw: 0,
+                message: 0,
+                token: 0,
+                reqErrorCode: 0,
+                reqStatusCode: 0,
+              },
+            },
+          ],
+          totalCount: [{ $count: 'count' }],
+        },
+      },
+    ]);
+
+    const transactions = aggregated?.[0]?.data || [];
+    const total = aggregated?.[0]?.totalCount?.[0]?.count || 0;
+
     return {
       data: transactions,
       pagination: {
@@ -189,6 +224,15 @@ export class TransactionService {
       { $sort: { createdAt: -1 } },
       { $skip: skip },
       { $limit: resPerPage },
+      {
+        $project: {
+          raw: 0,
+          message: 0,
+          token: 0,
+          reqErrorCode: 0,
+          reqStatusCode: 0,
+        },
+      },
     ]);
 
     return res;

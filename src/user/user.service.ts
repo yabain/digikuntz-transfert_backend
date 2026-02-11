@@ -505,34 +505,6 @@ export class UserService {
     return this.sanitizeUser(updatedUser);
   }
 
-  async updatePortalStatus(userId: any): Promise<any> {
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      throw new NotFoundException('Invalid user ID');
-    }
-
-    const user = await this.userModel.findById(userId);
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    const status = user.portal === true ? false : true
-    const updatedUser = await this.userModel
-      .findByIdAndUpdate(
-        userId,
-        { portal: status },
-        { new: true, runValidators: true },
-      )
-
-    if (!updatedUser) {
-      throw new NotFoundException('User not found');
-    }
-
-    // Invalider le cache
-    await this.cacheService.invalidateUserCache(userId);
-
-    return this.sanitizeUser(updatedUser);
-  }
-
   async updateAdminStatus(userId: any): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new NotFoundException('Invalid user ID');

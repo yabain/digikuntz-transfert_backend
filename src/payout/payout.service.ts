@@ -173,9 +173,10 @@ export class PayoutService {
         }
 
         if (payout.status === 'SUCCESSFUL') {
+          console.log('updating transaction: ', updatedPayout.transactionId.toString());
           const transaction =
             await this.transactionService.updateTransactionStatus(
-              reference,
+              updatedPayout.transactionId.toString(),
               TStatus.PAYOUTSUCCESS,
               payout,
             );

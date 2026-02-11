@@ -27,20 +27,6 @@ export class UpdateUserDto {
   @IsOptional()
   readonly agreeTerms: boolean;
 
-  @IsEmpty()
-  @IsOptional()
-  readonly portal: boolean;
-
-  @IsOptional()
-  portalServices: boolean;
-
-  @IsOptional()
-  portalSubscription: boolean;
-
-
-  @IsOptional()
-  portalFundraising: boolean;
-
   @IsOptional()
   readonly isActive: string;
 

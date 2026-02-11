@@ -186,4 +186,7 @@ export class Transaction {
 export const TransactionSchema = SchemaFactory.createForClass(Transaction);
 TransactionSchema.index({ createdAt: -1 });
 TransactionSchema.index({ ref: 'text' });
-
+TransactionSchema.index({ transactionType: 1, status: 1, createdAt: -1 });
+TransactionSchema.index({ userId: 1, createdAt: -1 });
+TransactionSchema.index({ senderId: 1, createdAt: -1 });
+TransactionSchema.index({ receiverId: 1, createdAt: -1 });

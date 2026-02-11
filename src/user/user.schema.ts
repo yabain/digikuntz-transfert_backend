@@ -34,18 +34,6 @@ export class User extends Document {
   verified: boolean;
 
   @Prop()
-  portal: boolean;
-
-  @Prop()
-  portalServices: boolean;
-
-  @Prop()
-  portalSubscription: boolean;
-
-  @Prop()
-  portalFundraising: boolean;
-
-  @Prop()
   inVerification: boolean;
 
   @Prop()
@@ -122,18 +110,6 @@ export class User extends Document {
 
   @Prop()
   address: string;
-
-  @Prop()
-  headTitlePortal: string;
-
-  @Prop()
-  headTitlePortalColor: string
-
-  @Prop()
-  headTextPortal: string;
-
-  @Prop()
-  headTextPortalColor: string
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

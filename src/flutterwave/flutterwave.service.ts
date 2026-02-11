@@ -302,7 +302,7 @@ export class FlutterwaveService {
       throw new NotFoundException('Transaction not found');
     }
 
-    console.log('(fw service: verifyPayin) resp payin data: ', payin);
+    // console.log('(fw service: verifyPayin) resp payin data: ', payin);
     if (payin.status === 'cancelled') {
       /* Keep the transaction "pending" because the user can
       relaunch new payment attempts on the flutterwave front

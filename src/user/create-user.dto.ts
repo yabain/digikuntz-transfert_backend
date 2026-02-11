@@ -37,20 +37,6 @@ export class CreateUserDto {
   @IsNotEmpty()
   readonly agreeTerms: boolean;
 
-  @ApiProperty({ example: true })
-  @IsBoolean()
-  @IsOptional()
-  readonly portal: boolean;
-
-  @IsOptional()
-  portalServices: boolean;
-
-  @IsOptional()
-  portalSubscription: boolean;
-
-  @IsOptional()
-  portalFundraising: boolean;
-
   @ApiProperty({ example: false })
   @IsBoolean()
   @IsOptional()
@@ -186,20 +172,4 @@ export class CreateUserDto {
   @IsString()
   @IsOptional()
   readonly address: string;
-
-  @IsString()
-  @IsOptional()
-  headTitlePortal: string;
-
-  @IsString()
-  @IsOptional()
-  headTitlePortalColor: string
-
-  @IsString()
-  @IsOptional()
-  headTextPortal: string;
-
-  @IsString()
-  @IsOptional()
-  headTextPortalColor: string
 }

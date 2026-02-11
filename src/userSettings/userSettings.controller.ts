@@ -45,4 +45,15 @@ export class UserSettingsController {
     console.log('data: ', userSettings)
     return this.userSettingsService.updateUserSettings(req.user._id, userSettings);
   }
+
+  /**
+   * Update the profile of the authenticated user.
+   */
+  @Put('update-items')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async updateItems(@Body() userData: any, @Req() req): Promise<any> {
+    return this.userSettingsService.updateItems(req.user._id, userData);
+  }
 }
