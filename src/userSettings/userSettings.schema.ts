@@ -42,6 +42,12 @@ export class UserSettings extends Document {
   portalServices: boolean;
 
   @Prop()
+  portalPrimaryColor: string;
+
+  @Prop()
+  portalSecondaryColor: string;
+
+  @Prop()
   portalFooter: boolean
 
   @Prop()
