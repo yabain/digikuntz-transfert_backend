@@ -114,7 +114,7 @@ export class ServicePaymentController {
       type: 'object',
       properties: {
         subscribersNumber: { type: 'number', description: 'Total number of subscribers' },
-        pourcentage: { type: 'number', description: 'Percentage of new subscribers in last 7 days' }
+        percentage: { type: 'number', description: 'Percentage of new subscribers in last 7 days' }
       }
     }
   })

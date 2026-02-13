@@ -70,7 +70,7 @@ export class SubscriptionService {
 
   async getSubscriptionsStatistic(): Promise<{
     subscribersNumber: number;
-    pourcentage: number;
+    percentage: number;
   }> {
     const subscribersNumber = await this.subscriptionModel.countDocuments();
 
@@ -81,12 +81,12 @@ export class SubscriptionService {
       createdAt: { $gte: sevenDaysAgo },
     });
 
-    const pourcentage =
+    const percentage =
       subscribersNumber === 0
         ? 0
         : Number(((subscribersLast7Days / subscribersNumber) * 100).toFixed(2));
 
-    return { subscribersNumber, pourcentage };
+    return { subscribersNumber, percentage };
   }
 
   /**

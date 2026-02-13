@@ -115,14 +115,14 @@ export class ServiceService {
 
     const activeService = totalService - inactiveService;
 
-    const pourcentage =
+    const percentage =
       totalService === 0
         ? 0
         : Number(((serviceLastNDays / totalService) * 100).toFixed(2));
 
     return {
       totalService,
-      pourcentage,
+      percentage,
       inactiveService,
       activeService,
     };
@@ -130,12 +130,12 @@ export class ServiceService {
 
   async getMyServiceStatistics(userId, long?: number): Promise<any> {
     const totalService = await this.serviceModel.countDocuments({ author: userId });
-
     const duration = long ?? 7;
     const sinceDate = new Date();
+    let serviceLastNDays: number = 0;
     sinceDate.setDate(sinceDate.getDate() - duration);
 
-    const serviceLastNDays = await this.serviceModel.countDocuments({
+    serviceLastNDays = await this.serviceModel.countDocuments({
       createdAt: { $gte: sinceDate },
       author: userId,
     });
@@ -147,16 +147,16 @@ export class ServiceService {
 
     const activeService = totalService - inactiveService;
 
-    const pourcentage =
+    const percentage =
       totalService === 0
         ? 0
         : Number(((serviceLastNDays / totalService) * 100).toFixed(2));
-
     return {
       totalService,
-      pourcentage,
+      percentage,
       inactiveService,
       activeService,
+      serviceLastNDays,
     };
   }
 

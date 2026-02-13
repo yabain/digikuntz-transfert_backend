@@ -122,14 +122,14 @@ export class PlansService {
 
     const activePlans = totalPlans - inactivePlans;
 
-    const pourcentage =
+    const percentage =
       totalPlans === 0
         ? 0
         : Number(((plansLastNDays / totalPlans) * 100).toFixed(2));
 
     return {
       totalPlans,
-      pourcentage,
+      percentage,
       inactivePlans,
       activePlans,
     };
@@ -154,14 +154,14 @@ export class PlansService {
 
     const activePlans = totalPlans - inactivePlans;
 
-    const pourcentage =
+    const percentage =
       totalPlans === 0
         ? 0
         : Number(((plansLastNDays / totalPlans) * 100).toFixed(2));
 
     return {
       totalPlans,
-      pourcentage,
+      percentage,
       inactivePlans,
       activePlans,
     };
