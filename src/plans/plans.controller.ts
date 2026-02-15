@@ -54,7 +54,7 @@ export class PlansController {
     @Req() req,
   ): Promise<Plans[]> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+      throw new NotFoundException('Unauthorised');
     }
     return this.plansService.getAllPlans(query);
   }
@@ -69,7 +69,7 @@ export class PlansController {
   @UsePipes(ValidationPipe)
   async getPlansStatistics(@Req() req): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+      throw new NotFoundException('Unauthorised');
     }
     return this.plansService.getPlansStatistics();
   }
@@ -95,7 +95,7 @@ export class PlansController {
     @Req() req,
   ): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+      throw new NotFoundException('Unauthorised');
     }
     return this.plansService.getMyPlansStatistics(userId);
   }

@@ -61,7 +61,7 @@ export class ServiceController {
     @Req() req,
   ): Promise<Service[]> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+      throw new NotFoundException('Unauthorised');
     }
     return this.serviceService.getAllService(query);
   }
@@ -75,7 +75,7 @@ export class ServiceController {
   @UsePipes(ValidationPipe)
   async getServiceStatistics(@Req() req): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+      throw new NotFoundException('Unauthorised');
     }
     return this.serviceService.getServiceStatistics();
   }
@@ -101,7 +101,7 @@ export class ServiceController {
     @Req() req,
   ): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+      throw new NotFoundException('Unauthorised');
     }
     return this.serviceService.getMyServiceStatistics(userId);
   }

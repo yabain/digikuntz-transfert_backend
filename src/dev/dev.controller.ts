@@ -35,7 +35,7 @@ export class DevController {
   @UsePipes(ValidationPipe)
   async getDevDataByUserId(@Req() req, @Param('userId') userId): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+      throw new NotFoundException('Unauthorised');
     }
     return this.devService.getDevDataByUserId(userId);
   }

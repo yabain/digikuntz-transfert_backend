@@ -46,7 +46,7 @@ export class UserSettingsController {
   @UsePipes(ValidationPipe)
   async update(@Param('id') userId: string, @Body() userSettings: any, @Req() req): Promise<any> {
     // if (!req.user.isAdmin && userId != req.user._id) {
-    //   throw new NotFoundException('Unautorised');
+    //   throw new NotFoundException('Unauthorised');
     // }
     console.log('data: ', userSettings)
     return this.userSettingsService.updateUserSettings(req.user._id, userSettings);

@@ -55,7 +55,7 @@ export class ExchangeController {
   @UsePipes(ValidationPipe)
   async updateExchangeRate(@Req() req, @Body() Body): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+      throw new NotFoundException('Unauthorised');
     }
     return this.exchangeService.updateExchangeRate(Body.rates);
   }

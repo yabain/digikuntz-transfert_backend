@@ -29,7 +29,7 @@ export class FlutterwaveController {
   @UsePipes(ValidationPipe)
   getBalance(@Param('countryWallet') countryWallet, @Req() req) {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+      throw new NotFoundException('Unauthorised');
     }
     return this.fw.getBalance(countryWallet);
   }
@@ -43,7 +43,7 @@ export class FlutterwaveController {
     @Req() req,
   ) {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+      throw new NotFoundException('Unauthorised');
     }
     return this.fw.listPayinTransactions(countryWallet, query);
   }
@@ -57,7 +57,7 @@ export class FlutterwaveController {
     @Req() req,
   ) {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+      throw new NotFoundException('Unauthorised');
     }
     return this.fw.listPayoutTransactions(countryWallet, query);
   }
@@ -103,7 +103,7 @@ export class FlutterwaveController {
   @UsePipes(ValidationPipe)
   createPayout(@Req() req, @Param('transactionId') transactionId) {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+      throw new NotFoundException('Unauthorised');
     }
     return this.fw.payout(transactionId, req.user._id);
   }
@@ -114,7 +114,7 @@ export class FlutterwaveController {
   @UsePipes(ValidationPipe)
   retryPayout(@Req() req, @Param('transactionId') transactionId) {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+      throw new NotFoundException('Unauthorised');
     }
     return this.fw.retryPayout(transactionId, req.user._id);
   }
@@ -137,7 +137,7 @@ export class FlutterwaveController {
   // @UsePipes(ValidationPipe)
   listPaymentPlans(@Query() query: ExpressQuery, @Req() req) {
     // if (!req.user.isAdmin) {
-    //   throw new NotFoundException('Unautorised');
+    //   throw new NotFoundException('Unauthorised');
     // }
     // Supports optional pagination params: page, perPage
     return this.fw.getPaymentPlans({
@@ -153,7 +153,7 @@ export class FlutterwaveController {
   createPaymentPlan(@Body() planPayload: any, @Req() req) {
     console.log('Payload', planPayload);
     // if (!req.user.isAdmin) {
-    //   throw new NotFoundException('Unautorised');
+    //   throw new NotFoundException('Unauthorised');
     // }
     return this.fw.createPaymentPlan(planPayload);
   }
@@ -170,7 +170,7 @@ export class FlutterwaveController {
   // @UsePipes(ValidationPipe)
   createVirtualCard(@Body() cardPayload: Record<string, any>, @Req() req, @Param('countryWallet') countryWallet) {
     // if (!req.user.isAdmin) {
-    //   throw new NotFoundException('Unautorised');
+    //   throw new NotFoundException('Unauthorised');
     // }
     return this.fw.createVirtualCard(countryWallet, cardPayload);
   }
@@ -180,7 +180,7 @@ export class FlutterwaveController {
   // @UsePipes(ValidationPipe)
   getVirtualCardsList(@Req() req, @Param('countryWallet') countryWallet) {
     // if (!req.user.isAdmin) {
-    //   throw new NotFoundException('Unautorised');
+    //   throw new NotFoundException('Unauthorised');
     // }
     return this.fw.getVirtualCards(countryWallet);
   }

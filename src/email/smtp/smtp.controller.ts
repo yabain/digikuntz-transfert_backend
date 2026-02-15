@@ -25,7 +25,7 @@ export class SmtpController {
   @UsePipes(ValidationPipe)
   getSmtpData(@Req() req): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+      throw new NotFoundException('Unauthorised');
     }
     return this.smtpService.getSmtpData();
   }
@@ -35,7 +35,7 @@ export class SmtpController {
   @UsePipes(ValidationPipe)
   updateSmtpData(@Req() req, @Body() data: any): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+      throw new NotFoundException('Unauthorised');
     }
     return this.smtpService.updateSmtpData({ ...data });
   }
@@ -45,7 +45,7 @@ export class SmtpController {
   @UsePipes(ValidationPipe)
   resetSmtp(@Req() req): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+      throw new NotFoundException('Unauthorised');
     }
     return this.smtpService.resetSmtp();
   }

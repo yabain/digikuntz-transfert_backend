@@ -53,7 +53,7 @@ export class TransactionController {
     @Req() req,
   ): Promise<Transaction[]> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+      throw new NotFoundException('Unauthorised');
     }
     return this.transactionService.findAll(query);
   }
@@ -75,7 +75,7 @@ export class TransactionController {
     @Req() req,
   ): Promise<Transaction[]> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+      throw new NotFoundException('Unauthorised');
     }
     return this.transactionService.getAllPayoutTransactoins(query);
   }
@@ -89,7 +89,7 @@ export class TransactionController {
     @Req() req,
   ): Promise<Transaction[]> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+      throw new NotFoundException('Unauthorised');
     }
     return this.transactionService.getAllPayinTransactions(query);
   }
@@ -118,7 +118,7 @@ export class TransactionController {
     @Req() req,
   ): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+      throw new NotFoundException('Unauthorised');
     }
     return this.transactionService.getPayoutListByStatus(status, query);
   }
@@ -131,7 +131,7 @@ export class TransactionController {
   @UsePipes(ValidationPipe)
   async getTransactionsStatistics(@Req() req): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+      throw new NotFoundException('Unauthorised');
     }
     return this.transactionService.getTransactionsStatistics();
   }

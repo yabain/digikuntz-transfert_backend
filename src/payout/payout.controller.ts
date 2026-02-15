@@ -22,7 +22,7 @@ export class PayoutController {
   @UsePipes(ValidationPipe)
   createPayout(@Req() req, @Param('transactionId') transactionId) {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unautorised');
+      throw new NotFoundException('Unauthorised');
     }
     return this.payoutService.createPayout(transactionId, req.user._id);
   }
