@@ -138,6 +138,14 @@ export class CreateUserDto {
   @IsOptional()
   readonly phone2: string;
 
+  @IsString()
+  @IsOptional()
+  readonly niu: string;
+
+  @IsString()
+  @IsOptional()
+  readonly rccm: string;
+
   @ApiProperty({ example: '+237 123456789' })
   @IsString()
   @IsOptional()

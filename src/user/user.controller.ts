@@ -126,7 +126,7 @@ export class UserController {
   @ApiResponse({ status: 201, description: 'User created.' })
   @UsePipes(ValidationPipe)
   async createUser(@Body() user: CreateUserDto): Promise<User> {
-    return this.userService.creatUser(user);
+    return this.userService.createUser(user);
   }
 
   /**

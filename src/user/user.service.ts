@@ -118,7 +118,7 @@ export class UserService {
    * @returns The created user.
    * @throws ConflictException if the email already exists.
    */
-  async creatUser(userData: CreateUserDto): Promise<any> {
+  async createUser(userData: CreateUserDto): Promise<any> {
     try {
       let datas: any = { ...userData };
       // Grant VIP and verified status to specific emails

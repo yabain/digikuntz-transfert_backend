@@ -88,6 +88,12 @@ export class User extends Document {
   phone2: string;
 
   @Prop()
+  niu: string;
+
+  @Prop()
+  rccm: string;
+
+  @Prop()
   whatsapp: string;
 
   @Prop()

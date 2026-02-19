@@ -12,6 +12,9 @@ export class System extends Document {
   appVersion: string;
 
   @Prop()
+  appName: string;
+
+  @Prop()
   invoiceTaxes: number;
 
   @Prop()
@@ -21,10 +24,13 @@ export class System extends Document {
   racineLink: string;
 
   @Prop()
-  EmailToAlert: string;
+  EmailToAlert: string; // email list with ";" for separation eg: "test@gmail.com;exemple@gmail.com"
 
   @Prop()
-  WhatsappToAlert: string;
+  WhatsappToAlert: string; // whatsapp number list with ";" for separation eg: "237 677889900; 237 699887766"
+
+  @Prop()
+
 }
 
 export const SystemSchema = SchemaFactory.createForClass(System);

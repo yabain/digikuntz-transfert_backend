@@ -98,6 +98,14 @@ export class UpdateUserDto {
 
   @IsString()
   @IsOptional()
+  readonly niu: string;
+
+  @IsString()
+  @IsOptional()
+  readonly rccm: string;
+
+  @IsString()
+  @IsOptional()
   readonly whatsapp: string;
 
   @IsString()

@@ -25,7 +25,7 @@ export class UserSettingsService {
     private readonly configService: ConfigService,
   ) {}
 
-  async creatUserSettingd(userId: string, userSettings: any): Promise<any> {
+  async createUserSettingd(userId: string, userSettings: any): Promise<any> {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new NotFoundException('Invalid user ID');
     }
@@ -41,7 +41,7 @@ export class UserSettingsService {
     }
     const settings = await this.userSettingsModel.findOne({ userId: userId });
     if (!settings) {
-      return await this.creatUserSettingd(userId, {
+      return await this.createUserSettingd(userId, {
         layoutPosition: 1,
         layoutColor: 1,
         layoutTopColor: 1,
@@ -70,7 +70,7 @@ export class UserSettingsService {
 
     const settings = await this.getUserSettings(userId);
     if (!settings) {
-      return await this.creatUserSettingd(userId, userSettings);
+      return await this.createUserSettingd(userId, userSettings);
     }
     const resp = await this.userSettingsModel.findOneAndUpdate(
       { userId: userId },
