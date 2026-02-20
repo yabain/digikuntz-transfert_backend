@@ -22,4 +22,11 @@ export class SystemController {
   async import(): Promise<any> {
     return this.systemService.import();
   }
+
+  @Get('systemData')
+  @ApiOperation({ summary: 'Get system data' })
+  @ApiResponse({ status: 200, description: 'List of system data returned.' })
+  async getSystemData(): Promise<System[]> {
+    return this.systemService.getData();
+  }
 }

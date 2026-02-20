@@ -15,7 +15,37 @@ export class System extends Document {
   appName: string;
 
   @Prop()
+  appLogoUrl: string;
+
+  @Prop()
   invoiceTaxes: number;
+
+  @Prop()
+  transferTaxes: number;
+
+  @Prop()
+  niu: number;
+
+  @Prop()
+  rccm: number;
+
+  @Prop()
+  addressLine1: string;
+
+  @Prop()
+  companyName: string;
+
+  @Prop()
+  defaultCurrency: string;
+
+  @Prop()
+  companyEmail: string; // email list with ";" for separation eg: "test@gmail.com;exemple@gmail.com"
+
+  @Prop()
+  companyWhatsapp: string; // whatsapp number list with ";" for separation eg: "237 677889900; 237 699887766"
+
+  @Prop()
+  addressLine2: string;
 
   @Prop()
   paymentGatwayAPIKey: string;
@@ -24,12 +54,19 @@ export class System extends Document {
   racineLink: string;
 
   @Prop()
-  EmailToAlert: string; // email list with ";" for separation eg: "test@gmail.com;exemple@gmail.com"
+  facebook: string;
 
   @Prop()
-  WhatsappToAlert: string; // whatsapp number list with ";" for separation eg: "237 677889900; 237 699887766"
+  website: string;
 
   @Prop()
+  linkedIn: string;
+
+  @Prop()
+  instagram: string;
+
+  @Prop()
+  twitter: string;
 
 }
 
