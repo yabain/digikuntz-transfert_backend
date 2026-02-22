@@ -182,7 +182,6 @@ export class UserService {
 
       // Mettre en cache avec logique conditionnelle
       await this.cacheService.setUserCache(userId, user);
-      // console.log('userData: ', user);
       return user;
     } catch (error) {
       if (error instanceof NotFoundException) {
@@ -203,7 +202,6 @@ export class UserService {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new NotFoundException('Invalid user');
     }
-    console.log('userData: ', userData);
     try {
       const user = await this.userModel
         .findByIdAndUpdate(userId, userData, {
@@ -235,7 +233,6 @@ export class UserService {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new NotFoundException('Invalid user ID');
     }
-    console.log('userData: ', userData);
     try {
       const user = await this.userModel
         .findByIdAndUpdate(userId, userData, {

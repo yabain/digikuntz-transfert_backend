@@ -24,16 +24,19 @@ export class System extends Document {
   transferTaxes: number;
 
   @Prop()
-  niu: number;
+  niu: string;
 
   @Prop()
-  rccm: number;
-
-  @Prop()
-  addressLine1: string;
+  rccm: string;
 
   @Prop()
   companyName: string;
+
+  @Prop()
+  companyPhone1: string;
+
+  @Prop()
+  companyPhone2: string;
 
   @Prop()
   defaultCurrency: string;
@@ -43,6 +46,9 @@ export class System extends Document {
 
   @Prop()
   companyWhatsapp: string; // whatsapp number list with ";" for separation eg: "237 677889900; 237 699887766"
+
+  @Prop()
+  addressLine1: string;
 
   @Prop()
   addressLine2: string;
