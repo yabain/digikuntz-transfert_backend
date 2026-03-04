@@ -261,14 +261,14 @@ export class SubscriptionService {
       && subscription.planId
     ) {
       void this.whatsappService.sendNewSubscriberMessageForPlanAuthor(
-        subscription.planId.toString(),
+        subscription.planId,
         receiverId,
       );
     }
 
     if (
       userId
-      && mongoose.Types.ObjectId.isValid(userId)
+      // && mongoose.Types.ObjectId.isValid(userId)
       && subscription.planId
     ) {
       void this.whatsappService.sendNewSubscriberMessage(
@@ -629,7 +629,7 @@ export class SubscriptionService {
         .populate('planId', 'title price cycle imageUrl currency')
         .populate('receiverId', 'name email');
 
-        console.log('my subscription list: ', subscriptionList);
+        // console.log('my subscription list: ', subscriptionList);
       return subscriptionList;
     } catch (error) {
       throw new NotFoundException(

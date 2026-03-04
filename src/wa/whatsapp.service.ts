@@ -617,7 +617,7 @@ export class WhatsappService implements OnModuleInit {
         `We are delighted to welcome you to our platform.*\n` +
         `Your smart all-in-one solution for payments management.\n` +
         `You can now make payments and manage your plans easily.\n` +
-        `\n _Access your account_ : ${this.frontUrl}/auth/login` +
+        `\n _Access your account_ : ${this.frontUrl}/dashboard` +
         `\n\n> This is an automatic message from the digiKUNTZ Payments WhatsApp service.`
       );
   }
@@ -653,7 +653,7 @@ export class WhatsappService implements OnModuleInit {
         `Your account has been credited with *${transaction.estimation} ${transaction.receiverCurrency}*.\n` +
         `Reason: ${transaction.raisonForTransfer || 'Account credit'}\n\n` +
         `Thank you for using digiKUNTZ Payments.\n` +
-        `\n _Access your account_ : ${this.frontUrl}/auth/login` +
+        `\n _Access your account_ : ${this.frontUrl}/dashboard` +
         `\n\n> This is an automatic message from digiKUNTZ Payments.`
       );
   }
@@ -689,7 +689,7 @@ export class WhatsappService implements OnModuleInit {
         `Your account has been debited by *${transaction.paymentWithTaxes} ${transaction.senderCountry}*.\n` +
         `Reason: ${transaction.raisonForTransfer || 'Account debit'}\n\n` +
         `Thank you for using digiKUNTZ Payments.\n` +
-        `\n _Access your account_ : ${this.frontUrl}/auth/login` +
+        `\n _Access your account_ : ${this.frontUrl}/dashboard` +
         `\n\n> This is an automatic message from digiKUNTZ Payments.`
       );
   }
@@ -704,7 +704,7 @@ export class WhatsappService implements OnModuleInit {
     console.log('sendNewSubscriberMessage plan: ', plan);
     console.log('Sending to: ', user.countryId.code + user.phone);
     console.log('message: ', message);
-    return await this.sendText(user.phone, message, user.countryId.code);
+    return await this.sendText(user.phone.toString(), message, user.countryId.code.toString());
   }
   private buildUpgradeSubscriberMessage(plan: any, user: any, transactionId: string): string {
     if (user.language === 'fr')
@@ -752,7 +752,7 @@ export class WhatsappService implements OnModuleInit {
         `Vous venez d'effectuer un paiement pour: *${plan.title}* (${plan.subTitle}).\n` +
         `Votre reçu: ${this.frontUrl}/invoice/${transactionId}\n\n` +
         `Merci d'utiliser digiKUNTZ Payments.\n` +
-        `\n _Accédez à votre compte_ : ${this.frontUrl}/auth/login` +
+        `\n _Accédez à votre compte_ : ${this.frontUrl}/dashboard` +
         `\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
       );
     else
@@ -762,7 +762,7 @@ export class WhatsappService implements OnModuleInit {
         `You have made a payment for *${plan.title}* (${plan.subTitle}).\n` +
         `Your invoice: ${this.frontUrl}/invoice/${transactionId}\n\n` +
         `Thank you for using digiKUNTZ Payments.\n` +
-        `\n _Access your account_ : ${this.frontUrl}/auth/login` +
+        `\n _Access your account_ : ${this.frontUrl}/dashboard` +
         `\n\n> This is an automatic message from digiKUNTZ Payments.`
       );
   }
@@ -770,9 +770,9 @@ export class WhatsappService implements OnModuleInit {
   // NEW SUBSCRIBER OF PLAN (By plan author to subscriber)
   async sendNewSubscriberMessageFromPlanAuthor(plan, user) {
     const message = this.buildNewSubscriberMessageFromPlanAuthor(plan, user);
-    console.log('Sending to: ', user.countryId?.code + user.phone);
+    console.log('Sending to: ', user.countryId?.code.toString() + user.phone.toString());
     console.log('message: ', message);
-    return await this.sendText(user.phone, message, user.countryId?.code);
+    return await this.sendText(user.phone.toString(), message, user.countryId?.code.toString());
   }
 
   private buildNewSubscriberMessageFromPlanAuthor(
@@ -816,9 +816,9 @@ export class WhatsappService implements OnModuleInit {
   async sendNewSubscriberMessageForPlanAuthor(plan, user) {
     const message = this.buildNewSubscriberMessageForPlanAuthor(plan, user);
 
-    console.log('Sending to: ', user.countryId?.code + user.phone);
+    console.log('Sending to: ', user.countryId?.code.toString() + user.phone.toString());
     console.log('message: ', message);
-    return await this.sendText(user.phone, message, user.countryId?.code);
+    return await this.sendText(user.phone.toString(), message, user.countryId?.code.toString());
   }
 
   private buildNewSubscriberMessageForPlanAuthor(
@@ -831,7 +831,7 @@ export class WhatsappService implements OnModuleInit {
         `Hello ${this.showName(author)},\n` +
         `Vous avez un nouvel abonné à *${plan.title}* (${plan.subTitle}).\n` +
         `Merci d'utiliser digiKUNTZ Payments.\n` +
-        `\n _Access your account_ : ${this.frontUrl}/auth/login` +
+        `\n _Access your account_ : ${this.frontUrl}/dashboard` +
         `\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
       );
     else
@@ -840,7 +840,7 @@ export class WhatsappService implements OnModuleInit {
         `Hello ${this.showName(author)},\n` +
         `You have a new subscriber to *${plan.title}* (${plan.subTitle}).\n` +
         `Thank you for using digiKUNTZ Payments.\n` +
-        `\n _Access your account_ : ${this.frontUrl}/auth/login` +
+        `\n _Access your account_ : ${this.frontUrl}/dashboard` +
         `\n\n> This is an automatic message from digiKUNTZ Payments.`
       );
   }
@@ -869,7 +869,7 @@ export class WhatsappService implements OnModuleInit {
           `Montant : *${transaction.estimation} ${transaction.receiverCurrency}*\n` +
           `Référence : ${transaction._id}\n\n` +
           `Veuillez vous connecter à l’espace administrateur pour vérifier et valider la transaction.` +
-          `\nAccédez à votre compte: ${this.frontUrl}/auth/login` +
+          `\nAccédez à votre compte: ${this.frontUrl}/dashboard` +
           `\n\n> Ceci est une alerte automatique du service WhatsApp de digiKUNTZ Payments.`
         );
       else
@@ -881,7 +881,7 @@ export class WhatsappService implements OnModuleInit {
           `Amount: *${transaction.estimation} ${transaction.receiverCurrency}*\n` +
           `Reference: ${transaction._id}\n\n` +
           `Please log in to the admin dashboard to review and validate the transaction.` +
-          `\nAccess your account: ${this.frontUrl}/auth/login` +
+          `\nAccess your account: ${this.frontUrl}/dashboard` +
           `\n\n> This is an automatic alert from the digiKUNTZ Payments WhatsApp service.`
         );
     } else {
@@ -893,7 +893,7 @@ export class WhatsappService implements OnModuleInit {
           `Montant : *${transaction.estimation} ${transaction.senderCurrency}*\n` +
           `Référence : ${transaction._id}\n\n` +
           `Veuillez vous connecter à l’espace administrateur pour vérifier et valider la transaction.` +
-          `\nAccédez à votre compte: ${this.frontUrl}/auth/login` +
+          `\nAccédez à votre compte: ${this.frontUrl}/dashboard` +
           `\n\n> Ceci est une alerte automatique du service WhatsApp de digiKUNTZ Payments.`
         );
       else
@@ -904,7 +904,7 @@ export class WhatsappService implements OnModuleInit {
           `Amount: *${transaction.estimation} ${transaction.senderCurrency}*\n` +
           `Reference: ${transaction._id}\n\n` +
           `Please log in to the admin dashboard to review and validate the transaction.` +
-          `\nAcces your account: ${this.frontUrl}/auth/login` +
+          `\nAcces your account: ${this.frontUrl}/dashboard` +
           `\n\n> This is an automatic alert from the digiKUNTZ Payments WhatsApp service.`
         );
     }

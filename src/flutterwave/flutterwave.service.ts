@@ -472,19 +472,19 @@ export class FlutterwaveService {
     console.log('In handleSubscription transaction: ', transaction);
     try {
       const subscriberId =
-        transaction?.userId?._id?.toString?.() ||
-        transaction?.userId?.toString?.() ||
-        transaction?.senderId?.toString?.();
-      const planId = transaction?.planId?.toString?.() || transaction?.planId;
+        transaction?.userId?._id?.toString() ||
+        transaction?.userId?.toString() ||
+        transaction?.senderId?.toString();
+      const planId = transaction?.planId?.toString() || transaction?.planId._id?.toString();
 
-      console.log('handleSubscription - userId: ', subscriberId);
-      console.log('handleSubscription - planId: ', planId);
+      // console.log('handleSubscription - userId: ', subscriberId);
+      // console.log('handleSubscription - planId: ', planId);
 
       const subscriptionStatus = await this.subscriptionService.verifySubscription(
         subscriberId,
         planId,
       );
-      console.log('handleSubscription - subscriptionStatus: ', subscriptionStatus);
+      // console.log('handleSubscription - subscriptionStatus: ', subscriptionStatus);
 
       let resp: any = '';
       if (subscriptionStatus.existingSubscription === true) {
@@ -505,7 +505,7 @@ export class FlutterwaveService {
         Number(transaction.estimation),
         transaction.senderCurrency,
       );
-      console.log('newBalence: ', newBalence);
+      // console.log('newBalence: ', newBalence);
 
       // Send notification
       // this.whatsappService.sendNewSubscriberMessage(transaction.planId.toString(), transaction.userId.toString(), transaction._id.toString());
