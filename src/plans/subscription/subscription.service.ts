@@ -385,7 +385,7 @@ export class SubscriptionService {
       userId,
       planId,
     });
-    console.log('verifySubscription - subscriptionModel.findOne: ', subscription);
+    // console.log('verifySubscription - subscriptionModel.findOne: ', subscription);
     if (!subscription) {
       return { existingSubscription: false }; // Subscription not found
     }
@@ -407,14 +407,14 @@ export class SubscriptionService {
       }; // 'Subscription expired';
     }
 
-    console.log('no statusUpdated: ', {
-      existingSubscription: true,
-      status: subscription.status,
-      id: subscription._id,
-      startDate: subscription.startDate,
-      endDate: subscription.endDate,
-      data: subscription
-    });
+    // console.log('no statusUpdated: ', {
+    //   existingSubscription: true,
+    //   status: subscription.status,
+    //   id: subscription._id,
+    //   startDate: subscription.startDate,
+    //   endDate: subscription.endDate,
+    //   data: subscription
+    // });
     return {
       existingSubscription: true,
       status: subscription.status,
@@ -619,17 +619,18 @@ export class SubscriptionService {
     }
   }
 
-  async getSubscriptionList(userId: any): Promise<any> {
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
+  async getSubscriptionListBySubscriberId(subscriberId: any): Promise<any> {
+    if (!mongoose.Types.ObjectId.isValid(subscriberId)) {
       throw new NotFoundException('Invalid user ID');
     }
 
     try {
       const subscriptionList = await this.subscriptionModel
-        .find({ userId })
-        .populate('planId', 'title price cycle')
+        .find({ userId: subscriberId })
+        .populate('planId', 'title price cycle imageUrl currency')
         .populate('receiverId', 'name email');
 
+        console.log('my subscription list: ', subscriptionList);
       return subscriptionList;
     } catch (error) {
       throw new NotFoundException(
@@ -773,9 +774,41 @@ export class SubscriptionService {
 
   async getSubscriptionsItemsOfUser(subscriptionId, subscriberId): Promise<Item[]> {
     const allItems = await this.itemService.getItemBySubscriptionId(subscriptionId);
-    console.log('allItems: ', allItems);
+    // console.log('allItems: ', allItems);
     const items = allItems.filter(item => item.userId.toString() === subscriberId.toString());
     return items;
+  }
+
+  async getSubscriptionStatistics(userId, long?: number): Promise<any> {
+    const totalSubscription = await this.subscriptionModel.countDocuments({ userId: userId });
+
+    const duration = long ?? 7;
+    const sinceDate = new Date();
+    sinceDate.setDate(sinceDate.getDate() - duration);
+
+    const subscriptionLastNDays = await this.subscriptionModel.countDocuments({
+      createdAt: { $gte: sinceDate },
+      userId: userId,
+    });
+
+    const inactiveSubscription = await this.subscriptionModel.countDocuments({
+      isActive: false,
+      userId: userId,
+    });
+
+    const activeSubscription = totalSubscription - inactiveSubscription;
+
+    const percentage =
+      totalSubscription === 0
+        ? 0
+        : Number(((subscriptionLastNDays / totalSubscription) * 100).toFixed(2));
+
+    return {
+      totalSubscription,
+      percentage,
+      inactiveSubscription,
+      activeSubscription,
+    };
   }
 
   // Retrieves all subscriptions, those where dateStart != dateEnd (because if dateStart === dateEnd, it's a subscription without payment, created by the plan owner),

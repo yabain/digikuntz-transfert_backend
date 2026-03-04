@@ -21,6 +21,7 @@ import { Query } from 'express-serve-static-core';
 export class EmailService {
   private alertEmail: any;
   private transporter: nodemailer.Transporter;
+  private transporterInitPromise: Promise<void> | null = null;
   private readonly frontUrl: string = 'https://payments.digikuntz.com';
   private readonly templateFolder = path.join(
     process.cwd(),
@@ -37,7 +38,7 @@ export class EmailService {
     private dateService: DateService,
     private smtpService: SmtpService,
   ) {
-    this.initializeTransporter();
+    this.transporterInitPromise = this.initializeTransporter();
   }
 
   getAlertDestination() {
@@ -46,7 +47,7 @@ export class EmailService {
     return this.alertEmail;
   }
 
-  async initializeTransporter() {
+  async initializeTransporter(): Promise<void> {
     this.smtpData = await this.getTransporterData();
     this.alertEmail = this.getAlertDestination();
     this.transporter = nodemailer.createTransport({
@@ -63,6 +64,19 @@ export class EmailService {
         rejectUnauthorized: true,
       },
     });
+  }
+
+  private async ensureTransporterReady(): Promise<void> {
+    if (this.transporter) return;
+    if (!this.transporterInitPromise) {
+      this.transporterInitPromise = this.initializeTransporter();
+    }
+    await this.transporterInitPromise;
+
+    if (!this.transporter) {
+      this.transporterInitPromise = this.initializeTransporter();
+      await this.transporterInitPromise;
+    }
   }
 
   isEmailValide(email) {
@@ -175,8 +189,12 @@ export class EmailService {
       for (let i = 0; i < to.length; i++) {
         const recipients = to[i];
         setTimeout(async () => {
-          await this.proceedToSendEmail(recipients, subject, message || '', url || undefined);
-          console.log(`✅ Alert "${subject}" sent to : ${recipients}`);
+          try {
+            await this.proceedToSendEmail(recipients, subject, message || '', url || undefined);
+            console.log(`✅ Alert "${subject}" sent to : ${recipients}`);
+          } catch (error) {
+            console.error(`❌ Error to send alert "${subject}" to: ${recipients}`, error);
+          }
         }, 1000 * i)
 
       }
@@ -259,6 +277,7 @@ export class EmailService {
 
     const from = this.configService.get<string>('SMTP_USER');
     try {
+      await this.ensureTransporterReady();
       const resp: any = await this.transporter.sendMail({
         from,
         to,

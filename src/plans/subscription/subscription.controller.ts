@@ -41,7 +41,7 @@ import { UpdateSubscriptionDto } from './update-subscription.dto';
  * user subscriptions, plan access verification, and administrative functions.
  */
 @ApiTags('Subscriptions')
-@Controller('subscription')
+@Controller(['subscription', 'subscriptions'])
 export class SubscriptionController {
   constructor(private subscriptionService: SubscriptionService) {}
 
@@ -132,36 +132,6 @@ export class SubscriptionController {
   }
 
   /**
-   * Get expired subscriptions (admin only)
-   * @param req - Request object containing user information
-   * @returns List of expired subscriptions
-   */
-  @Get('expired')
-  @ApiBearerAuth()
-  @ApiOperation({ 
-    summary: 'Get expired subscriptions',
-    description: 'Retrieve all expired subscriptions. Admin access required.',
-    tags: ['Admin']
-  })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'List of expired subscriptions retrieved successfully.',
-    type: [Subscription]
-  })
-  @ApiResponse({ 
-    status: 401, 
-    description: 'Unauthorized - Admin access required.' 
-  })
-  @UseGuards(AuthGuard('jwt'))
-  @UsePipes(ValidationPipe)
-  async getExpiredSubscriptions(@Req() req): Promise<any> {
-    if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorized');
-    }
-    return this.subscriptionService.getExpiredSubscriptions();
-  }
-
-  /**
    * Update subscription status (admin only)
    * @param subscriptionId - ID of the subscription to update
    * @param req - Request object containing user information
@@ -198,6 +168,71 @@ export class SubscriptionController {
     return this.subscriptionService.updateStatus(subscriptionId);
   }
 
+
+  /**
+   * Upgrade subscription
+   * @param data - Subscription upgrade data
+   * @returns Upgraded subscription
+   */
+  @Post('upgrade')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async upgrateSubscription(
+    @Body() data: any,
+    @Req() req
+  ): Promise<any> {
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unauthorized');
+    }
+    return this.subscriptionService.upgradeSubscription(data.subscriptionId, data.transactionId);
+  }
+
+
+  /**
+   * Get subscriber of plan (all subscription of plan)
+   */
+  @Get('get-subscribers/:planId')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async getSubscriptionsOfPlan(
+    @Param('planId') planId: any,
+  ): Promise<any> {
+    return this.subscriptionService.getSubscriptionsOfPlan(planId);
+  }
+
+  @Get('get-item-by-transactionId/:transactionId')
+  async getItemSubscriptionByTransactionId(
+    @Param('transactionId') transactionId: any,
+  ): Promise<any> {
+    return this.subscriptionService.getItemSubscriptionByTransactionId(transactionId);
+  }
+
+  @Get('get-user-subscription/:planId')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async getSubscriptionsOfUser(
+    @Param('planId') planId: any,
+  ): Promise<any> {
+    return this.subscriptionService.getSubscriptionsOfUser(planId);
+  }
+
+  @Get('get-items/:ids')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async getSubscriptionsItemsOfUser(
+    @Param('ids') ids: any,
+  ): Promise<any> {
+    const [subscriptionId, subscriberId] = ids.split('AAA');
+    return this.subscriptionService.getSubscriptionsItemsOfUser(subscriptionId, subscriberId);
+  }
+
+  @Post('verify')
+  async verifyExistingSubscription(
+    @Body() subscription: any,
+  ): Promise<any> {
+    return this.subscriptionService.verifySubscription(subscription.userId, subscription.planId);
+  }
+
   // ========== USER ROUTES ==========
 
   /**
@@ -205,7 +240,7 @@ export class SubscriptionController {
    * @param req - Request object containing user information
    * @returns List of user's subscriptions
    */
-  @Get('my-subscriptions')
+  @Get('subscriptions-list/:subscriberId')
   @ApiBearerAuth()
   @ApiOperation({ 
     summary: 'Get user subscriptions',
@@ -223,8 +258,22 @@ export class SubscriptionController {
   })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async getMySubscriptions(@Req() req): Promise<any> {
-    return this.subscriptionService.getSubscriptionList(req.user._id);
+  async getMySubscriptions(@Param('subscriberId') subscriberId: string, @Req() req): Promise<any> {
+    if (req.user._id.toString() !== subscriberId && req.user.isAdmin !== true) {
+      throw new NotFoundException('Unauthorized');
+    }
+    return this.subscriptionService.getSubscriptionListBySubscriberId(subscriberId);
+  }
+
+
+  @Get('get-my-statistics')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get statistics about subscription of User' })
+  @ApiResponse({ status: 200, description: 'subscription Statistics.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async getMySubscriptionStatistics(@Req() req): Promise<any> {
+    return this.subscriptionService.getSubscriptionStatistics(req.user._id);
   }
 
   /**
@@ -859,68 +908,33 @@ export class SubscriptionController {
     return this.subscriptionService.getAllActiveSubscriptions(query);
   }
 
-
   /**
-   * Upgrade subscription
-   * @param data - Subscription upgrade data
-   * @returns Upgraded subscription
+   * Get expired subscriptions (admin only)
+   * @param req - Request object containing user information
+   * @returns List of expired subscriptions
    */
-  @Post('upgrade')
+  @Get('expired')
+  @ApiBearerAuth()
+  @ApiOperation({ 
+    summary: 'Get expired subscriptions',
+    description: 'Retrieve all expired subscriptions. Admin access required.',
+    tags: ['Admin']
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'List of expired subscriptions retrieved successfully.',
+    type: [Subscription]
+  })
+  @ApiResponse({ 
+    status: 401, 
+    description: 'Unauthorized - Admin access required.' 
+  })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async upgrateSubscription(
-    @Body() data: any,
-    @Req() req
-  ): Promise<any> {
+  async getExpiredSubscriptions(@Req() req): Promise<any> {
     if (!req.user.isAdmin) {
       throw new NotFoundException('Unauthorized');
     }
-    return this.subscriptionService.upgradeSubscription(data.subscriptionId, data.transactionId);
-  }
-
-
-  /**
-   * Get subscriber of plan (all subscription of plan)
-   */
-  @Get('get-subscribers/:planId')
-  @UseGuards(AuthGuard('jwt'))
-  @UsePipes(ValidationPipe)
-  async getSubscriptionsOfPlan(
-    @Param('planId') planId: any,
-  ): Promise<any> {
-    return this.subscriptionService.getSubscriptionsOfPlan(planId);
-  }
-
-  @Get('get-item-by-transactionId/:transactionId')
-  async getItemSubscriptionByTransactionId(
-    @Param('transactionId') transactionId: any,
-  ): Promise<any> {
-    return this.subscriptionService.getItemSubscriptionByTransactionId(transactionId);
-  }
-
-  @Get('get-user-subscription/:planId')
-  @UseGuards(AuthGuard('jwt'))
-  @UsePipes(ValidationPipe)
-  async getSubscriptionsOfUser(
-    @Param('planId') planId: any,
-  ): Promise<any> {
-    return this.subscriptionService.getSubscriptionsOfUser(planId);
-  }
-
-  @Get('get-items/:ids')
-  @UseGuards(AuthGuard('jwt'))
-  @UsePipes(ValidationPipe)
-  async getSubscriptionsItemsOfUser(
-    @Param('ids') ids: any,
-  ): Promise<any> {
-    const [subscriptionId, subscriberId] = ids.split('AAA');
-    return this.subscriptionService.getSubscriptionsItemsOfUser(subscriptionId, subscriberId);
-  }
-
-  @Post('verify')
-  async verifyExistingSubscription(
-    @Body() subscription: any,
-  ): Promise<any> {
-    return this.subscriptionService.verifySubscription(subscription.userId, subscription.planId);
+    return this.subscriptionService.getExpiredSubscriptions();
   }
 }

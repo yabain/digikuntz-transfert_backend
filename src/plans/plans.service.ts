@@ -35,7 +35,7 @@ export class PlansService {
     @Inject(forwardRef(() => WhatsappService))
     private waService: WhatsappService,
     private userService: UserService,
-  ) {}
+  ) { }
 
   private sanitizeUser(user: any): any {
     if (!user) return user;
@@ -53,13 +53,13 @@ export class PlansService {
 
     const keyword = query.keyword
       ? {
-          title: {
-            $regex: query.keyword as string,
-            $options: 'i',
-          },
-        }
+        title: {
+          $regex: query.keyword as string,
+          $options: 'i',
+        },
+      }
       : {};
-      
+
     const plansList = await this.plansModel
       .find({ ...keyword })
       .populate('author', 'name email pictureUrl')
@@ -210,14 +210,17 @@ export class PlansService {
     }
   }
 
-  async addSubscriber(data: any): Promise<any> {
+  async addSubscriber(data: any, userCreation: boolean = true, ): Promise<any> {
     const dataBackup = structuredClone(data);
     let user: any = this.parseUserToObject(data);
-    user.password = "12345678";
+    let newUser: any;
     try {
-      let newUser = await this.authService.signUp(user, false);
-      if (!newUser) {
-        throw new NotFoundException('Unable to add this user');
+      if (userCreation) {
+        user.password = "12345678";
+        newUser = await this.authService.signUp(user, false);
+        if (!newUser) {
+          throw new NotFoundException('Unable to add this user');
+        }
       }
 
       const plan = await this.getPlansById(dataBackup.planId);
@@ -228,13 +231,14 @@ export class PlansService {
 
 
       const subscription = await this.subscriptionService.subscribe({
-        userId: newUser.userData._id,
+        userId: userCreation ? newUser.userData._id : data.userId,
         receiverId: plan.author._id,
         planId: plan._id,
         quantity: 0,
         cycle: plan.cycle,
         startDate: dataBackup.subscriptionStartDate,
-        endDate: dataBackup.subscriptionStartDate,
+        endDate: userCreation ? dataBackup.subscriptionStartDate : this.calculateEndDate(dataBackup.subscriptionStartDate, plan.cycle, dataBackup.quantity),
+         // endDate:  dataBackup.subscriptionEndDate,
         status: false,
       });
 
@@ -248,6 +252,41 @@ export class PlansService {
       console.log(err);
       throw new NotFoundException('Error: ' + err);
     }
+  }
+
+
+  /**
+   * Calcule la date de fin d'abonnement en fonction du cycle et de la quantité
+   * @param startDate Date de début de l'abonnement
+   * @param cycle Cycle de l'abonnement (dayly, weekly, monthly, yearly)
+   * @param quantity Nombre de cycles à ajouter
+   * @returns Date de fin d'abonnement
+   */
+  calculateEndDate(startDate: Date, cycle: string, quantity: number): Date {
+    const endDate = new Date(startDate);
+
+    switch (cycle) {
+      case 'dayly':
+        endDate.setDate(endDate.getDate() + quantity);
+        break;
+
+      case 'weekly':
+        endDate.setDate(endDate.getDate() + quantity * 7);
+        break;
+
+      case 'monthly':
+        endDate.setMonth(endDate.getMonth() + quantity);
+        break;
+
+      case 'yearly':
+        endDate.setFullYear(endDate.getFullYear() + quantity);
+        break;
+
+      default:
+        throw new Error(`Cycle non supporté: ${cycle}`);
+    }
+
+    return endDate;
   }
 
   async incrementSubscriberNumber(plansId: string): Promise<any> {
@@ -341,11 +380,11 @@ export class PlansService {
 
     const keyword = query.keyword
       ? {
-          title: {
-            $regex: query.keyword,
-            $options: 'i',
-          },
-        }
+        title: {
+          $regex: query.keyword,
+          $options: 'i',
+        },
+      }
       : {};
     const optionsList = await this.plansModel
       .find({ ...keyword, status: true })
@@ -384,8 +423,8 @@ export class PlansService {
 
     const keyword = query.keyword
       ? {
-          $or: [{ title: { $regex: query.keyword as string, $options: 'i' } }],
-        }
+        $or: [{ title: { $regex: query.keyword as string, $options: 'i' } }],
+      }
       : {};
 
     // Find plans matching the keyword with pagination

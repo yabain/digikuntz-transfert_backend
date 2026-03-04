@@ -16,10 +16,10 @@ export enum SubscriptionCycle {
 })
 export class Subscription extends Document {
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
-  userId: User;
+  userId: User; // Subscriber Id
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
-  receiverId: User; // plan autohr Id
+  receiverId: User; // plan author Id
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Plans' })
   planId: Plans;

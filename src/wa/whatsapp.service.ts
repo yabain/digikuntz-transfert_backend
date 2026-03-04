@@ -28,6 +28,7 @@ type ConnState =
 @Injectable()
 export class WhatsappService implements OnModuleInit {
   private readonly logger = new Logger(WhatsappService.name);
+  private readonly bootRetryDelayMs = 15000;
 
   private client: Client | null = null;
   private ready = false;
@@ -46,9 +47,14 @@ export class WhatsappService implements OnModuleInit {
   // chemins de session
   private readonly authDataPath = '.wwebjs_session';
   private readonly clientId = 'default';
+  private booting = false;
+  private reinitializing = false;
 
-  async onModuleInit() {
-    await this.boot();
+  onModuleInit() {
+    // Non-blocking startup: do not block Nest bootstrap on WhatsApp init.
+    setImmediate(() => {
+      void this.bootInBackground();
+    });
   }
 
   constructor(
@@ -89,113 +95,152 @@ export class WhatsappService implements OnModuleInit {
 
   /** Boot du client wwebjs avec LocalAuth (session persistée) */
   private async boot() {
-    if (this.client) return; // idempotent
+    if (this.client || this.booting) return; // idempotent
+    this.booting = true;
     this.lastState = 'INITIALIZING';
 
-    const chromePath =
-      process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)
-        ? process.env.CHROME_PATH
-        : undefined;
+    try {
+      const chromePath =
+        process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)
+          ? process.env.CHROME_PATH
+          : undefined;
 
-    const hadPrevSession = this.hasPreviousSession(); // ★
+      const hadPrevSession = this.hasPreviousSession(); // ★
 
-    this.client = new Client({
-      authStrategy: new LocalAuth({
-        dataPath: this.authDataPath,
-        clientId: this.clientId,
-      }),
-      puppeteer: {
-        headless: true,
-        args:
-          process.platform === 'linux'
-            ? [
-              '--no-sandbox',
-              '--disable-setuid-sandbox',
-              '--disable-dev-shm-usage',
-            ]
-            : [],
-        executablePath: chromePath,
-      },
-      restartOnAuthFail: true,
-    });
+      this.client = new Client({
+        authStrategy: new LocalAuth({
+          dataPath: this.authDataPath,
+          clientId: this.clientId,
+        }),
+        webVersionCache: {
+          type: 'local',
+        },
+        puppeteer: {
+          headless: true,
+          args:
+            process.platform === 'linux'
+              ? [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+              ]
+              : [],
+          executablePath: chromePath,
+        },
+        restartOnAuthFail: true,
+      });
 
-    // ---- Events
-    this.client.on('qr', (qr) => {
-      this.logger.log('QR reçu — scanne-le dans WhatsApp > Appareils liés');
-      this.lastQr = qr;
-      this.ready = false;
-      this.lastState = 'INITIALIZING';
+      // ---- Events
+      this.client.on('qr', (qr) => {
+        this.logger.log('QR reçu — scanne-le dans WhatsApp > Appareils liés');
+        this.lastQr = qr;
+        this.ready = false;
+        this.lastState = 'INITIALIZING';
 
-      // ★ Au démarrage SANS session, on notifie qu'une (re)connexion est requise.
-      // if (!hadPrevSession) {
-      if (!this.sendOnStart) {
+        // ★ Au démarrage SANS session, on notifie qu'une (re)connexion est requise.
+        if (!this.sendOnStart) {
+          void this.sendConnexionFailureAlert();
+          this.sendOnStart = true;
+        }
+      });
+
+      this.client.on('authenticated', () => {
+        this.logger.log('Authentifié');
+        this.lastQr = null;
+      });
+
+      this.client.on('ready', () => {
+        this.logger.log('Client prêt');
+        this.ready = true;
+        this.lastState = 'CONNECTED';
+        this.lastQr = null;
+
+        // ★ Service opérationnel => mail de succès
+        void this.sendMailWatsappserviceReady();
+        // reset compteur d'échecs d’envoi
+        this.currentFailNumber = 0;
+      });
+
+      this.client.on('change_state', (state) => {
+        this.logger.warn(`État WhatsApp: ${state}`);
+        this.lastState = (state as ConnState) ?? 'UNKNOWN';
+      });
+
+      this.client.on('auth_failure', (msg) => {
+        this.logger.error(`Échec auth: ${msg}`);
+        this.ready = false;
+        this.lastState = 'UNKNOWN';
+        this.lastQr = null;
+
+        // ★ Alerte échec d’authentification
+        void this.sendConnexionFailureAlert();
+      });
+
+      this.client.on('disconnected', (reason) => {
+        this.logger.warn(`Déconnecté: ${reason}`);
+        this.ready = false;
+        this.lastState = 'UNKNOWN';
+        this.lastQr = null;
+
+        // ★ Alerte déconnexion
+        void this.sendConnexionFailureAlert();
+
+        // relance douce
+        setTimeout(() => this.reinitialize().catch(() => { }), 1500);
+      });
+
+      if (!hadPrevSession && !this.sendOnStart) {
+        // ★ Dès le boot, s'il n'y a pas de session, on prévient immédiatement
+        // (utile si on n’attend pas l’event 'qr' pour informer).
         void this.sendConnexionFailureAlert();
         this.sendOnStart = true;
       }
-    });
 
-    this.client.on('authenticated', () => {
-      this.logger.log('Authentifié');
-      this.lastQr = null;
-    });
-
-    this.client.on('ready', () => {
-      this.logger.log('Client prêt');
-      this.ready = true;
-      this.lastState = 'CONNECTED';
-      this.lastQr = null;
-
-      // ★ Service opérationnel => mail de succès
-      void this.sendMailWatsappserviceReady();
-      // reset compteur d'échecs d’envoi
-      this.currentFailNumber = 0;
-    });
-
-    this.client.on('change_state', (state) => {
-      this.logger.warn(`État WhatsApp: ${state}`);
-      this.lastState = (state as ConnState) ?? 'UNKNOWN';
-    });
-
-    this.client.on('auth_failure', (msg) => {
-      this.logger.error(`Échec auth: ${msg}`);
-      this.ready = false;
-      this.lastState = 'UNKNOWN';
-      this.lastQr = null;
-
-      // ★ Alerte échec d’authentification
-      void this.sendConnexionFailureAlert();
-    });
-
-    this.client.on('disconnected', (reason) => {
-      this.logger.warn(`Déconnecté: ${reason}`);
-      this.ready = false;
-      this.lastState = 'UNKNOWN';
-      this.lastQr = null;
-
-      // ★ Alerte déconnexion
-      void this.sendConnexionFailureAlert();
-
-      // relance douce
-      setTimeout(() => this.reinitialize().catch(() => { }), 1500);
-    });
-
-    if (!hadPrevSession) {
-      // ★ Dès le boot, s'il n'y a pas de session, on prévient immédiatement
-      // (utile si on n’attend pas l’event 'qr' pour informer).
-      void this.sendConnexionFailureAlert();
+      await this.client.initialize();
+    } finally {
+      this.booting = false;
     }
+  }
 
-    await this.client.initialize();
+  private async bootInBackground() {
+    try {
+      await this.boot();
+    } catch (error: any) {
+      const errorMessage = error?.message ?? String(error);
+      this.logger.error(
+        `WhatsApp background init failed: ${errorMessage}. Retrying in ${this.bootRetryDelayMs / 1000}s...`,
+      );
+      this.ready = false;
+      this.lastState = 'TIMEOUT';
+
+      try {
+        await this.client?.destroy();
+      } catch {
+        this.logger.warn('Failed to destroy client after background init error');
+      } finally {
+        this.client = null;
+      }
+
+      setTimeout(() => {
+        void this.bootInBackground();
+      }, this.bootRetryDelayMs);
+    }
   }
 
   private async reinitialize() {
+    if (this.reinitializing) return;
+    this.reinitializing = true;
     try {
       await this.client?.destroy();
     } catch {
       this.logger.warn('Failed to destroy client');
     }
     this.client = null;
-    await this.boot();
+    try {
+      await this.boot();
+    } finally {
+      this.reinitializing = false;
+    }
   }
 
   /** ---- Public API (utilisées par le Controller) ---- */
@@ -357,14 +402,32 @@ export class WhatsappService implements OnModuleInit {
   }
 
   /** ping d'injection: échoue tant que l'injection n'est pas prête */
-  private async ensureInjectionReady(timeoutMs = 20_000) {
+  private async ensureInjectionReady(timeoutMs = 60_000) {
     if (!this.client) throw new Error('Client not initialized');
     const start = Date.now();
     let lastErr: any;
     while (Date.now() - start < timeoutMs) {
       try {
-        await this.client.getChats();
-        return;
+        const state = await (this.client as any).getState?.();
+        if (!this.ready || state !== 'CONNECTED') {
+          await new Promise((r) => setTimeout(r, 300));
+          continue;
+        }
+
+        const page = (this.client as any).pupPage;
+        if (!page) {
+          await new Promise((r) => setTimeout(r, 300));
+          continue;
+        }
+
+        const injected = await page.evaluate(() => {
+          const w = window as any;
+          // Avoid heavy calls like getChats() that can break during transient WA updates.
+          return Boolean(w?.WWebJS && (w?.Store || w?.webpackChunkbuild));
+        });
+
+        if (injected) return;
+        await new Promise((r) => setTimeout(r, 300));
       } catch (e: any) {
         lastErr = e;
         const errorMessage = e?.message ?? String(e);
@@ -384,11 +447,8 @@ export class WhatsappService implements OnModuleInit {
             await this.reinitialize();
             // Attendre un peu après la réinitialisation
             await new Promise((r) => setTimeout(r, 2000));
-            // Réessayer une fois après réinitialisation
-            if (this.client) {
-              await this.client.getChats();
-              return;
-            }
+            // Continue polling after reinitialization
+            continue;
           } catch (reinitErr) {
             this.logger.error('Failed to reinitialize client: ' + (reinitErr?.message ?? reinitErr));
           }
@@ -399,8 +459,9 @@ export class WhatsappService implements OnModuleInit {
         await new Promise((r) => setTimeout(r, 300));
       }
     }
-    this.logger.error('Injection timeout: ' + (lastErr?.message ?? lastErr));
-    throw new Error('Injection not ready: ' + (lastErr?.message ?? 'Timeout'));
+    const timeoutMessage = lastErr?.message ?? 'Timed out waiting for ready/injection';
+    this.logger.error('Injection timeout: ' + timeoutMessage);
+    throw new Error('Injection not ready: ' + timeoutMessage);
   }
 
   private formatPhone(to: string, cc?: string) {

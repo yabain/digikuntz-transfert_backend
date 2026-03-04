@@ -8,7 +8,6 @@ import { EmailService } from 'src/email/email.service';
 import { Country, CountrySchema } from 'src/country/country.schema';
 import { City, CitySchema } from 'src/city/city.schema';
 import { DateService } from 'src/email/date.service';
-import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
 import { Payin, PayinSchema } from 'src/payin/payin.schema';
 import { Payout, PayoutSchema } from 'src/payout/payout.schema';
 import { PayinService } from 'src/payin/payin.service';
@@ -66,7 +65,6 @@ import { SystemModule } from 'src/system/system.module';
     TransactionService,
     EmailService,
     DateService,
-    FlutterwaveService,
     PayinService,
     PayoutService,
     SmtpService,

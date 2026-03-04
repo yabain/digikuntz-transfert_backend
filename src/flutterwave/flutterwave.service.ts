@@ -60,9 +60,9 @@ export class FlutterwaveService {
     private transactionService: TransactionService,
     private balanceService: BalanceService,
     private subscriptionService: SubscriptionService,
-  private servicePaymentService: ServicePaymentService,
-  @Inject(forwardRef(() => WhatsappService))
-  private whatsappService: WhatsappService,
+    private servicePaymentService: ServicePaymentService,
+    @Inject(forwardRef(() => WhatsappService))
+    private whatsappService: WhatsappService,
   ) {
     this.secretHash = this.config.get<string>('FLUTTERWAVE_SECRET_HASH');
     this.fwSecret = this.config.get<string>('FLUTTERWAVE_SECRET_KEY');
@@ -471,23 +471,33 @@ export class FlutterwaveService {
   async handleSubscription(transaction) {
     console.log('In handleSubscription transaction: ', transaction);
     try {
+      const subscriberId =
+        transaction?.userId?._id?.toString?.() ||
+        transaction?.userId?.toString?.() ||
+        transaction?.senderId?.toString?.();
+      const planId = transaction?.planId?.toString?.() || transaction?.planId;
 
-      console.log('handleSubscription - userId: ', transaction.userId._id.toString() || transaction.userId.toString());
-      console.log('handleSubscription - planId: ', transaction.planId);
-      const subscriptionStatus =
-        await this.subscriptionService.verifySubscription(
-          transaction.userId._id.toString() || transaction.userId.toString(),
-          transaction.planId,
-        );
+      console.log('handleSubscription - userId: ', subscriberId);
+      console.log('handleSubscription - planId: ', planId);
 
-      console.log('handleSubscription - subscriptionStatus: ', subscriptionStatus)
-      // update existing suscription
+      const subscriptionStatus = await this.subscriptionService.verifySubscription(
+        subscriberId,
+        planId,
+      );
+      console.log('handleSubscription - subscriptionStatus: ', subscriptionStatus);
 
       let resp: any = '';
-      if (subscriptionStatus.existingSubscription === false) {
-        throw new NotFoundException('Subscription not found');
+      if (subscriptionStatus.existingSubscription === true) {
+        // Existing subscription: subscribe() upgrades with transactionId
+        resp = await this.subscriptionService.subscribe(
+          subscriptionStatus.data,
+          transaction._id,
+        );
       } else {
-        resp = await this.subscriptionService.subscribe(subscriptionStatus.data, transaction._id);
+        // Missing subscription: create then subscribe
+        const payload =
+          this.subscriptionService.parseTransactionToSubscription(transaction);
+        resp = await this.subscriptionService.subscribe(payload, transaction._id);
       }
 
       console.log('handleSubscription - resp: ', resp);
@@ -500,7 +510,7 @@ export class FlutterwaveService {
 
       // Send notification
       // this.whatsappService.sendNewSubscriberMessage(transaction.planId.toString(), transaction.userId.toString(), transaction._id.toString());
-      return 
+      return;
     } catch (err) {
       // console.log('(fw service: handleSubscription) Error: ', err);
       return {
