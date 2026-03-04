@@ -39,13 +39,15 @@ import { AppCacheModule } from '../cache/cache.module';
 import { PlansModule } from 'src/plans/plans.module';
 import { SystemModule } from 'src/system/system.module';
 import { OperationNotificationService } from 'src/notification/operation-notification.service';
+import { FundraisingModule } from 'src/fundraising/fundraising.module';
 
 @Module({
   imports: [
     ConfigModule,
     HttpModule,
-    WhatsappModule,
+    forwardRef(() => WhatsappModule),
     forwardRef(() => PlansModule),
+    forwardRef(() => FundraisingModule),
     SystemModule,
     AppCacheModule,
     MongooseModule.forFeature([

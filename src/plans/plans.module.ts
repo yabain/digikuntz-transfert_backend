@@ -48,12 +48,14 @@ import { AppCacheModule } from '../cache/cache.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { SystemModule } from 'src/system/system.module';
 import { OperationNotificationService } from 'src/notification/operation-notification.service';
+import { FundraisingModule } from 'src/fundraising/fundraising.module';
 
 @Module({
   imports: [
     forwardRef(() => AuthModule),
     forwardRef(() => WhatsappModule),
     forwardRef(() => SubscriptionModule),
+    forwardRef(() => FundraisingModule),
     forwardRef(() => SystemModule),
     AppCacheModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),

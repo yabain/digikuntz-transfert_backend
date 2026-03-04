@@ -172,6 +172,14 @@ export class Transaction {
   @Prop()
   cycle: string; // Deduced from the response code      dayly | weekly |monthly | yearly
 
+  @Prop()
+  fundraisingId: string;
+
+  @Prop()
+  donorVisibility: boolean;
+
+  @Prop()
+  donationMessage: string;
 
   ///---------------- For service and subscription
   @Prop()
@@ -190,3 +198,4 @@ TransactionSchema.index({ transactionType: 1, status: 1, createdAt: -1 });
 TransactionSchema.index({ userId: 1, createdAt: -1 });
 TransactionSchema.index({ senderId: 1, createdAt: -1 });
 TransactionSchema.index({ receiverId: 1, createdAt: -1 });
+TransactionSchema.index({ fundraisingId: 1, createdAt: -1 });

@@ -14,11 +14,19 @@ import {
   Headers,
   Logger,
 } from '@nestjs/common';
+import {
+  ApiBody,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { PayinService } from './payin.service';
 import axios from 'axios';
 import * as crypto from 'crypto';
 import { HttpException } from '@nestjs/common';
 
+@ApiTags('payin')
 @Controller('payin')
 export class PayinController {
   private readonly logger = new Logger(PayinController.name);
@@ -26,6 +34,20 @@ export class PayinController {
 
   // 1) initialisation : backend crée txRef + enregistre, renvoie les données au front
   @Post('initialize')
+  @ApiOperation({ summary: 'Initialize a payin' })
+  @ApiBody({
+    schema: {
+      example: {
+        txRef: 'txPayin-1741130000000-abcd1234',
+        amount: 1000,
+        currency: 'XAF',
+        customerEmail: 'john@mail.com',
+        transactionId: '65f0aa12d4b1c2f1a8a4f001',
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Payin initialized.' })
+  @ApiResponse({ status: 400, description: 'Invalid payload.' })
   async initialize(@Body() dto: any) {
     console.log('Payin initialize:');
     return this.payinService.initPayin({
@@ -76,6 +98,10 @@ export class PayinController {
   // }
 
   @Get('get-txRef/:txRef')
+  @ApiOperation({ summary: 'Get local payin by txRef' })
+  @ApiParam({ name: 'txRef', description: 'Payin transaction reference' })
+  @ApiResponse({ status: 200, description: 'Payin data returned.' })
+  @ApiResponse({ status: 404, description: 'Payin not found.' })
   async getPayinByTxRef(@Param('txRef') txRef: string) {
     return this.payinService.getPayinByTxRef(txRef);
   }

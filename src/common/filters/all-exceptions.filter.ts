@@ -28,11 +28,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
         : (exceptionResponse as any).message || message;
     }
 
-    // Log l'erreur sans données sensibles
-    this.logger.error(
-      `${request.method} ${request.url} - ${status} - ${message}`,
-      exception instanceof Error ? exception.stack : undefined,
-    );
+    // Evite de loguer les 404 comme des erreurs serveur
+    if (status === HttpStatus.NOT_FOUND) {
+      this.logger.warn(`${request.method} ${request.url} - ${status} - ${message}`);
+    } else {
+      this.logger.error(
+        `${request.method} ${request.url} - ${status} - ${message}`,
+        exception instanceof Error ? exception.stack : undefined,
+      );
+    }
 
     response.status(status).json({
       statusCode: status,

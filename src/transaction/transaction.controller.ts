@@ -24,6 +24,7 @@ import { TransactionService } from './transaction.service';
 import { Transaction } from './transaction.schema';
 import {
   ApiBearerAuth,
+  ApiBody,
   ApiOperation,
   ApiParam,
   ApiQuery,
@@ -46,6 +47,8 @@ export class TransactionController {
     description: 'Search filter',
   })
   @ApiResponse({ status: 200, description: 'List of transactions returned.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getAllTransactoins(
@@ -68,6 +71,8 @@ export class TransactionController {
     description: 'Search filter',
   })
   @ApiResponse({ status: 200, description: 'List of transactions returned.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getAllPayoutTransactoins(
@@ -82,6 +87,12 @@ export class TransactionController {
 
   @Get('all-payin')
   @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all payin transactions (admin only)' })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
+  @ApiResponse({ status: 200, description: 'List of payins returned.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getAllPayinTransactions(
@@ -96,6 +107,28 @@ export class TransactionController {
 
   @Get('user-transactions/:id')
   @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get paginated transactions for one user' })
+  @ApiParam({ name: 'id', description: 'User ID', type: String })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 20 })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated user transactions.',
+    schema: {
+      example: {
+        data: [],
+        pagination: {
+          currentPage: 1,
+          limit: 20,
+          totalPages: 1,
+          totalItems: 0,
+          hasNextPage: false,
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 404, description: 'User/transaction resource not found.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getAllTransactoinsOfUser(
@@ -109,7 +142,16 @@ export class TransactionController {
   @Get('get-payout-list/:status')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get payout transaction regarding status (admin only)' })
+  @ApiParam({
+    name: 'status',
+    description: 'Payout status filter',
+    enum: ['pending', 'accepted', 'rejected', 'error'],
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
   @ApiResponse({ status: 200, description: 'Plans Statistics.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getPayoutListByStatus(
@@ -126,7 +168,23 @@ export class TransactionController {
   @Get('get-statistics')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get statistics about all plans (admin only)' })
-  @ApiResponse({ status: 200, description: 'Plans Statistics.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Transactions statistics.',
+    schema: {
+      example: {
+        rejectedTransactions: 5,
+        pendingTransactions: 12,
+        endedTransactions: 90,
+        errorTransactions: 3,
+        totalPayoutTransactions: 110,
+        totalPayinTransactions: 142,
+        totalTransactions: 300,
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getTransactionsStatistics(@Req() req): Promise<any> {
@@ -141,37 +199,27 @@ export class TransactionController {
   @ApiOperation({ summary: 'Get transaction data by ID' })
   @ApiParam({ name: 'id', description: 'Transaction ID', type: String })
   @ApiResponse({ status: 200, description: 'Transaction data returned.' })
+  @ApiResponse({ status: 404, description: 'Transaction not found.' })
   async getTransactionData(@Param('id') transactionId: string): Promise<any> {
     return this.transactionService.findById(transactionId);
   }
-
-  // @Post('new')
-  // @ApiBearerAuth()
-  // @ApiOperation({ summary: 'Process a new payment transaction' })
-  // @ApiBody({
-  //   schema: {
-  //     example: {
-  //       amount: 100,
-  //       fromCurrency: 'USD',
-  //       toCurrency: 'XAF',
-  //       sender: 'userId',
-  //       receiver: 'userId',
-  //       // ...Other field
-  //     },
-  //   },
-  // })
-  // @ApiResponse({ status: 201, description: 'Transaction processed.' })
-  // @UseGuards(AuthGuard('jwt'))
-  // @UsePipes(ValidationPipe)
-  // async processPayment(@Body() transactionData: any, @Req() req): Promise<any> {
-  //   return this.transactionService.processPayment(transactionData, req.user);
-  // }
 
   @Delete(':id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a transaction by ID (admin only)' })
   @ApiParam({ name: 'id', description: 'Transaction ID', type: String })
-  @ApiResponse({ status: 200, description: 'Transaction deleted.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Transaction deleted.',
+    schema: {
+      example: {
+        _id: '65f0aa12d4b1c2f1a8a4f000',
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Bad request / unauthorised.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 404, description: 'Transaction not found.' })
   @UseGuards(AuthGuard('jwt'))
   async delete(@Param('id') transactionId: string, @Req() req): Promise<any> {
     if (!req.user.isAdmin) throw new BadRequestException('Unauthorised !');

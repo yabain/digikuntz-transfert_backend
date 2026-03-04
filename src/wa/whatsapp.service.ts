@@ -1068,4 +1068,50 @@ export class WhatsappService implements OnModuleInit {
         : `*Transaction rejected*\n\nHello ${this.showName(user)},\nYour transaction was rejected by the administrator.\nReference: ${transaction.transactionRef || transaction._id}\n\n> This is an automatic message from digiKUNTZ Payments.`;
     return await this.sendText(user.whatsapp || user.phone, message, countryCode);
   }
+
+  async sendFundraisingDonationMessageToDonor(
+    transaction: any,
+    fundraising: any,
+    donor: any,
+  ) {
+    if (!donor) return;
+    const countryCode = donor.countryId?.code || donor.countryId;
+    const message =
+      donor.language === 'fr'
+        ? `*Don effectué avec succès !*\n\nHello ${this.showName(donor)},\nVotre don de *${transaction.estimation} ${fundraising.currency}* pour la collecte *${fundraising.title}* a été confirmé.\nRéférence: ${transaction.transactionRef || transaction._id}\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
+        : `*Donation successful!*\n\nHello ${this.showName(donor)},\nYour donation of *${transaction.estimation} ${fundraising.currency}* to *${fundraising.title}* has been confirmed.\nReference: ${transaction.transactionRef || transaction._id}\n\n> This is an automatic message from digiKUNTZ Payments.`;
+
+    return await this.sendText(
+      donor.whatsapp || donor.phone,
+      message,
+      countryCode,
+    );
+  }
+
+  async sendFundraisingDonationMessageToOwner(
+    transaction: any,
+    fundraising: any,
+    owner: any,
+    donor?: any,
+  ) {
+    if (!owner) return;
+    const countryCode = owner.countryId?.code || owner.countryId;
+    const donorName = donor
+      ? this.showName(donor)
+      : transaction.donorVisibility
+        ? transaction.senderName || 'Anonymous'
+        : 'Anonymous';
+    const showDonor = transaction.donorVisibility !== false;
+    const donorLabel = showDonor ? donorName : owner.language === 'fr' ? 'Anonyme' : 'Anonymous';
+    const message =
+      owner.language === 'fr'
+        ? `*Nouveau don reçu !*\n\nHello ${this.showName(owner)},\nVous avez reçu un don de *${transaction.estimation} ${fundraising.currency}* pour la collecte *${fundraising.title}*.\nDonateur: ${donorLabel}\nRéférence: ${transaction.transactionRef || transaction._id}\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
+        : `*New donation received!*\n\nHello ${this.showName(owner)},\nYou received a donation of *${transaction.estimation} ${fundraising.currency}* for *${fundraising.title}*.\nDonor: ${donorLabel}\nReference: ${transaction.transactionRef || transaction._id}\n\n> This is an automatic message from digiKUNTZ Payments.`;
+
+    return await this.sendText(
+      owner.whatsapp || owner.phone,
+      message,
+      countryCode,
+    );
+  }
 }

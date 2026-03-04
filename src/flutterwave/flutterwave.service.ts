@@ -38,6 +38,7 @@ import { SubscriptionService } from 'src/plans/subscription/subscription.service
 import { ServicePaymentService } from 'src/service/service-payment/service-payment.service';
 import { WhatsappService } from 'src/wa/whatsapp.service';
 import { OperationNotificationService } from 'src/notification/operation-notification.service';
+import { FundraisingService } from 'src/fundraising/fundraising.service';
 
 @Injectable()
 export class FlutterwaveService {
@@ -63,6 +64,7 @@ export class FlutterwaveService {
     private subscriptionService: SubscriptionService,
     private servicePaymentService: ServicePaymentService,
     private operationNotificationService: OperationNotificationService,
+    private fundraisingService: FundraisingService,
     @Inject(forwardRef(() => WhatsappService))
     private whatsappService: WhatsappService,
   ) {
@@ -347,6 +349,9 @@ export class FlutterwaveService {
         if (transaction.transactionType === 'apiCall') {
           await this.handleApiCall(transaction);
         }
+        if (transaction.transactionType === 'fundraising') {
+          await this.handleFundraising(transaction);
+        }
         if (
           (transaction.transactionType === 'transfer' ||
             transaction.transactionType === 'withdrawal') &&
@@ -447,6 +452,9 @@ export class FlutterwaveService {
         }
         if (transaction.transactionType === 'withdrawal') {
           await this.handleWithdrawal(transaction);
+        }
+        if (transaction.transactionType === 'fundraising') {
+          await this.handleFundraising(transaction);
         }
         if (
           (transaction.transactionType === 'transfer' ||
@@ -588,6 +596,18 @@ export class FlutterwaveService {
     } catch (err) {
       return {
         message: '(fw service: handleApiCall) Error: ' + err,
+        status: 'error',
+      };
+    }
+  }
+
+  async handleFundraising(transaction) {
+    try {
+      await this.fundraisingService.handleSuccessfulDonation(transaction);
+      return true;
+    } catch (err) {
+      return {
+        message: '(fw service: handleFundraising) Error: ' + err,
         status: 'error',
       };
     }

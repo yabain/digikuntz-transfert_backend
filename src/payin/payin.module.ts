@@ -36,12 +36,14 @@ import { ServicePaymentService } from 'src/service/service-payment/service-payme
 import { ServicePayment, ServicePaymentSchema } from 'src/service/service-payment/service-payment.schema';
 import { AppCacheModule } from '../cache/cache.module';
 import { OperationNotificationService } from 'src/notification/operation-notification.service';
+import { FundraisingModule } from 'src/fundraising/fundraising.module';
 
 @Module({
   imports: [
     ConfigModule,
     HttpModule,
     WhatsappModule,
+    forwardRef(() => FundraisingModule),
     forwardRef(() => PlansModule),
     forwardRef(() => SubscriptionModule),
     forwardRef(() => SystemModule),

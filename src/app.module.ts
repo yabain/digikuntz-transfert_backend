@@ -32,6 +32,7 @@ import { WhatsappModule } from './wa/whatsapp.module';
 import { UserSettingsModule } from './userSettings/userSettings.module';
 import { ServiceModule } from './service/service.module';
 import { AppCacheModule } from './cache/cache.module';
+import { FundraisingModule } from './fundraising/fundraising.module';
 
 @Module({
   imports: [
@@ -94,6 +95,7 @@ import { AppCacheModule } from './cache/cache.module';
     UserSettingsModule,
     ServiceModule,
     AppCacheModule,
+    FundraisingModule,
     DevModule,
   ],
   controllers: [AppController],

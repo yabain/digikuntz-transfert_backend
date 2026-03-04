@@ -201,4 +201,52 @@ export class OperationNotificationService {
       'Email rejected transaction user',
     );
   }
+
+  async notifyFundraisingDonation(
+    transaction: any,
+    fundraising: any,
+    donation: any,
+  ): Promise<void> {
+    const [donor, owner] = await Promise.all([
+      this.userService.getUserById(transaction.senderId || transaction.userId),
+      this.userService.getUserById(transaction.receiverId),
+    ]);
+
+    if (donor) {
+      await this.safe(
+        this.whatsappService.sendFundraisingDonationMessageToDonor(
+          transaction,
+          fundraising,
+          donor,
+        ),
+        'WA fundraising donor',
+      );
+      await this.safe(
+        this.emailService.sendOperationConfirmationEmail(donor, transaction, {
+          subjectFr: 'Confirmation de don',
+          subjectEn: 'Donation confirmation',
+        }),
+        'Email fundraising donor',
+      );
+    }
+
+    if (owner) {
+      await this.safe(
+        this.whatsappService.sendFundraisingDonationMessageToOwner(
+          transaction,
+          fundraising,
+          owner,
+          donor,
+        ),
+        'WA fundraising owner',
+      );
+      await this.safe(
+        this.emailService.sendOperationConfirmationEmail(owner, transaction, {
+          subjectFr: 'Nouveau don reçu',
+          subjectEn: 'New donation received',
+        }),
+        'Email fundraising owner',
+      );
+    }
+  }
 }
