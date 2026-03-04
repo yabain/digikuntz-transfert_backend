@@ -253,17 +253,31 @@ export class SubscriptionService {
       await this.itemService.createItem(item, subscription.userId);
     }
 
-    const receiverId = subscription.receiverId ? subscription.receiverId.toString() : undefined;
-    const userId = subscription.userId ? subscription.userId.toString() : undefined;
+    const receiverId = subscription.receiverId
+      ? (subscription.receiverId as any)?._id?.toString?.() ??
+        subscription.receiverId.toString()
+      : undefined;
+    const userId = subscription.userId
+      ? (subscription.userId as any)?._id?.toString?.() ??
+        subscription.userId.toString()
+      : undefined;
+    const planId = subscription.planId
+      ? (subscription.planId as any)?._id?.toString?.() ??
+        subscription.planId.toString()
+      : undefined;
     if (
       receiverId
       // && mongoose.Types.ObjectId.isValid(receiverId)
       && subscription.planId
     ) {
-      void this.whatsappService.sendNewSubscriberMessageForPlanAuthor(
-        subscription.planId,
-        receiverId,
-      );
+      void this.whatsappService
+        .sendNewSubscriberMessageForPlanAuthor(
+          subscription.planId,
+          subscription.receiverId,
+        )
+        .catch((error) =>
+          console.error('sendNewSubscriberMessageForPlanAuthor failed:', error),
+        );
     }
 
     if (
@@ -271,11 +285,11 @@ export class SubscriptionService {
       // && mongoose.Types.ObjectId.isValid(userId)
       && subscription.planId
     ) {
-      void this.whatsappService.sendNewSubscriberMessage(
-        subscription.planId.toString(),
-        userId,
-        transactionId,
-      );
+      void this.whatsappService
+        .sendNewSubscriberMessage(planId!, userId, transactionId)
+        .catch((error) =>
+          console.error('sendNewSubscriberMessage failed:', error),
+        );
     }
 
     return res;

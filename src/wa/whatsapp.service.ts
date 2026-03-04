@@ -769,10 +769,17 @@ export class WhatsappService implements OnModuleInit {
 
   // NEW SUBSCRIBER OF PLAN (By plan author to subscriber)
   async sendNewSubscriberMessageFromPlanAuthor(plan, user) {
+    if (!plan || !user) return;
+    if (!user.phone || !user.countryId?.code) return;
+
     const message = this.buildNewSubscriberMessageFromPlanAuthor(plan, user);
-    console.log('Sending to: ', user.countryId?.code.toString() + user.phone.toString());
+    console.log('Sending to: ', user.countryId.code.toString() + user.phone.toString());
     console.log('message: ', message);
-    return await this.sendText(user.phone.toString(), message, user.countryId?.code.toString());
+    return await this.sendText(
+      user.phone.toString(),
+      message,
+      user.countryId.code.toString(),
+    );
   }
 
   private buildNewSubscriberMessageFromPlanAuthor(
@@ -814,11 +821,18 @@ export class WhatsappService implements OnModuleInit {
 
   // NEW SUBSCRIBER OF PLAN (for plan author)
   async sendNewSubscriberMessageForPlanAuthor(plan, user) {
+    if (!plan || !user) return;
+    if (!user.phone || !user.countryId?.code) return;
+
     const message = this.buildNewSubscriberMessageForPlanAuthor(plan, user);
 
-    console.log('Sending to: ', user.countryId?.code.toString() + user.phone.toString());
+    console.log('Sending to: ', user.countryId.code.toString() + user.phone.toString());
     console.log('message: ', message);
-    return await this.sendText(user.phone.toString(), message, user.countryId?.code.toString());
+    return await this.sendText(
+      user.phone.toString(),
+      message,
+      user.countryId.code.toString(),
+    );
   }
 
   private buildNewSubscriberMessageForPlanAuthor(
