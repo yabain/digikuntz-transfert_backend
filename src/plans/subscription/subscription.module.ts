@@ -20,6 +20,7 @@ import { WhatsappModule } from 'src/wa/whatsapp.module';
 import { AppCacheModule } from '../../cache/cache.module';
 import { PlansModule } from '../plans.module';
 import { TransactionModule } from 'src/transaction/transaction.module';
+import { OperationNotificationService } from 'src/notification/operation-notification.service';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { TransactionModule } from 'src/transaction/transaction.module';
     EmailService,
     DateService,
     SmtpService,
+    OperationNotificationService,
   ],
   controllers: [SubscriptionController],
   exports: [SubscriptionService, SubscriptionCronService], // Exporter pour utilisation dans d'autres modules

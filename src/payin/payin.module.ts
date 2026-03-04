@@ -35,6 +35,7 @@ import { WhatsappModule } from 'src/wa/whatsapp.module';
 import { ServicePaymentService } from 'src/service/service-payment/service-payment.service';
 import { ServicePayment, ServicePaymentSchema } from 'src/service/service-payment/service-payment.schema';
 import { AppCacheModule } from '../cache/cache.module';
+import { OperationNotificationService } from 'src/notification/operation-notification.service';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { AppCacheModule } from '../cache/cache.module';
     DateService,
     SmtpService,
     ServicePaymentService,
+    OperationNotificationService,
   ],
   controllers: [PayinController],
   exports: [PayinService],

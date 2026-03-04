@@ -343,6 +343,40 @@ export class EmailService {
     }
   }
 
+  async sendPasswordUpdatedEmail(userData: any): Promise<boolean> {
+    if (!this.isEmailValide(userData?.email)) return false;
+    const userName = userData.name || `${userData.firstName} ${userData.lastName}`;
+    const language = userData?.language === 'fr' ? 'fr' : 'en';
+    const templateName = 'password-updated';
+    const subject =
+      language === 'fr' ? 'Mot de passe modifié' : 'Password updated';
+
+    let templatePath = path.join(
+      this.templateFolder,
+      `${templateName}_${language}.hbs`,
+    );
+    let templateSource: string;
+    try {
+      templateSource = fs.readFileSync(templatePath, 'utf8');
+    } catch (err) {
+      if (language !== 'fr') {
+        templatePath = path.join(this.templateFolder, `${templateName}_fr.hbs`);
+        templateSource = fs.readFileSync(templatePath, 'utf8');
+      } else {
+        throw err;
+      }
+    }
+
+    const template = handlebars.compile(templateSource);
+    const html = template({ userName, frontUrl: this.frontUrl });
+    return await this.proceedToSendEmail(
+      userData.email,
+      subject,
+      html,
+      'Password updated notification',
+    );
+  }
+
   // async sendPlansEmail(user: any, plansData: any): Promise<boolean> {
   //   const userName = user.name || `${user.firstName} ${user.lastName}`;
   //   const templateName = 'subscribe_MailForSubscriber';
@@ -449,7 +483,7 @@ export class EmailService {
 
   async sendWithdrawalConfirmationEmail(userData, transactionData): Promise<boolean> {
     const userName = userData.name || `${userData.firstName} ${userData.lastName}`;
-    const templateName = 'withdrawal-confirmation';
+    const templateName = 'withdrawal_confirmation';
     const language = userData?.language === 'fr' ? 'fr' : 'en';
     const subject =
       language === 'fr'
@@ -500,7 +534,7 @@ export class EmailService {
 
   async sendTransferConfirmationEmail(userData, transactionData): Promise<boolean> {
     const userName = userData.name || `${userData.firstName} ${userData.lastName}`;
-    const templateName = 'withdrawal-confirmation';
+    const templateName = 'transfer_confirmation';
     const language = userData?.language === 'fr' ? 'fr' : 'en';
     const subject =
       language === 'fr'
@@ -545,6 +579,63 @@ export class EmailService {
       subject,
       html,
       'Subscription invoice: ' + context.invoice_url,
+    );
+  }
+
+  async sendOperationConfirmationEmail(
+    userData: any,
+    transactionData: any,
+    options?: {
+      templateName?: string;
+      subjectFr?: string;
+      subjectEn?: string;
+    },
+  ): Promise<boolean> {
+    const userName = userData.name || `${userData.firstName} ${userData.lastName}`;
+    const language = userData?.language === 'fr' ? 'fr' : 'en';
+    const templateName = options?.templateName || 'transfer_confirmation';
+    const subject =
+      language === 'fr'
+        ? options?.subjectFr || 'Confirmation de transaction'
+        : options?.subjectEn || 'Transaction confirmation';
+
+    let templatePath = path.join(
+      this.templateFolder,
+      `${templateName}_${language}.hbs`,
+    );
+
+    let templateSource: string;
+    try {
+      templateSource = fs.readFileSync(templatePath, 'utf8');
+    } catch (err) {
+      if (language !== 'fr') {
+        templatePath = path.join(this.templateFolder, `${templateName}_fr.hbs`);
+        templateSource = fs.readFileSync(templatePath, 'utf8');
+      } else {
+        throw err;
+      }
+    }
+
+    const template = handlebars.compile(templateSource);
+    const front = this.configService.get<string>('FRONT_URL') || this.frontUrl;
+    const context = {
+      userName,
+      invoice_url: `${front}/invoice/${transactionData._id.toString()}`,
+      amount: transactionData.estimation,
+      transactionDate: this.dateService.formatDate(
+        transactionData.createdAt,
+        'short',
+        userData.language,
+      ),
+      transactionRef: transactionData.transactionRef,
+    };
+
+    const html = template(context);
+    return await this.proceedToSendEmail(
+      userData.email,
+      subject,
+      html,
+      'Operation invoice: ' + context.invoice_url,
     );
   }
 

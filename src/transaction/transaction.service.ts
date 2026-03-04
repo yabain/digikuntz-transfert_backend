@@ -26,6 +26,7 @@ import { Payout } from 'src/payout/payout.schema';
 import { PayinService } from 'src/payin/payin.service';
 import { UpdateTransactionDto } from './update-transaction.dto';
 import { SystemService } from 'src/system/system.service';
+import { OperationNotificationService } from 'src/notification/operation-notification.service';
 // import { CreateTransactionDto } from './create-transaction.dto';
 
 @Injectable()
@@ -43,6 +44,7 @@ export class TransactionService {
     private configService: ConfigService,
     private payinService: PayinService,
     private systemService: SystemService,
+    private operationNotificationService: OperationNotificationService,
   ) { }
 
   async findAll(query: Query): Promise<Transaction[]> {
@@ -446,6 +448,16 @@ export class TransactionService {
       );
     }
     if (!transaction) throw new NotFoundException('Transaction not found');
+    if (
+      status === TStatus.PAYOUTREJECTED ||
+      status === ('transaction_payin_rejected' as any)
+    ) {
+      void this.operationNotificationService
+        .notifyRejectedTransaction(transaction)
+        .catch((error) =>
+          console.error('notifyRejectedTransaction failed:', error),
+        );
+    }
     return transaction;
   }
   

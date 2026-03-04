@@ -973,6 +973,18 @@ export class WhatsappService implements OnModuleInit {
     );
   }
 
+  async sendServiceMessageForReceiver(transaction: any) {
+    const user = await this.userService.getUserById(transaction.receiverId);
+    const language = user.language || 'fr';
+    const message = this.buildServiceReceivedMessage(transaction, language);
+    const countryCode = user.countryId?.code || user.countryId;
+    return await this.sendText(
+      user.whatsapp || user.phone,
+      message,
+      countryCode,
+    );
+  }
+
   private buildServiceMessage(transaction: any, language: string = 'fr'): string {
     if (language === 'fr')
       return (
@@ -993,5 +1005,67 @@ export class WhatsappService implements OnModuleInit {
         `You can find your downloadable receipt: ` + `${this.frontUrl}/invoice/${transaction._id}` +
         `\n\n> This is an automated message from digiKUNTZ Payments' WhatsApp service.`
       );
+  }
+
+  private buildServiceReceivedMessage(
+    transaction: any,
+    language: string = 'fr',
+  ): string {
+    if (language === 'fr')
+      return (
+        `*Paiement de service reçu !*\n\n` +
+        `Vous avez reçu un paiement de service de *${transaction.estimation} ${transaction.receiverCurrency}*.\n` +
+        `Client : ${transaction.senderName}\n` +
+        `Référence : ${transaction.transactionRef}\n\n` +
+        `Consultez votre reçu : ${this.frontUrl}/invoice/${transaction._id}` +
+        `\n\n> Ceci est un message automatique du service WhatsApp de digiKUNTZ Payments.`
+      );
+    return (
+      `*Service payment received!*\n\n` +
+      `You received a service payment of *${transaction.estimation} ${transaction.receiverCurrency}*.\n` +
+      `Customer: ${transaction.senderName}\n` +
+      `Reference: ${transaction.transactionRef}\n\n` +
+      `View your invoice: ${this.frontUrl}/invoice/${transaction._id}` +
+      `\n\n> This is an automatic message from digiKUNTZ Payments WhatsApp service.`
+    );
+  }
+
+  async sendPasswordResetMessage(user: any, token: string) {
+    if (!user) return;
+    const countryCode = user.countryId?.code || user.countryId;
+    const resetUrl = `${this.frontUrl}/auth/new-password/${token}`;
+    const message =
+      user.language === 'fr'
+        ? `*Réinitialisation de mot de passe*\n\nHello ${this.showName(user)},\nVeuillez réinitialiser votre mot de passe via ce lien:\n${resetUrl}\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
+        : `*Password reset*\n\nHello ${this.showName(user)},\nPlease reset your password using this link:\n${resetUrl}\n\n> This is an automatic message from digiKUNTZ Payments.`;
+    return await this.sendText(user.whatsapp || user.phone, message, countryCode);
+  }
+
+  async sendPasswordUpdatedMessage(user: any) {
+    if (!user) return;
+    const countryCode = user.countryId?.code || user.countryId;
+    const message =
+      user.language === 'fr'
+        ? `*Mot de passe modifié*\n\nHello ${this.showName(user)},\nVotre mot de passe a été mis à jour avec succès.\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
+        : `*Password updated*\n\nHello ${this.showName(user)},\nYour password has been successfully updated.\n\n> This is an automatic message from digiKUNTZ Payments.`;
+    return await this.sendText(user.whatsapp || user.phone, message, countryCode);
+  }
+
+  async sendPayoutFailedAdminMessage(transaction: any, language: string = 'fr') {
+    const message =
+      language === 'fr'
+        ? `*Échec payout*\n\nUn payout a échoué.\nType: ${transaction.transactionType}\nRéférence: ${transaction.transactionRef || transaction._id}\nMontant: ${transaction.estimation} ${transaction.senderCurrency || transaction.receiverCurrency}\n\n> Alerte automatique digiKUNTZ Payments.`
+        : `*Payout failed*\n\nA payout has failed.\nType: ${transaction.transactionType}\nReference: ${transaction.transactionRef || transaction._id}\nAmount: ${transaction.estimation} ${transaction.senderCurrency || transaction.receiverCurrency}\n\n> Automatic alert from digiKUNTZ Payments.`;
+    return await this.sendText(this.alertPhoneNumber, message, this.alertCountryCode);
+  }
+
+  async sendTransactionRejectedMessage(transaction: any, user: any) {
+    if (!user) return;
+    const countryCode = user.countryId?.code || user.countryId;
+    const message =
+      user.language === 'fr'
+        ? `*Transaction rejetée*\n\nHello ${this.showName(user)},\nVotre transaction a été rejetée par l'administrateur.\nRéférence: ${transaction.transactionRef || transaction._id}\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
+        : `*Transaction rejected*\n\nHello ${this.showName(user)},\nYour transaction was rejected by the administrator.\nReference: ${transaction.transactionRef || transaction._id}\n\n> This is an automatic message from digiKUNTZ Payments.`;
+    return await this.sendText(user.whatsapp || user.phone, message, countryCode);
   }
 }

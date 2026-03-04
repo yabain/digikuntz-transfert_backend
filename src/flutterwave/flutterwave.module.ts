@@ -38,6 +38,7 @@ import { ServicePayment, ServicePaymentSchema } from 'src/service/service-paymen
 import { AppCacheModule } from '../cache/cache.module';
 import { PlansModule } from 'src/plans/plans.module';
 import { SystemModule } from 'src/system/system.module';
+import { OperationNotificationService } from 'src/notification/operation-notification.service';
 
 @Module({
   imports: [
@@ -77,6 +78,7 @@ import { SystemModule } from 'src/system/system.module';
     DateService,
     SmtpService,
     ServicePaymentService,
+    OperationNotificationService,
   ],
   exports: [FlutterwaveService],
 })

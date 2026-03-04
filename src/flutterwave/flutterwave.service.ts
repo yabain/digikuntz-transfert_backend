@@ -37,6 +37,7 @@ import { BalanceService } from 'src/balance/balance.service';
 import { SubscriptionService } from 'src/plans/subscription/subscription.service';
 import { ServicePaymentService } from 'src/service/service-payment/service-payment.service';
 import { WhatsappService } from 'src/wa/whatsapp.service';
+import { OperationNotificationService } from 'src/notification/operation-notification.service';
 
 @Injectable()
 export class FlutterwaveService {
@@ -61,6 +62,7 @@ export class FlutterwaveService {
     private balanceService: BalanceService,
     private subscriptionService: SubscriptionService,
     private servicePaymentService: ServicePaymentService,
+    private operationNotificationService: OperationNotificationService,
     @Inject(forwardRef(() => WhatsappService))
     private whatsappService: WhatsappService,
   ) {
@@ -345,6 +347,17 @@ export class FlutterwaveService {
         if (transaction.transactionType === 'apiCall') {
           await this.handleApiCall(transaction);
         }
+        if (
+          (transaction.transactionType === 'transfer' ||
+            transaction.transactionType === 'withdrawal') &&
+          transaction.status !== this.tStatus.PAYINSUCCESS
+        ) {
+          void this.operationNotificationService
+            .notifyAdminPayoutPending(transaction)
+            .catch((error) =>
+              console.error('notifyAdminPayoutPending failed:', error),
+            );
+        }
         // console.log('updating transaction data')
         await this.transactionService.updateTransactionStatus(
           String(payin.transactionId),
@@ -434,6 +447,17 @@ export class FlutterwaveService {
         }
         if (transaction.transactionType === 'withdrawal') {
           await this.handleWithdrawal(transaction);
+        }
+        if (
+          (transaction.transactionType === 'transfer' ||
+            transaction.transactionType === 'withdrawal') &&
+          transaction.status !== this.tStatus.PAYINSUCCESS
+        ) {
+          void this.operationNotificationService
+            .notifyAdminPayoutPending(transaction)
+            .catch((error) =>
+              console.error('notifyAdminPayoutPending failed:', error),
+            );
         }
         // console.log('updating transaction data')
         await this.transactionService.updateTransactionStatus(
@@ -528,7 +552,8 @@ export class FlutterwaveService {
         Number(transaction.estimation),
         transaction.senderCurrency,
       );
-      this.whatsappService.sendServiceMessage(transaction);
+      void this.operationNotificationService.notifyServicePaymentSuccess(transaction);
+
       return creditBalance;
     } catch (err) {
       // console.log('(fw service: handleService) Error: ', err);

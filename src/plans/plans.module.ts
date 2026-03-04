@@ -47,6 +47,7 @@ import { ServicePayment, ServicePaymentSchema } from 'src/service/service-paymen
 import { AppCacheModule } from '../cache/cache.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { SystemModule } from 'src/system/system.module';
+import { OperationNotificationService } from 'src/notification/operation-notification.service';
 
 @Module({
   imports: [
@@ -98,6 +99,7 @@ import { SystemModule } from 'src/system/system.module';
     BalanceService,
     AuthService,
     ServicePaymentService,
+    OperationNotificationService,
   ],
   controllers: [PlansController],
   exports: [PlansService],

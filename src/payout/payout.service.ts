@@ -7,8 +7,6 @@ import {
   HttpException,
   HttpStatus,
   NotFoundException,
-  Inject,
-  forwardRef,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type mongoose from 'mongoose';
@@ -19,9 +17,8 @@ import { ConfigService } from '@nestjs/config';
 import { TStatus } from 'src/transaction/transaction.schema';
 import { TransactionService } from 'src/transaction/transaction.service';
 import { randomBytes } from 'crypto';
-import { WhatsappService } from 'src/wa/whatsapp.service';
 import { EmailService } from 'src/email/email.service';
-import { UserService } from 'src/user/user.service';
+import { OperationNotificationService } from 'src/notification/operation-notification.service';
 
 @Injectable()
 export class PayoutService {
@@ -35,10 +32,8 @@ export class PayoutService {
     @InjectModel(Payout.name)
     private readonly payoutModel: mongoose.Model<PayoutDocument>,
     private transactionService: TransactionService,
-    @Inject(forwardRef(() => WhatsappService))
-    private whatsappService: WhatsappService,
     private emailService: EmailService,
-    private userService: UserService
+    private operationNotificationService: OperationNotificationService,
   ) {
     this.fwSecret = this.config.get<string>('FLUTTERWAVE_SECRET_KEY');
     this.fwSecretNGN = this.config.get<string>('FLUTTERWAVE_SECRET_KEY_NGN');
@@ -183,12 +178,9 @@ export class PayoutService {
           console.log('transaction SUCCESSFUL', transaction);
           // send Email payment success
           if (transaction.transactionType === 'transfer') {
-            this.whatsappService.sendMessageForTransferReceiver(transaction);
-            this.whatsappService.sendMessageForTransferSender(transaction);
+            void this.operationNotificationService.notifyTransferSuccess(transaction);
           } else if (transaction.transactionType === 'withdrawal') {
-            this.whatsappService.sendWithdrawalMessage(transaction);
-            const userData = await this.userService.getUserById(transaction.receiverId)
-            this.sendWithdrawalConfirmationEmail(userData, transaction);
+            void this.operationNotificationService.notifyWithdrawalSuccess(transaction);
           }
           console.log('verify payout and update SUCCESS')
         }
@@ -200,8 +192,7 @@ export class PayoutService {
               payout
             );
           console.log('transaction FAILED', transaction);
-          // send Email payment failed to admin
-          // Send Whatsapp to admin
+          void this.operationNotificationService.notifyAdminPayoutFailed(transaction);
         }
         if (payout.status === 'PENDING' && updateOnPending === true) {
           const transaction =

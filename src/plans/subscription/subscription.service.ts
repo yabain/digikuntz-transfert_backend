@@ -20,6 +20,7 @@ import { UserService } from 'src/user/user.service';
 import { Item } from '../item/item.shema';
 import { PlansService } from '../plans.service';
 import { TransactionService } from 'src/transaction/transaction.service';
+import { OperationNotificationService } from 'src/notification/operation-notification.service';
 
 @Injectable()
 export class SubscriptionService {
@@ -33,7 +34,8 @@ export class SubscriptionService {
     private userService: UserService,
     @Inject(forwardRef(() => PlansService))
     private plansService: PlansService,
-    private transactionService: TransactionService
+    private transactionService: TransactionService,
+    private operationNotificationService: OperationNotificationService,
   ) { }
 
   async subscribe(subscriptionData: CreateSubscriptionDto, transactionId = undefined) {
@@ -265,31 +267,22 @@ export class SubscriptionService {
       ? (subscription.planId as any)?._id?.toString?.() ??
         subscription.planId.toString()
       : undefined;
-    if (
-      receiverId
-      // && mongoose.Types.ObjectId.isValid(receiverId)
-      && subscription.planId
-    ) {
-      void this.whatsappService
-        .sendNewSubscriberMessageForPlanAuthor(
-          subscription.planId,
-          subscription.receiverId,
-        )
-        .catch((error) =>
-          console.error('sendNewSubscriberMessageForPlanAuthor failed:', error),
-        );
-    }
-
-    if (
-      userId
-      // && mongoose.Types.ObjectId.isValid(userId)
-      && subscription.planId
-    ) {
-      void this.whatsappService
-        .sendNewSubscriberMessage(planId!, userId, transactionId)
-        .catch((error) =>
-          console.error('sendNewSubscriberMessage failed:', error),
-        );
+    if (receiverId && userId && planId) {
+      const transactionData = await this.transactionService.findById(
+        transactionId.toString(),
+      );
+      if (transactionData) {
+        void this.operationNotificationService
+          .notifySubscriptionSuccess(
+            subscription.planId,
+            transactionData,
+            userId,
+            receiverId,
+          )
+          .catch((error) =>
+            console.error('notifySubscriptionSuccess failed:', error),
+          );
+      }
     }
 
     return res;
@@ -528,8 +521,20 @@ export class SubscriptionService {
       throw new NotFoundException('Error upgrading subscription');
     }
 
-    this.whatsappService.sendupgradeSubscriberMessage(subscriptionData.planId, subscriptionData.userId, transactionId.toString());
-    this.whatsappService.sendNewSubscriberMessage(subscriptionData.planId, subscriptionData.receiverId, transactionId.toString());
+    const planData = await this.plansService.getPlansById(
+      subscriptionData.planId.toString(),
+    );
+    void this.operationNotificationService
+      .notifySubscriptionSuccess(
+        planData,
+        transactionData,
+        subscriptionData.userId.toString(),
+        subscriptionData.receiverId.toString(),
+      )
+      .catch((error) =>
+        console.error('notifySubscriptionSuccess upgrade failed:', error),
+      );
+
     return updated;
   }
 

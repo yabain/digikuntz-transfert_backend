@@ -206,6 +206,11 @@ export class AuthService {
       user.name ? user.name : user.firstName + ' ' + user.lastName,
       resetPwdUrl,
     );
+    void this.whatsappService
+      .sendPasswordResetMessage(user, resetPwdUrl)
+      .catch((error) =>
+        console.error('sendPasswordResetMessage failed:', error),
+      );
 
     return true;
   }
@@ -231,6 +236,12 @@ export class AuthService {
     user.resetPasswordToken = ''; // Clear the reset token
     await user.save();
     await this.revokedTokenModel.create({ token });
+    void this.emailService.sendPasswordUpdatedEmail(user).catch((error) =>
+      console.error('sendPasswordUpdatedEmail failed:', error),
+    );
+    void this.whatsappService.sendPasswordUpdatedMessage(user).catch((error) =>
+      console.error('sendPasswordUpdatedMessage failed:', error),
+    );
     return true;
   }
 

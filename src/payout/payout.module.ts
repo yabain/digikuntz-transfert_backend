@@ -18,6 +18,7 @@ import { EmailModule } from 'src/email/email.module';
 import { PlansModule } from 'src/plans/plans.module';
 import { UserModule } from 'src/user/user.module';
 import { SystemModule } from 'src/system/system.module';
+import { OperationNotificationService } from 'src/notification/operation-notification.service';
 
 @Module({
   imports: [
@@ -38,7 +39,8 @@ import { SystemModule } from 'src/system/system.module';
     PayoutService,
     PayinService,
     TransactionService,
-    PayoutCron
+    PayoutCron,
+    OperationNotificationService,
   ],
   controllers: [PayoutController],
   exports: [PayoutService],
