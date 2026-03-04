@@ -495,9 +495,8 @@ export class FlutterwaveService {
         );
       } else {
         // Missing subscription: create then subscribe
-        const payload =
-          this.subscriptionService.parseTransactionToSubscription(transaction);
-        resp = await this.subscriptionService.subscribe(payload, transaction._id);
+        const payload = this.subscriptionService.parseTransactionToSubscription(transaction);
+        resp = await this.subscriptionService.createSubscriptionWithTransaction(payload, transaction._id);
       }
 
       console.log('handleSubscription - resp: ', resp);

@@ -187,9 +187,9 @@ export class SubscriptionService {
     }
 
     console.log('createSubscriptionWithoutTransaction - subscription populated: ', subscription);
-    const incrementSubscriberOnPlan = await this.plansService.incrementSubscriberNumber(subscriptionWithDates.planId.toString());
+    // const incrementSubscriberOnPlan = await this.plansService.incrementSubscriberNumber(subscriptionWithDates.planId.toString());
 
-    console.log('incrementSubscriberOnPlan: ', incrementSubscriberOnPlan);
+    // console.log('incrementSubscriberOnPlan: ', incrementSubscriberOnPlan);
 
     void this.whatsappService.sendNewSubscriberMessageForPlanAuthor(
       subscription.planId,
@@ -236,7 +236,7 @@ export class SubscriptionService {
     if (!subscription) {
       throw new NotFoundException('Subscription not found');
     }
-    await this.plansService.incrementSubscriberNumber(subscription.planId.toString());
+    // await this.plansService.incrementSubscriberNumber(subscription.planId.toString());
 
     if (startDate != endDate) {
       const item = {
@@ -244,7 +244,7 @@ export class SubscriptionService {
         userId: subscription.userId,
         receiverId: subscription.receiverId, // plan author Id
         subscriptionId: subscription._id as any,
-        transactionId: transactionId as any || '',
+        transactionId: transactionId as any,
         quantity: subscriptionData.quantity,
         dateStart: startDate.toISOString(),
         dateEnd: endDate.toISOString(),
@@ -253,13 +253,12 @@ export class SubscriptionService {
       await this.itemService.createItem(item, subscription.userId);
     }
 
-    const receiverId =
-      subscription.receiverId && subscription.receiverId.toString();
-    const userId = subscription.userId && subscription.userId.toString();
+    const receiverId = subscription.receiverId ? subscription.receiverId.toString() : undefined;
+    const userId = subscription.userId ? subscription.userId.toString() : undefined;
     if (
-      receiverId &&
-      mongoose.Types.ObjectId.isValid(receiverId) &&
-      subscription.planId
+      receiverId
+      // && mongoose.Types.ObjectId.isValid(receiverId)
+      && subscription.planId
     ) {
       void this.whatsappService.sendNewSubscriberMessageForPlanAuthor(
         subscription.planId.toString(),
@@ -268,13 +267,13 @@ export class SubscriptionService {
     }
 
     if (
-      receiverId &&
-      mongoose.Types.ObjectId.isValid(receiverId) &&
-      subscription.planId
+      userId
+      && mongoose.Types.ObjectId.isValid(userId)
+      && subscription.planId
     ) {
       void this.whatsappService.sendNewSubscriberMessage(
         subscription.planId.toString(),
-        receiverId,
+        userId,
         transactionId,
       );
     }
