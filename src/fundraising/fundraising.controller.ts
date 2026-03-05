@@ -48,6 +48,7 @@ export class FundraisingController {
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async createFundraising(@Req() req, @Body() data: CreateFundraisingDto) {
+    console.log('data: ', data);
     return this.fundraisingService.createFundraising(String(req.user._id), data);
   }
 

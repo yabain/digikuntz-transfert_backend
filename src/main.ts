@@ -278,16 +278,6 @@ async function bootstrap() {
   SwaggerModule.setup('api-docs', app, document);
   SwaggerModule.setup('api-doc', app, document);
 
-  // Global fallback for unknown routes
-  app.use((req, res) => {
-    res.status(404).json({
-      statusCode: 404,
-      timestamp: new Date().toISOString(),
-      path: req.originalUrl || req.url,
-      message: 'Route not found',
-    });
-  });
-
   await app.listen(process.env.PORT ?? 3002, '0.0.0.0'); // Sstart Backend on port 3002 because 3000 is already used on server
   console.log(
     `digiKUNTZ Payments backend Application is running on: ${await app.getUrl()}`,
