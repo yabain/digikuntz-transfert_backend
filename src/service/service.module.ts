@@ -48,12 +48,14 @@ import { ServicePaymentController } from './service-payment/service-payment.cont
 import { SubscriptionModule } from 'src/plans/subscription/subscription.module';
 import { SystemModule } from 'src/system/system.module';
 import { OperationNotificationService } from 'src/notification/operation-notification.service';
+import { PaystackModule } from 'src/paystack/paystack.module';
 
 @Module({
   imports: [
     AuthModule,
     WhatsappModule,
     forwardRef(() => FlutterwaveModule),
+    PaystackModule,
     AppCacheModule,
     forwardRef(() => SubscriptionModule),
     forwardRef(() => SystemModule),

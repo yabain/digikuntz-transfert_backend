@@ -36,10 +36,12 @@ import { AppCacheModule } from '../cache/cache.module';
 import { SubscriptionModule } from 'src/plans/subscription/subscription.module';
 import { SystemModule } from 'src/system/system.module';
 import { OperationNotificationService } from 'src/notification/operation-notification.service';
+import { PaystackModule } from 'src/paystack/paystack.module';
 
 @Module({
   imports: [
     HttpModule,
+    PaystackModule,
     forwardRef(() => WhatsappModule),
     AppCacheModule,
     forwardRef(() => SubscriptionModule),

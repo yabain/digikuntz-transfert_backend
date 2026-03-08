@@ -32,6 +32,9 @@ export class Fundraising {
   creatorId: string;
 
   @Prop({ required: true })
+  startDate: Date;
+
+  @Prop({ required: true })
   endDate: Date;
 
   @Prop({ enum: FundraisingVisibility, default: FundraisingVisibility.PUBLIC })

@@ -275,6 +275,7 @@ export class FlutterwaveService {
         currency: savedTransaction.senderCurrency,
         customerEmail: savedTransaction.senderEmail,
         customerName: savedTransaction.senderName,
+        customerPhone: savedTransaction.senderContact,
         status: 'pending',
         userId,
       });
@@ -296,12 +297,14 @@ export class FlutterwaveService {
 
   async verifyPayin(txRef: string) {
     const payin: any = await this.payinService.verifyPayin(txRef);
+    console.log('payin in verifyPayin: ', payin);
     if (!payin) {
       throw new NotFoundException('Payin not found');
     }
     const transaction = await this.transactionService.findById(
       String(payin.transactionId),
     );
+    console.log('transaction: ', transaction);
     if (!transaction) {
       throw new NotFoundException('Transaction not found');
     }

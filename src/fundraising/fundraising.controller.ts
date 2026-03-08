@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -11,18 +12,23 @@ import {
   UsePipes,
   ValidationPipe,
   NotFoundException,
+  UploadedFiles,
+  UseInterceptors,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import {
   ApiBearerAuth,
   ApiBody,
+  ApiConsumes,
   ApiOperation,
   ApiParam,
   ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
+import { multerConfigForFundraising } from 'src/multer.config';
 import { CreateDonationDto } from './create-donation.dto';
 import { CreateFundraisingDto } from './create-fundraising.dto';
 import { FundraisingService } from './fundraising.service';
@@ -48,8 +54,47 @@ export class FundraisingController {
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async createFundraising(@Req() req, @Body() data: CreateFundraisingDto) {
-    console.log('data: ', data);
     return this.fundraisingService.createFundraising(String(req.user._id), data);
+  }
+
+  @Put('picture/:id')
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload and replace fundraising cover image (owner/admin)' })
+  @ApiParam({ name: 'id', description: 'Fundraising ID' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        pictureFile: {
+          type: 'string',
+          format: 'binary',
+          description: 'Fundraising cover image file',
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Fundraising cover updated.' })
+  @ApiResponse({ status: 400, description: 'No file uploaded or invalid payload.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Forbidden.' })
+  @ApiResponse({ status: 404, description: 'Fundraising not found.' })
+  @UseInterceptors(FilesInterceptor('pictureFile', 1, multerConfigForFundraising))
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async updateCover(
+    @Req() req,
+    @Param('id') fundraisingId: string,
+    @UploadedFiles() picture: Array<Express.Multer.File>,
+  ) {
+    if (!picture || picture.length === 0) {
+      throw new BadRequestException('No file uploaded');
+    }
+    return this.fundraisingService.updateCoverImage(
+      fundraisingId,
+      picture,
+      String(req.user._id),
+    );
   }
 
   @Get()

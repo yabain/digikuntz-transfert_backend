@@ -17,7 +17,7 @@ export class PayinCron {
   async handleCron() {
     // this.logger.debug('(Payin cron) check pending Payin');
     const pendings: any = await this.payinService.findPending(100);
-    // console.log('(Payin cron) pendings resp : ', pendings);
+    console.log('(Payin cron) pendings resp : ', pendings);
     for (const p of pendings) {
       try {
         if (this.payinService.hasExpiredInMinutes(p.createdAt, 480)) {

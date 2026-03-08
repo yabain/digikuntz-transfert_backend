@@ -15,6 +15,11 @@ export enum PayinStatus {
   CANCELLED = 'cancelled',
 }
 
+export enum PayinProvider {
+  FLUTTERWAVE = 'flutterwave',
+  PAYSTACK = 'paystack',
+}
+
 @Schema({
   timestamps: true,
 })
@@ -54,6 +59,9 @@ export class Payin extends Document {
 
   @Prop({ type: Object })
   raw?: any; // full payload for audit
+
+  @Prop({ default: PayinProvider.FLUTTERWAVE })
+  provider: PayinProvider;
 }
 
 export const PayinSchema = SchemaFactory.createForClass(Payin);

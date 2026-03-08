@@ -4,6 +4,8 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { promises as fs } from 'fs';
+import * as path from 'path';
 import { InjectModel } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
 import { UserService } from 'src/user/user.service';
@@ -18,6 +20,7 @@ import {
 } from './fundraising.schema';
 import { Donation, DonationDocument } from './donation.schema';
 import { UpdateFundraisingDto } from './update-fundraising.dto';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class FundraisingService {
@@ -29,6 +32,7 @@ export class FundraisingService {
     private userService: UserService,
     private balanceService: BalanceService,
     private operationNotificationService: OperationNotificationService,
+    private readonly configService: ConfigService,
   ) {}
 
   private getPagination(query: any) {
@@ -39,13 +43,46 @@ export class FundraisingService {
     return { page, limit, skip };
   }
 
+  private getUploadPath(): string {
+    if (process.env.NODE_ENV === 'production') {
+      return '/app/assets/images';
+    }
+    return path.join(__dirname, '..', '..', '..', 'assets', 'images');
+  }
+
+  private extractFilenameFromUrl(fileUrl: string): string | null {
+    if (!fileUrl) return null;
+    try {
+      const parsed = new URL(fileUrl);
+      return path.basename(parsed.pathname);
+    } catch {
+      return path.basename(fileUrl);
+    }
+  }
+
+  private async removePreviousCoverIfNeeded(previousUrl: string, nextUrl: string) {
+    if (!previousUrl || previousUrl === nextUrl) return;
+    const previousFilename = this.extractFilenameFromUrl(previousUrl);
+    if (!previousFilename) return;
+
+    const uploadDir = this.getUploadPath();
+    const previousFilePath = path.join(uploadDir, previousFilename);
+
+    try {
+      await fs.unlink(previousFilePath);
+    } catch {
+      // Ignore file deletion errors; DB update is the source of truth.
+    }
+  }
+
   private async ensureOwnerOrAdmin(userId: string, fundraisingId: string) {
-    const fundraising = await this.findById(fundraisingId);
+    const fundraising: any = await this.findById(fundraisingId);
     const requester = await this.userService.getUserById(userId);
     if (!requester) {
       throw new UnauthorizedException('Unauthorized');
     }
-    const isOwner = String(fundraising.creatorId) === String(userId);
+    console.log('test identity', String(fundraising.creatorId._id), String(userId))
+    const isOwner = String(fundraising.creatorId._id) === String(userId);
     if (!isOwner && requester.isAdmin !== true) {
       throw new UnauthorizedException('Unauthorized');
     }
@@ -56,7 +93,10 @@ export class FundraisingService {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       throw new NotFoundException('Invalid fundraising ID');
     }
-    const fundraising = await this.fundraisingModel.findById(id).lean().exec();
+    const fundraising = await this.fundraisingModel.findById(id)
+    .populate('creatorId')
+    .lean()
+    .exec();
     if (!fundraising) {
       throw new NotFoundException('Fundraising not found');
     }
@@ -98,6 +138,47 @@ export class FundraisingService {
     } as any);
 
     return created;
+  }
+
+  async updateCoverImage(
+    fundraisingId: string,
+    coverFile: Array<Express.Multer.File>,
+    userId: string
+  ): Promise<any>  {
+    if (!mongoose.Types.ObjectId.isValid(fundraisingId)) {
+      throw new NotFoundException('Invalid service');
+    }
+    if (!coverFile) {
+      throw new BadRequestException('No file uploaded');
+    }
+
+    const fundraising: any = await this.ensureOwnerOrAdmin(userId, fundraisingId);
+    if (!fundraising) {
+      throw new NotFoundException('fundraising not found');
+    }
+
+    // Generate URLs for the uploaded files
+    const fileUrls = coverFile.map((file) => {
+      return `${this.configService.get<string>('BACK_URL')}/assets/images/${file.filename}`;
+    });
+
+
+    const updated = await this.fundraisingModel
+      .findByIdAndUpdate(
+        fundraisingId,
+        { coverImageUrl: fileUrls[0] },
+        { new: true, runValidators: true },
+      )
+      .populate('creatorId')
+      .lean()
+      .exec();
+
+      if (!updated) {
+        throw new NotFoundException('Service not found');
+      }
+    // await this.removePreviousCoverIfNeeded(previousUrl, nextUrl);
+
+    return updated;
   }
 
   async getAllSystem(query: any) {
@@ -261,6 +342,7 @@ export class FundraisingService {
           ...(data.description !== undefined ? { description: data.description } : {}),
           ...(data.targetAmount !== undefined ? { targetAmount: data.targetAmount } : {}),
           ...(data.endDate !== undefined ? { endDate: new Date(data.endDate) } : {}),
+          ...(data.startDate !== undefined ? { startDate: new Date(data.startDate) } : {}),
           ...(data.visibility !== undefined ? { visibility: data.visibility } : {}),
           ...(data.coverImageUrl !== undefined ? { coverImageUrl: data.coverImageUrl } : {}),
         },

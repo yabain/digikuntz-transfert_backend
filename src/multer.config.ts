@@ -94,3 +94,19 @@ export const multerConfigForService = {
     fileSize: 2 * 1024 * 1024, // 2 MB
   },
 };
+
+// Configuration for Multer to handle fundraising cover uploads
+export const multerConfigForFundraising = {
+  storage: diskStorage({
+    destination: getUploadPath(),
+    filename: (req, file, callback) => {
+      const fundraisingId = req.params.id;
+      const fileExt = path.extname(file.originalname);
+      const fileName = `fundraisingCoverFile_${fundraisingId}${fileExt}`;
+      callback(null, fileName);
+    },
+  }),
+  limits: {
+    fileSize: 2 * 1024 * 1024, // 2 MB
+  },
+};

@@ -49,6 +49,7 @@ import { SubscriptionModule } from './subscription/subscription.module';
 import { SystemModule } from 'src/system/system.module';
 import { OperationNotificationService } from 'src/notification/operation-notification.service';
 import { FundraisingModule } from 'src/fundraising/fundraising.module';
+import { PaystackModule } from 'src/paystack/paystack.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { FundraisingModule } from 'src/fundraising/fundraising.module';
     forwardRef(() => SubscriptionModule),
     forwardRef(() => FundraisingModule),
     forwardRef(() => SystemModule),
+    PaystackModule,
     AppCacheModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({

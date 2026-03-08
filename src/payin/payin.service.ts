@@ -16,10 +16,11 @@ import { randomBytes } from 'crypto';
 import type { AxiosError } from 'axios';
 import type { Request } from 'express';
 
-import { Payin, PayinDocument, PayinStatus } from './payin.schema';
+import { Payin, PayinDocument, PayinProvider, PayinStatus } from './payin.schema';
 import { CreatePayinDto } from './payin.dto';
 import { ConfigService } from '@nestjs/config';
 import { Query } from 'express-serve-static-core';
+import { PaystackService } from 'src/paystack/paystack.service';
 
 type InitPayinPayload = {
   amount: number;
@@ -68,6 +69,7 @@ export class PayinService {
   constructor(
     private readonly http: HttpService,
     private readonly config: ConfigService,
+    private readonly paystackService: PaystackService,
     @InjectModel(Payin.name)
     private readonly payinModel: mongoose.Model<PayinDocument>,
   ) {
@@ -193,8 +195,15 @@ export class PayinService {
 
   // Hosted Payment (V3)
   async createPayin(dto: CreatePayinDto) {
+    const txRef = dto.txRef ?? this.generateTxRef('txPayin');
+
+    // KES payments are processed with Paystack (M-Pesa channel).
+    if (String(dto.currency).toUpperCase() === 'KES') {
+      return this.createKesMpesaPayin({ ...dto, txRef });
+    }
+
     const payload = {
-      tx_ref: dto.txRef,
+      tx_ref: txRef,
       amount: dto.amount,
       currency: dto.currency,
       redirect_url: this.buildRedirectUrl(dto.redirectUrl),
@@ -212,19 +221,20 @@ export class PayinService {
       await this.payinModel.create({
         userId: dto.userId,
         transactionId: dto.transactionId,
-        txRef: dto.txRef,
+        txRef,
         amount: dto.amount,
         currency: dto.currency,
         customerEmail: dto.customerEmail,
         customerName: dto.customerName,
         status: PayinStatus.PENDING,
+        provider: PayinProvider.FLUTTERWAVE,
         raw: resData,
       });
 
       return {
         status: PayinStatus.PENDING,
         transactionId: dto.transactionId,
-        txRef: dto.txRef,
+        txRef,
         amount: dto.amount,
         currency: dto.currency,
         customerEmail: dto.customerEmail,
@@ -239,6 +249,99 @@ export class PayinService {
         HttpStatus.BAD_GATEWAY,
       );
     }
+  }
+
+  private mapPaystackStatusToLocal(status?: string): PayinStatus {
+    console.log('Paystack Status for map: ', status);
+    const normalized = String(status ?? '').toLowerCase();
+    if (normalized === 'success') return PayinStatus.SUCCESSFUL;
+    if (
+      normalized === 'pending' ||
+      normalized === 'abandoned' ||
+      normalized === 'ongoing' ||
+      normalized === 'processing' ||
+      normalized === 'queued'
+    ) {
+      return PayinStatus.PENDING;
+    }
+    if (normalized === 'failed') return PayinStatus.FAILED;
+    if (normalized === 'cancelled') return PayinStatus.CANCELLED;
+    return PayinStatus.PENDING;
+  }
+
+  private async createKesMpesaPayin(dto: CreatePayinDto & { txRef: string }) {
+    const amountKobo = Math.round(Number(dto.amount) * 100);
+    if (!Number.isFinite(amountKobo) || amountKobo <= 0) {
+      throw new HttpException(
+        { message: 'Invalid payment amount' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const callbackUrl =
+      dto.redirectUrl || this.config.get<string>('PAYSTACK_CALLBACK_URL_KES');
+
+    const resData = await this.paystackService.initializeKesMpesaPayment({
+      email: dto.customerEmail,
+      amountKobo,
+      reference: dto.txRef,
+      callbackUrl,
+      metadata: {
+        channel: 'mobile_money',
+        provider: 'mpesa',
+        customerName: dto.customerName ?? '',
+        customerPhone: dto.customerPhone ?? '',
+        app: 'digikuntz-payments',
+      },
+    });
+
+    await this.payinModel.create({
+      userId: dto.userId,
+      transactionId: dto.transactionId,
+      txRef: dto.txRef,
+      amount: dto.amount,
+      currency: dto.currency,
+      customerEmail: dto.customerEmail,
+      customerName: dto.customerName,
+      channel: 'mobile_money',
+      status: PayinStatus.PENDING,
+      provider: PayinProvider.PAYSTACK,
+      raw: resData,
+    });
+
+    return {
+      status: PayinStatus.PENDING,
+      transactionId: dto.transactionId,
+      txRef: dto.txRef,
+      amount: dto.amount,
+      currency: dto.currency,
+      customerEmail: dto.customerEmail,
+      redirect_url: resData?.data?.authorization_url,
+    };
+  }
+
+  private async verifyPaystackByReference(reference: string) {
+    console.log('Reference Paystack verification: ', reference);
+    const verifyResp = await this.paystackService.verifyTransaction(reference);
+    console.log('verifyPaystack By Reference raw: ', verifyResp);
+    console.log('verifyPaystack By Reference: ', verifyResp.data);
+    const providerStatus = verifyResp?.data?.status;
+    const status = this.mapPaystackStatusToLocal(providerStatus);
+
+    const updated = await this.payinModel
+      .findOneAndUpdate(
+        { txRef: reference },
+        {
+          status,
+          provider: PayinProvider.PAYSTACK,
+          raw: verifyResp,
+        },
+        { new: true },
+      )
+      .lean()
+      .exec();
+
+    return updated;
   }
 
   /**
@@ -423,6 +526,15 @@ export class PayinService {
    * Generic verify: accept either numeric FW id or txRef
    */
   async verifyPayin(idOrTxRef: string, saveLocal = false) {
+    const localAnyRef = await this.payinModel
+      .findOne({ $or: [{ txRef: idOrTxRef }, { flwTxId: String(idOrTxRef) }] })
+      .lean()
+      .exec();
+
+    if (localAnyRef?.provider === PayinProvider.PAYSTACK) {
+      return this.verifyPaystackByReference(String(localAnyRef.txRef));
+    }
+
     // console.log('verifyPayin: idOrTxRef', idOrTxRef);
     try {
       let resp;

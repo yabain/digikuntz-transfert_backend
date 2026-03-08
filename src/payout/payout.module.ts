@@ -19,11 +19,13 @@ import { PlansModule } from 'src/plans/plans.module';
 import { UserModule } from 'src/user/user.module';
 import { SystemModule } from 'src/system/system.module';
 import { OperationNotificationService } from 'src/notification/operation-notification.service';
+import { PaystackModule } from 'src/paystack/paystack.module';
 
 @Module({
   imports: [
     ConfigModule,
     HttpModule,
+    PaystackModule,
     forwardRef(() => WhatsappModule),
     forwardRef(() => SystemModule),
     forwardRef(() => EmailModule),

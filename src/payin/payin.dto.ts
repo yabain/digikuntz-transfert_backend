@@ -42,6 +42,10 @@ export class CreatePayinDto {
 
   @IsOptional()
   @IsString()
+  customerPhone?: string;
+
+  @IsOptional()
+  @IsString()
   txRef?: string;
 
   @IsOptional()

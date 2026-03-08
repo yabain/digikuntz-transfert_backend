@@ -31,6 +31,10 @@ export class UpdateFundraisingDto {
 
   @IsOptional()
   @IsDateString()
+  startDate?: string;
+
+  @IsOptional()
+  @IsDateString()
   endDate?: string;
 
   @IsOptional()
