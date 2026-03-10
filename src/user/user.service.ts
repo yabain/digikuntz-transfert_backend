@@ -29,6 +29,20 @@ export class UserService {
     private cacheService: CacheService,
   ) { }
 
+  private handleDuplicateUserError(error: any): never {
+    if (error?.code !== 11000) {
+      throw error;
+    }
+    const duplicatedField = Object.keys(error?.keyPattern || {})[0] || '';
+    if (duplicatedField === 'email') {
+      throw new ConflictException('Email already exists');
+    }
+    if (duplicatedField === 'whatsapp') {
+      throw new ConflictException('WhatsApp already exists');
+    }
+    throw new ConflictException('Duplicate value');
+  }
+
   private sanitizeUser(user: any): any {
     if (!user) return user;
     const obj = user.toObject ? user.toObject() : user; // convert mongoose doc to object if needed
@@ -143,11 +157,7 @@ export class UserService {
 
       return this.sanitizeUser(user);
     } catch (error) {
-      if (error.code === 11000) {
-        throw new ConflictException('Email already exists');
-      }
-
-      throw error;
+      this.handleDuplicateUserError(error);
     }
   }
 
@@ -222,6 +232,9 @@ export class UserService {
 
       return user;
     } catch (error) {
+      if (error?.code === 11000) {
+        this.handleDuplicateUserError(error);
+      }
       if (error instanceof NotFoundException) {
         throw error;
       }
@@ -253,6 +266,9 @@ export class UserService {
 
       return user;
     } catch (error) {
+      if (error?.code === 11000) {
+        this.handleDuplicateUserError(error);
+      }
       if (error instanceof NotFoundException) {
         throw error;
       }

@@ -321,10 +321,10 @@ export class PayinService {
   }
 
   private async verifyPaystackByReference(reference: string) {
-    console.log('Reference Paystack verification: ', reference);
+    // console.log('Reference Paystack verification: ', reference);
     const verifyResp = await this.paystackService.verifyTransaction(reference);
-    console.log('verifyPaystack By Reference raw: ', verifyResp);
-    console.log('verifyPaystack By Reference: ', verifyResp.data);
+    // console.log('verifyPaystack By Reference raw: ', verifyResp);
+    // console.log('verifyPaystack By Reference: ', verifyResp.data);
     const providerStatus = verifyResp?.data?.status;
     const status = this.mapPaystackStatusToLocal(providerStatus);
 

@@ -19,13 +19,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Internal server error';
+    let errorPayload: Record<string, any> = {};
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       const exceptionResponse = exception.getResponse();
-      message = typeof exceptionResponse === 'string' 
-        ? exceptionResponse 
-        : (exceptionResponse as any).message || message;
+      if (typeof exceptionResponse === 'string') {
+        message = exceptionResponse;
+      } else if (exceptionResponse && typeof exceptionResponse === 'object') {
+        const responseObj = exceptionResponse as Record<string, any>;
+        message = String(responseObj.message || message);
+        errorPayload = Object.fromEntries(
+          Object.entries(responseObj).filter(([key]) => key !== 'message'),
+        );
+      }
     }
 
     // Evite de loguer les 404 comme des erreurs serveur
@@ -43,6 +50,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
       path: request.url,
       message,
+      ...errorPayload,
     });
   }
 }

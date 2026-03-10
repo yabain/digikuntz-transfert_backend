@@ -75,6 +75,24 @@ export class FlutterwaveService {
     this.fwPublicNGN = this.config.get<string>('FLUTTERWAVE_PUBLIC_KEY_NGN');
   }
 
+  private isInsufficientPayoutBalance(details: any): boolean {
+    const code = String(details?.code || '').toLowerCase();
+    const message = String(
+      details?.message ||
+      details?.data?.message ||
+      details?.error ||
+      details ||
+      '',
+    ).toLowerCase();
+
+    return (
+      code.includes('insufficient') ||
+      message.includes('insufficient balance') ||
+      message.includes('balance is not enough') ||
+      message.includes('insufficient fund')
+    );
+  }
+
   // ---------- Helpers ----------
   private authHeader() {
     return { Authorization: `Bearer ${this.fwSecret}` };
@@ -297,14 +315,14 @@ export class FlutterwaveService {
 
   async verifyPayin(txRef: string) {
     const payin: any = await this.payinService.verifyPayin(txRef);
-    console.log('payin in verifyPayin: ', payin);
+    // console.log('payin in verifyPayin: ', payin);
     if (!payin) {
       throw new NotFoundException('Payin not found');
     }
     const transaction = await this.transactionService.findById(
       String(payin.transactionId),
     );
-    console.log('transaction: ', transaction);
+    // console.log('transaction: ', transaction);
     if (!transaction) {
       throw new NotFoundException('Transaction not found');
     }
@@ -689,7 +707,7 @@ export class FlutterwaveService {
     const payloadPayout = {
       accountBankCode: transaction.bankCode,
       accountNumber: transaction.bankAccountNumber,
-      amount: transaction.receiverAmount,
+      amount: transaction.transactionType === 'transfer' ? transaction.receiverAmount : transaction.estimation,
       destinationCurrency: transaction.receiverCurrency,
       sourceCurrency: transaction.receiverCurrency,
       reference: newTxRef,
@@ -699,6 +717,16 @@ export class FlutterwaveService {
       userId: userId,
       type: this.getreceiverAccountType(transaction), // 'bank' | 'mobile_money' | 'wallet'
     };
+
+    // KES payouts are processed through Paystack (M-Pesa / mobile money flow).
+    if (String(payloadPayout.destinationCurrency).toUpperCase() === 'KES') {
+      await this.payoutService.initiatePaystackPayout(
+        transaction,
+        String(userId),
+        newTxRef,
+      );
+      return this.transactionService.findById(transactionId);
+    }
 
     // console.log('Payout creation: ', payloadPayout);
     //     {
@@ -776,8 +804,20 @@ export class FlutterwaveService {
       // console.log('update: ', update)
       return update;
     } catch (err) {
-      if (err.response) {
-        console.error('FW Error:', err.response.data);
+      if (err?.response) {
+        const fwDetails = err.response.data;
+        console.error('FW Error:', fwDetails);
+        if (this.isInsufficientPayoutBalance(fwDetails)) {
+          throw new HttpException(
+            {
+              message: 'Insufficient payout balance',
+              code: 'INSUFFICIENT_PAYOUT_BALANCE',
+              provider: 'flutterwave',
+              details: fwDetails,
+            },
+            HttpStatus.BAD_REQUEST,
+          );
+        }
       } else {
         console.error('Unexpected Error:', err);
       }

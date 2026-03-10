@@ -102,7 +102,14 @@ export class AuthService {
       return { userData: user, token: this.jwtService.sign({ id: user._id }) };
     } catch (error) {
       if (error.code === 11000) {
-        throw new ConflictException('Email already exists'); // Handle duplicate email error
+        const duplicatedField = Object.keys(error?.keyPattern || {})[0] || '';
+        if (duplicatedField === 'email') {
+          throw new ConflictException('Email already exists');
+        }
+        if (duplicatedField === 'whatsapp') {
+          throw new ConflictException('WhatsApp already exists');
+        }
+        throw new ConflictException('Duplicate value');
       }
       throw error; // Propagate other errors
     }
@@ -117,14 +124,26 @@ export class AuthService {
   async signIn(authData: any): Promise<any> {
     // Find the user by email and populate cityId and countryId
     let user: any;
-    if (authData.type === 'email') {
+    const loginType = String(authData?.type || 'email').toLowerCase();
+    if (loginType === 'email') {
       user = await this.userModel
         .findOne({ email: authData.email })
         .populate('cityId')
         .populate('countryId');
     } else {
+      const whatsappInput = String(authData?.whatsapp || '').trim();
+      const whatsappDigits = whatsappInput.replace(/\D/g, '');
+      const digitsPattern = whatsappDigits
+        ? new RegExp(`^\\D*${whatsappDigits.split('').join('\\D*')}\\D*$`)
+        : null;
       user = await this.userModel
-        .findOne({ whatsapp: authData.whatsapp })
+        .findOne({
+          $or: [
+            { whatsapp: whatsappInput },
+            { whatsapp: whatsappInput.replace(/\s+/g, '') },
+            ...(digitsPattern ? [{ whatsapp: { $regex: digitsPattern } }] : []),
+          ],
+        })
         .populate('cityId')
         .populate('countryId');
     }

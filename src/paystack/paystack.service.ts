@@ -80,6 +80,51 @@ export class PaystackService {
     });
   }
 
+  private sanitizeBankCode(input?: string): string {
+    return String(input || '')
+      .trim()
+      .toUpperCase();
+  }
+
+  async resolveKesMpesaBankCode(preferredBankCode?: string): Promise<string> {
+    const preferred = this.sanitizeBankCode(preferredBankCode);
+    if (preferred) return preferred;
+
+    const tryResolve = async (params: Record<string, any>) => {
+      const res = await firstValueFrom(
+        this.http.get(`${this.baseUrl}/bank`, {
+          headers: this.headers(),
+          params,
+        }),
+      );
+      const banks = Array.isArray(res?.data?.data) ? res.data.data : [];
+      const mpesa = banks.find((bank: any) => {
+        const name = String(bank?.name || '').toLowerCase();
+        const slug = String(bank?.slug || '').toLowerCase();
+        const code = this.sanitizeBankCode(bank?.code);
+        return (
+          name.includes('mpesa') ||
+          slug.includes('mpesa') ||
+          code.includes('MPESA') ||
+          code === 'MPS'
+        );
+      });
+      return this.sanitizeBankCode(mpesa?.code);
+    };
+
+    try {
+      const byCurrency = await tryResolve({ currency: 'KES' });
+      if (byCurrency) return byCurrency;
+    } catch (_) {}
+
+    try {
+      const byCountry = await tryResolve({ country: 'kenya' });
+      if (byCountry) return byCountry;
+    } catch (_) {}
+
+    return 'MPESA';
+  }
+
   async getBalance() {
     const res = await firstValueFrom(
       this.http.get(`${this.baseUrl}/balance`, {
@@ -148,5 +193,63 @@ export class PaystackService {
       },
       rawMeta: res?.data?.meta ?? null,
     };
+  }
+
+  async createKesMpesaTransferRecipient(payload: {
+    name: string;
+    accountNumber: string;
+    bankCode?: string;
+    description?: string;
+  }) {
+    const body: any = {
+      type: 'mobile_money',
+      name: payload.name,
+      account_number: payload.accountNumber,
+      bank_code: payload.bankCode || 'MPESA',
+      currency: 'KES',
+      description: payload.description || 'M-Pesa payout recipient',
+    };
+
+    const res = await firstValueFrom(
+      this.http.post(`${this.baseUrl}/transferrecipient`, body, {
+        headers: this.headers(),
+      }),
+    );
+    return res.data;
+  }
+
+  async initiateKesPayout(payload: {
+    recipientCode: string;
+    amountSmallestUnit: number;
+    reference: string;
+    reason?: string;
+  }) {
+    const body: any = {
+      source: 'balance',
+      amount: payload.amountSmallestUnit,
+      recipient: payload.recipientCode,
+      reference: payload.reference,
+      reason: payload.reason || 'Payout',
+    };
+
+    const res = await firstValueFrom(
+      this.http.post(`${this.baseUrl}/transfer`, body, {
+        headers: this.headers(),
+      }),
+    );
+    return res.data;
+  }
+
+  async fetchTransferByReference(reference: string) {
+    // Query transfer list by reference to obtain the latest transfer state.
+    const res = await firstValueFrom(
+      this.http.get(`${this.baseUrl}/transfer`, {
+        headers: this.headers(),
+        params: { reference },
+      }),
+    );
+
+    const list = Array.isArray(res?.data?.data) ? res.data.data : [];
+    return list.find((item: any) => item?.reference === reference) || null;
   }
 }

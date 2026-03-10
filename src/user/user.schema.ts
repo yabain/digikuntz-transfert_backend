@@ -121,6 +121,13 @@ export class User extends Document {
 export const UserSchema = SchemaFactory.createForClass(User);
 
 // Index pour optimiser les recherches
+UserSchema.index(
+  { whatsapp: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { whatsapp: { $type: 'string', $ne: '' } },
+  },
+);
 UserSchema.index({ isActive: 1, verified: 1 }); // Index composé
 UserSchema.index({ createdAt: -1 });
 UserSchema.index({ countryId: 1, cityId: 1 }); // Index composé pour les populate

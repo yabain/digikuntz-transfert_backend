@@ -639,6 +639,67 @@ export class EmailService {
     );
   }
 
+
+  async sendAdminPayoutPendingEmail(transactionData: any): Promise<boolean> {
+    const to = this.getAlertDestination();
+    const language = 'fr';
+    const templateName = 'admin_payout_pending';
+
+    let templatePath = path.join(
+      this.templateFolder,
+      `${templateName}_${language}.hbs`,
+    );
+
+    let templateSource: string;
+    try {
+      templateSource = fs.readFileSync(templatePath, 'utf8');
+    } catch (err) {
+      templatePath = path.join(this.templateFolder, `${templateName}_fr.hbs`);
+      templateSource = fs.readFileSync(templatePath, 'utf8');
+    }
+
+    const template = handlebars.compile(templateSource);
+    const front = this.configService.get<string>('FRONT_URL') || this.frontUrl;
+    const context = {
+      userName: 'Admin',
+      invoice_url: `${front}/admin/payout/pending`,
+      transactionRef: transactionData?.transactionRef || transactionData?._id || '--',
+      receiverName: transactionData?.receiverName || '--',
+      amount: transactionData?.estimation || transactionData?.receiverAmount || '--',
+      currency: transactionData?.receiverCurrency || transactionData?.senderCurrency || '--',
+      transactionDate: this.dateService.formatDate(
+        transactionData?.createdAt || new Date(),
+        'short',
+        'fr',
+      ),
+    };
+
+    const html = template(context);
+
+    try {
+      for (let i = 0; i < to.length; i++) {
+        const recipients = to[i];
+        setTimeout(async () => {
+          try {
+            await this.proceedToSendEmail(
+              recipients,
+              '⚠️ Payout en attente de validation',
+              html,
+              'admin/payout/pending',
+            );
+            console.log(`✅ Admin pending payout email sent to: ${recipients}`);
+          } catch (error) {
+            console.error(`❌ Error sending admin pending payout email to: ${recipients}`, error);
+          }
+        }, 1000 * i);
+      }
+      return true;
+    } catch (error) {
+      console.error('❌ Error sending admin pending payout email', error);
+      return false;
+    }
+  }
+
   async sendWhatsappAlert(
     subject: string,
     templateName: string,

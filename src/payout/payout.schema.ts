@@ -7,6 +7,12 @@ import { HydratedDocument } from 'mongoose';
 import { User } from 'src/user/user.schema';
 
 export type PayoutDocument = HydratedDocument<Payout>;
+
+export enum PayoutProvider {
+  FLUTTERWAVE = 'flutterwave',
+  PAYSTACK = 'paystack',
+}
+
 export enum PayoutStatus {
   INITIATED = 'INITIATED' ,
   NEW = 'PENDING',
@@ -56,6 +62,9 @@ export class Payout extends Document  {
 
   @Prop({ type: Object })
   raw?: any; // API response}
+
+  @Prop({ default: PayoutProvider.FLUTTERWAVE })
+  provider: PayoutProvider;
 }
 
 export const PayoutSchema = SchemaFactory.createForClass(Payout);

@@ -51,7 +51,28 @@ export class AuthController {
     description: 'Authenticates user credentials and returns an access token.',
   })
   @ApiBody({
-    schema: { example: { email: 'user@mail.com', password: 'string' } },
+    schema: {
+      oneOf: [
+        {
+          type: 'object',
+          required: ['type', 'email', 'password'],
+          properties: {
+            type: { type: 'string', example: 'email' },
+            email: { type: 'string', example: 'user@mail.com' },
+            password: { type: 'string', example: 'string' },
+          },
+        },
+        {
+          type: 'object',
+          required: ['type', 'whatsapp', 'password'],
+          properties: {
+            type: { type: 'string', example: 'phone' },
+            whatsapp: { type: 'string', example: '+237 694949617' },
+            password: { type: 'string', example: 'string' },
+          },
+        },
+      ],
+    },
   })
   @ApiResponse({
     status: 200,

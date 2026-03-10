@@ -159,11 +159,7 @@ export class OperationNotificationService {
       'WA admin pending payout',
     );
     await this.safe(
-      this.emailService.sendAlertEmail(
-        '⚠️ Payout en attente de validation',
-        `Transaction ${transaction.transactionRef || transaction._id} en attente de validation admin.`,
-        'admin/payout/pending',
-      ) as any,
+      this.emailService.sendAdminPayoutPendingEmail(transaction),
       'Email admin pending payout',
     );
   }

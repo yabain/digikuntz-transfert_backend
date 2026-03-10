@@ -553,7 +553,7 @@ export class TransactionService {
     const payload = {
       ...transactionData,
       estimation: String(transactionData.estimation),
-      receiverAmount: String(transactionData.estimation),
+      receiverAmount: transactionData.transactionType === 'transfer' ? String(transactionData.receiverAmount) : String(transactionData.estimation),
       invoiceTaxes: String(taxesDetails.invoiceTaxes),
       taxesAmount: String(taxesDetails.taxesAmount),
       paymentWithTaxes: String(taxesDetails.paymentWithTaxes),
