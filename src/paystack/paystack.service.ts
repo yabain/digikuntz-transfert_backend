@@ -31,6 +31,18 @@ export class PaystackService {
     };
   }
 
+  private throwHttpFromAxios(error: any, fallbackMessage: string): never {
+    const status = Number(error?.response?.status) || HttpStatus.BAD_GATEWAY;
+    const details = error?.response?.data || error?.message || error;
+    throw new HttpException(
+      {
+        message: fallbackMessage,
+        details,
+      },
+      status >= 400 && status < 600 ? status : HttpStatus.BAD_GATEWAY,
+    );
+  }
+
   async initializeKesMpesaPayment(payload: {
     email: string;
     amountKobo: number;
@@ -251,5 +263,40 @@ export class PaystackService {
 
     const list = Array.isArray(res?.data?.data) ? res.data.data : [];
     return list.find((item: any) => item?.reference === reference) || null;
+  }
+
+  async disableTransferOtpWithPin(otp: string) {
+    const cleanedOtp = String(otp || '').trim();
+    if (!cleanedOtp) {
+      throw new HttpException(
+        { message: 'OTP/PIN is required' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    try {
+      // Request OTP challenge (Paystack sends code to user) before finalization.
+      await firstValueFrom(
+        this.http.post(
+          `${this.baseUrl}/transfer/disable_otp`,
+          {},
+          { headers: this.headers() },
+        ),
+      );
+    } catch (error: any) {
+      // If challenge already exists, finalize can still succeed. Ignore this step failure.
+    }
+
+    try {
+      const body = { otp: cleanedOtp };
+      const res = await firstValueFrom(
+        this.http.post(`${this.baseUrl}/transfer/disable_otp_finalize`, body, {
+          headers: this.headers(),
+        }),
+      );
+      return res.data;
+    } catch (error: any) {
+      this.throwHttpFromAxios(error, 'Unable to disable transfer OTP');
+    }
   }
 }

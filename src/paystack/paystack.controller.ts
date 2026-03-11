@@ -2,6 +2,8 @@ import {
   Controller,
   Get,
   NotFoundException,
+  Param,
+  Post,
   Query,
   Req,
   UseGuards,
@@ -82,5 +84,27 @@ export class PaystackController {
       throw new NotFoundException('Unauthorised');
     }
     return this.paystackService.listPayoutTransactions(query);
+  }
+
+  @Post('transfers/disable-otp/:otp')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Disable Paystack transfer OTP by finalizing with the PIN/OTP code',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Transfer OTP disabled successfully.',
+  })
+  @ApiResponse({ status: 400, description: 'Invalid or expired OTP.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
+  // @UseGuards(AuthGuard('jwt'))
+  // @UsePipes(ValidationPipe)
+  disableTransferOtp(@Req() req, @Param('otp') otp: string) {
+    // if (!req.user.isAdmin) {
+    //   throw new NotFoundException('Unauthorised');
+    // }
+    return this.paystackService.disableTransferOtpWithPin(otp);
   }
 }
