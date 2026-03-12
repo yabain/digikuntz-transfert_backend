@@ -8,7 +8,7 @@
   <meta name="x-apple-disable-message-reformatting">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta content="telephone=no" name="format-detection">
-  <title>Confirmation de transfert</title>
+  <title>Payout en attente de validation</title>
   <style type="text/css">
     #outlook a {
       padding: 0;
@@ -270,23 +270,44 @@
           </table>
 
           <div class="container">
-            <h2>Confirmation de transfert</h2>
+            <h2>Payout en attente de validation</h2>
 
-            <p>Hello {{userName}},</p>
+            <p>Hello <b>{{userName}}</b>,</p>
 
             <p>
-              Nous vous confirmons le transfert récement initié. <br>
-              Vous trouverez ci-dessous les informations relatives à votre transaction.
+              Une demande de payout est en attente de validation administrateur. <br>
+              Vous trouverez ci-dessous les informations de la transaction.
             </p>
 
+            <div style="background-color: #de851766; padding: 10px; border-radius: 10px;">
+            <h3>Details de la transaction</h3>
             <div class="details">
-              <p><strong>Ref transaction :</strong> {{transactionRef}}</p>
-              <p><strong>Destinataire :</strong> {{receiverName}}</p>
-              <p><strong>Montant :</strong> {{amount}}</p>
-              <p><strong>Numéro de compte :</strong> {{receiverMobileAccountNumber}}</p>
-              <p><strong>Date de la transaction :</strong> {{transactionDate}}</p>
+              <p><strong>Ref :</strong> {{transactionRef}}</p>
+              <p><strong>Montant à percevoir :</strong> {{receiverAmount}} {{receiverCurrency}}</p>
+              <p><strong>Méthode de paiement :</strong> {{paymentMethod}}</p>
+              <p><strong>Frais :</strong> {{taxesAmount}} {{senderCurrency}}</p>
+              <p><strong>Paiement avec frais :</strong> {{paymentWithTaxes}} {{senderCurrency}}</p>
+              <p><strong>Date de la transaction:</strong> {{transactionDate}}</p>
+              <p><strong>Raison :</strong> {{raisonForTransfer}}</p>
             </div>
-
+          </div>
+            <h3>Details expéditeur</h3>
+            <div class="details">
+              <p><strong>Nom :</strong> {{senderName}}</p>
+              <p><strong>Email :</strong> {{senderEmail}}</p>
+              <p><strong>Téléphone :</strong> {{senderContact}}</p>
+              <p><strong>Pays :</strong> {{senderCurrency}}</p>
+            </div>
+            <hr>
+            <h3>Details bénéficiaire</h3>
+            <div class="details">
+              <p><strong>Nom :</strong> {{receiverName}}</p>
+              <p><strong>Email :</strong> {{receiverEmail}}</p>
+              <p><strong>Téléphone :</strong> {{receiverContact}}</p>
+              <p><strong>Pays :</strong> {{receiverCountry}}</p>
+            </div>
+            <hr>
+            <br>
             <div class="invoice-link">
               <p><span
                 class="ci"
@@ -301,13 +322,13 @@
                   font-style:normal;line-height:24px;width:auto;text-align:center;
                   mso-padding-alt:0;mso-border-alt:10px solid #0a36b4;padding-left:30px;
                   padding-right:30px">
-                  Voir le reçu</a></span>
+                  Voir les payouts en attente</a></span>
               </p>
             </div>
 
 
             <p>
-              Nous vous remercions pour votre confiance. <br>
+              Merci de procéder à la validation si toutes les informations sont conformes. <br>
               Pour toute information complémentaire, notre équipe reste à votre disposition.
             </p>
 

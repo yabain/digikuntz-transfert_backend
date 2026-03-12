@@ -159,46 +159,54 @@
         width: 414px !important
       }
     }
-  
-      body {
-        font-family: Arial, Helvetica, sans-serif;
-        background-color: #f6f6f6;
-        margin: 0;
-        padding: 0;
-      }
-      .container {
-        max-width: 600px;
-        margin: 30px auto;
-        background-color: #ffffff;
-        padding: 20px;
-        border-radius: 4px;
-      }
-      h2 {
-        color: #333333;
-      }
-      p {
-        color: #555555;
-        line-height: 1.5;
-      }
-      .details {
-        margin-top: 20px;
-      }
-      .details p {
-        margin: 6px 0;
-      }
-      .invoice-link {
-        margin-top: 20px;
-      }
-      .invoice-link a {
-        color: #1a73e8;
-        text-decoration: none;
-      }
-      .footer {
-        margin-top: 30px;
-        font-size: 12px;
-        color: #888888;
-      }
-    </style>
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background-color: #f6f6f6;
+      margin: 0;
+      padding: 0;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: 30px auto;
+      background-color: #ffffff;
+      padding: 20px;
+      border-radius: 4px;
+    }
+
+    h2 {
+      color: #333333;
+    }
+
+    p {
+      color: #555555;
+      line-height: 1.5;
+    }
+
+    .details {
+      margin-top: 20px;
+    }
+
+    .details p {
+      margin: 6px 0;
+    }
+
+    .invoice-link {
+      margin-top: 20px;
+    }
+
+    .invoice-link a {
+      color: #1a73e8;
+      text-decoration: none;
+    }
+
+    .footer {
+      margin-top: 30px;
+      font-size: 12px;
+      color: #888888;
+    }
+  </style>
 </head>
 
 <body
@@ -272,26 +280,46 @@
           <div class="container">
             <h2>Payout pending validation</h2>
 
-            <p>Hello {{userName}},</p>
+            <p>Hello <b>{{userName}}</b>,</p>
 
             <p>
               A payout request is pending admin validation. <br>
               You will find the transaction details below.
             </p>
 
+            <div style="background-color: #de851766; padding: 10px; border-radius: 10px;">
+            <h3>Transaction details</h3>
             <div class="details">
-              <p><strong>transaction Ref :</strong> {{transactionRef}}</p>
-              <p><strong>Receiver :</strong> {{receiverName}}</p>
-              <p><strong>Amount :</strong> {{amount}} {{currency}}</p>
-                            <p><strong>Transaction date :</strong> {{transactionDate}}</p>
+              <p><strong>Transaction Ref :</strong> {{transactionRef}}</p>
+              <p><strong>Amount to be receive :</strong> {{receiverAmount}} {{receiverCurrency}}</p>
+              <p><strong>Payment method :</strong> {{paymentMethod}}</p>
+              <p><strong>Fees :</strong> {{taxesAmount}} {{senderCurrency}}</p>
+              <p><strong>Payment with fees :</strong> {{paymentWithTaxes}} {{senderCurrency}}</p>
+              <p><strong>Transaction date :</strong> {{transactionDate}}</p>
+              <p><strong>Raison :</strong> {{raisonForTransfer}}</p>
             </div>
-
+          </div>
+            <h3>Sender details</h3>
+            <div class="details">
+              <p><strong>Name :</strong> {{senderName}}</p>
+              <p><strong>Email :</strong> {{senderEmail}}</p>
+              <p><strong>Phone :</strong> {{senderContact}}</p>
+              <p><strong>Country :</strong> {{senderCurrency}}</p>
+            </div>
+            <hr>
+            <h3>Receiver details</h3>
+            <div class="details">
+              <p><strong>Name :</strong> {{receiverName}}</p>
+              <p><strong>Email :</strong> {{receiverEmail}}</p>
+              <p><strong>Phone :</strong> {{receiverContact}}</p>
+              <p><strong>Country :</strong> {{receiverCountry}}</p>
+            </div>
+            <hr>
+            <br>
             <div class="invoice-link">
-              <p><span
-                class="ci"
-                style="border-style:solid;border-color:#2CB543;background:#0a36b4;border-width:0px;display:inline-block;border-radius:6px;width:auto"><a
-                  href="{{invoice_url}}" class="ch" target="_blank"
-                  style="mso-style-priority:100 !important;text-decoration:none;
+              <p><span class="ci"
+                  style="border-style:solid;border-color:#2CB543;background:#0a36b4;border-width:0px;display:inline-block;border-radius:6px;width:auto"><a
+                    href="{{invoice_url}}" class="ch" target="_blank" style="mso-style-priority:100 !important;text-decoration:none;
                   -webkit-text-size-adjust:none;-ms-text-size-adjust:none;
                   mso-line-height-rule:exactly;color:#FFFFFF;font-size:20px;
                   padding:10px 30px 10px 30px;display:inline-block;
@@ -300,7 +328,7 @@
                   font-style:normal;line-height:24px;width:auto;text-align:center;
                   mso-padding-alt:0;mso-border-alt:10px solid #0a36b4;padding-left:30px;
                   padding-right:30px">
-                  View pending payouts</a></span>
+                    View pending payouts</a></span>
               </p>
             </div>
 

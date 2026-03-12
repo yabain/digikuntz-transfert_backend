@@ -661,12 +661,28 @@ export class EmailService {
     const template = handlebars.compile(templateSource);
     const front = this.configService.get<string>('FRONT_URL') || this.frontUrl;
     const context = {
-      userName: 'Admin',
-      invoice_url: `${front}/admin/payout/pending`,
+      userName: 'digiKUNTZ Administrator',
+      invoice_url: `${front}/admin-payments/payout`,
       transactionRef: transactionData?.transactionRef || transactionData?._id || '--',
+
+      senderCountry: transactionData?.senderCountry || '--',
+      senderName: transactionData?.senderName || '--',
+      senderAmount: transactionData?.senderAmount || '--',
+      senderCurrency: transactionData?.senderCurrency || '--',
+      senderEmail: transactionData?.senderEmail || '--',
+      senderContact: '+' + transactionData?.senderCountryCode + transactionData?.senderContact || '--',
+      
+      receiverCountry: transactionData?.receiverCountry || '--',
       receiverName: transactionData?.receiverName || '--',
-      amount: transactionData?.estimation || transactionData?.receiverAmount || '--',
-      currency: transactionData?.receiverCurrency || transactionData?.senderCurrency || '--',
+      receiverCurrency: transactionData?.receiverCurrency || '--',
+      receiverContact: '+' + transactionData?.receiverCountryCode + transactionData?.receiverContact || '--',
+      receiverEmail: transactionData?.receiverEmail || '--',
+
+      receiverAmount: transactionData?.receiverAmount || '--',
+      taxesAmount: transactionData?.taxesAmount || '--',
+      paymentWithTaxes: transactionData?.paymentWithTaxes || '--',
+      paymentMethod: transactionData?.paymentMethod || '--',
+      raisonForTransfer: transactionData?.raisonForTransfer || '--',
       transactionDate: this.dateService.formatDate(
         transactionData?.createdAt || new Date(),
         'short',
