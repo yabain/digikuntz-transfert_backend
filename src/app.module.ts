@@ -33,6 +33,7 @@ import { UserSettingsModule } from './userSettings/userSettings.module';
 import { ServiceModule } from './service/service.module';
 import { AppCacheModule } from './cache/cache.module';
 import { FundraisingModule } from './fundraising/fundraising.module';
+import { PaymentRequestModule } from './payment-request/payment-request.module';
 
 @Module({
   imports: [
@@ -96,6 +97,7 @@ import { FundraisingModule } from './fundraising/fundraising.module';
     ServiceModule,
     AppCacheModule,
     FundraisingModule,
+    PaymentRequestModule,
     DevModule,
   ],
   controllers: [AppController],

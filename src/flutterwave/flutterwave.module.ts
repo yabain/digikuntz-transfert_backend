@@ -41,6 +41,7 @@ import { SystemModule } from 'src/system/system.module';
 import { OperationNotificationService } from 'src/notification/operation-notification.service';
 import { FundraisingModule } from 'src/fundraising/fundraising.module';
 import { PaystackModule } from 'src/paystack/paystack.module';
+import { PaymentRequestModule } from 'src/payment-request/payment-request.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { PaystackModule } from 'src/paystack/paystack.module';
     forwardRef(() => WhatsappModule),
     forwardRef(() => PlansModule),
     forwardRef(() => FundraisingModule),
+    forwardRef(() => PaymentRequestModule),
     SystemModule,
     AppCacheModule,
     MongooseModule.forFeature([

@@ -39,6 +39,9 @@ import { ServicePaymentService } from 'src/service/service-payment/service-payme
 import { WhatsappService } from 'src/wa/whatsapp.service';
 import { OperationNotificationService } from 'src/notification/operation-notification.service';
 import { FundraisingService } from 'src/fundraising/fundraising.service';
+import { CreatePaymentRequestDto } from 'src/payment-request/create-payment-request.dto';
+import { PaymentRequestService } from 'src/payment-request/payment-request.service';
+import { PaymentRequestStatus } from 'src/payment-request/payment-request.schema';
 
 @Injectable()
 export class FlutterwaveService {
@@ -65,6 +68,8 @@ export class FlutterwaveService {
     private servicePaymentService: ServicePaymentService,
     private operationNotificationService: OperationNotificationService,
     private fundraisingService: FundraisingService,
+    @Inject(forwardRef(() => PaymentRequestService))
+    private paymentRequestService: PaymentRequestService,
     @Inject(forwardRef(() => WhatsappService))
     private whatsappService: WhatsappService,
   ) {
@@ -260,7 +265,14 @@ export class FlutterwaveService {
   }
 
   // ---------- Pay-In (Hosted Payment) ----------
-  async createPayin(transactionData: any, userId) {
+  async createPayin(
+    transactionData: any,
+    userId,
+    options?: {
+      paymentRequestMode?: boolean;
+      paymentRequestInput?: CreatePaymentRequestDto;
+    },
+  ) {
     transactionData.userId = userId;
     const txRef = this.payinService.generateTxRef('txPayin')
     const raw = {
@@ -284,6 +296,21 @@ export class FlutterwaveService {
           { status: HttpStatus.BAD_REQUEST, error: 'Invalid payment amount' },
           HttpStatus.BAD_REQUEST,
         );
+      }
+
+      if (options?.paymentRequestMode === true) {
+        return this.payinService.createPaymentRequestPayin({
+          amount,
+          txRef,
+          transactionId: savedTransaction._id,
+          currency: savedTransaction.senderCurrency,
+          customerEmail: savedTransaction.senderEmail,
+          customerName: savedTransaction.senderName,
+          customerPhone: savedTransaction.senderContact,
+          status: 'pending',
+          userId,
+          mobileMoney: options?.paymentRequestInput?.mobile_money,
+        });
       }
 
       return this.payinService.createPayin({
@@ -329,6 +356,12 @@ export class FlutterwaveService {
 
     // console.log('(fw service: verifyPayin) resp payin data: ', payin);
     if (payin.status === 'cancelled') {
+      if (transaction.transactionType === 'paymentRequest') {
+        await this.paymentRequestService.updatePaymentRequestStatusByTransaction(
+          String(payin.transactionId),
+          PaymentRequestStatus.CANCELED,
+        );
+      }
       /* Keep the transaction "pending" because the user can
       relaunch new payment attempts on the flutterwave front
       and if the status is no longer in this "pending" state,
@@ -342,6 +375,12 @@ export class FlutterwaveService {
       // return { message: 'Payin cancelled', status: 'cancelled' };
       return { message: 'Payin pending', status: 'pending' };
     } else if (payin.status === 'failed') {
+      if (transaction.transactionType === 'paymentRequest') {
+        await this.paymentRequestService.updatePaymentRequestStatusByTransaction(
+          String(payin.transactionId),
+          PaymentRequestStatus.FAILED,
+        );
+      }
       /* Keep the transaction "pending" because the user can
         relaunch new payment attempts on the flutterwave front
         and if the status is no longer in this "pending" state,
@@ -372,6 +411,9 @@ export class FlutterwaveService {
         }
         if (transaction.transactionType === 'fundraising') {
           await this.handleFundraising(transaction);
+        }
+        if (transaction.transactionType === 'paymentRequest') {
+          await this.handlePaymentRequest(transaction);
         }
         if (
           (transaction.transactionType === 'transfer' ||
@@ -437,6 +479,12 @@ export class FlutterwaveService {
         String(payin.transactionId),
         this.tStatus.PAYINCLOSED,
       );
+      if (transaction.transactionType === 'paymentRequest') {
+        await this.paymentRequestService.updatePaymentRequestStatusByTransaction(
+          String(payin.transactionId),
+          PaymentRequestStatus.CANCELED,
+        );
+      }
       await this.payinService.updatePayinStatus(txRef, 'cancelled');
       return { message: 'Payin cancelled', status: 'cancelled' };
     }
@@ -450,6 +498,12 @@ export class FlutterwaveService {
             this.tStatus.PAYINERROR,
             payin.raw,
           );
+        if (transaction.transactionType === 'paymentRequest') {
+          await this.paymentRequestService.updatePaymentRequestStatusByTransaction(
+            String(payin.transactionId),
+            PaymentRequestStatus.FAILED,
+          );
+        }
         // console.log('transactionUpdated: ', transactionUpdated);
         await this.payinService.updatePayinStatus(txRef, 'failed');
         return { message: 'Payin failed', status: 'failed' };
@@ -476,6 +530,9 @@ export class FlutterwaveService {
         }
         if (transaction.transactionType === 'fundraising') {
           await this.handleFundraising(transaction);
+        }
+        if (transaction.transactionType === 'paymentRequest') {
+          await this.handlePaymentRequest(transaction);
         }
         if (
           (transaction.transactionType === 'transfer' ||
@@ -632,6 +689,24 @@ export class FlutterwaveService {
         status: 'error',
       };
     }
+  }
+
+  async handlePaymentRequest(transaction) {
+    try {
+      await this.paymentRequestService.handlePaymentRequest(transaction);
+      return true;
+    } catch (err) {
+      console.error('(fw service: handlePaymentRequest) Error: ', err);
+      throw err;
+    }
+  }
+
+  async creditBalanceForPaymentRequest(transaction: any) {
+    return this.balanceService.creditBalance(
+      transaction.receiverId || transaction.userId,
+      Number(transaction.estimation),
+      transaction.senderCurrency || transaction.receiverCurrency,
+    );
   }
 
   async createSubscriptionOfTransaction(transaction) {

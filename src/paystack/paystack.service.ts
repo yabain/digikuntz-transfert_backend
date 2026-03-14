@@ -43,6 +43,22 @@ export class PaystackService {
     );
   }
 
+  private normalizeKesMobileMoneyProvider(input?: string): string {
+    const normalized = String(input || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_-]+/g, '');
+
+    if (!normalized) return 'mpesa';
+    if (normalized === 'mpesa') return 'mpesa';
+    if (normalized === 'm-pesa') return 'mpesa';
+    if (normalized === 'atl' || normalized === 'airtel' || normalized === 'airtelmoney') {
+      return 'atl';
+    }
+
+    return normalized;
+  }
+
   async initializeKesMpesaPayment(payload: {
     email: string;
     amountKobo: number;
@@ -66,6 +82,39 @@ export class PaystackService {
       }),
     );
     return res.data;
+  }
+
+  async chargeKesMobileMoney(payload: {
+    email: string;
+    amountKobo: number;
+    reference: string;
+    phone: string;
+    provider: string;
+    metadata?: Record<string, any>;
+  }) {
+    const provider = this.normalizeKesMobileMoneyProvider(payload.provider);
+    const body: any = {
+      email: payload.email,
+      amount: payload.amountKobo,
+      currency: 'KES',
+      reference: payload.reference,
+      mobile_money: {
+        phone: payload.phone,
+        provider,
+      },
+      metadata: payload.metadata ?? {},
+    };
+
+    try {
+      const res = await firstValueFrom(
+        this.http.post(`${this.baseUrl}/charge`, body, {
+          headers: this.headers(),
+        }),
+      );
+      return res.data;
+    } catch (error: any) {
+      this.throwHttpFromAxios(error, 'Unable to initiate Paystack mobile money request');
+    }
   }
 
   async verifyTransaction(reference: string) {

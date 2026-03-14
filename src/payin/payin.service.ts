@@ -91,6 +91,17 @@ export class PayinService {
     return { Authorization: `Bearer ${this.fwSecret}` };
   }
 
+  private authHeaderByCurrency(currency?: string): Record<string, string> {
+    const normalized = String(currency || '').toUpperCase();
+    if (normalized === 'NGN') {
+      const ngnSecret = this.config.get<string>('FLUTTERWAVE_SECRET_KEY_NGN');
+      if (ngnSecret) {
+        return { Authorization: `Bearer ${ngnSecret}` };
+      }
+    }
+    return this.authHeader();
+  }
+
   generateTxRef(prefix = 'tx'): string {
     return `${prefix}-${Date.now()}-${randomBytes(4).toString('hex')}`;
   }
@@ -249,6 +260,155 @@ export class PayinService {
         HttpStatus.BAD_GATEWAY,
       );
     }
+  }
+
+  async createPaymentRequestPayin(dto: CreatePayinDto) {
+    const txRef = dto.txRef ?? this.generateTxRef('txPayin');
+    const currency = String(dto.currency || '').toUpperCase();
+
+    if (currency === 'KES') {
+      return this.createKesMobileMoneyRequest({ ...dto, txRef });
+    }
+
+    return this.createFlutterwaveMobileMoneyRequest({ ...dto, txRef });
+  }
+
+  private async createFlutterwaveMobileMoneyRequest(
+    dto: CreatePayinDto & { txRef: string },
+  ) {
+    const provider = String(dto.mobileMoney?.provider || '')
+      .toLowerCase()
+      .replace(/[^a-z]/g, '');
+    const phone = String(dto.mobileMoney?.phone || dto.customerPhone || '')
+      .replace(/\s+/g, '')
+      .trim();
+
+    if (!provider || !phone) {
+      throw new HttpException(
+        {
+          message:
+            'mobile_money.provider and mobile_money.phone are required for payment request',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const payload: any = {
+      tx_ref: dto.txRef,
+      amount: Number(dto.amount),
+      currency: String(dto.currency).toUpperCase(),
+      email: dto.customerEmail,
+      phone_number: phone,
+      fullname: dto.customerName || dto.customerEmail,
+      network: provider.toUpperCase(),
+      meta: { app: 'digikuntz-payments', flow: 'payment_request' },
+    };
+
+    const currency = String(dto.currency || '').toUpperCase();
+    const flutterwaveChargeType =
+      currency === 'XAF'
+        ? 'mobile_money_franco'
+        : currency === 'NGN'
+          ? 'mobile_money_nigeria'
+          : 'mobile_money';
+
+    const res = await firstValueFrom(
+      this.http.post(`${this.fwBaseUrlV3}/charges?type=${flutterwaveChargeType}`, payload, {
+        headers: this.authHeaderByCurrency(dto.currency),
+        timeout: PayinService.HTTP_TIMEOUT_MS,
+      }),
+    );
+    const resData = res.data;
+
+    await this.payinModel.create({
+      userId: dto.userId,
+      transactionId: dto.transactionId,
+      txRef: dto.txRef,
+      amount: dto.amount,
+      currency: dto.currency,
+      customerEmail: dto.customerEmail,
+      customerName: dto.customerName,
+      channel: 'mobile_money',
+      status: PayinStatus.PENDING,
+      provider: PayinProvider.FLUTTERWAVE,
+      raw: resData,
+    });
+
+    return {
+      status: PayinStatus.PENDING,
+      transactionId: dto.transactionId,
+      txRef: dto.txRef,
+      amount: dto.amount,
+      currency: dto.currency,
+      customerEmail: dto.customerEmail,
+      provider: PayinProvider.FLUTTERWAVE,
+      details: resData?.data ?? resData,
+      redirect_url: resData?.data?.link || resData?.data?.auth_url,
+    };
+  }
+
+  private async createKesMobileMoneyRequest(
+    dto: CreatePayinDto & { txRef: string },
+  ) {
+    const amountKobo = Math.round(Number(dto.amount) * 100);
+    if (!Number.isFinite(amountKobo) || amountKobo <= 0) {
+      throw new HttpException(
+        { message: 'Invalid payment amount' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const provider = String(dto.mobileMoney?.provider || 'm-pesa');
+    const phone = String(dto.mobileMoney?.phone || dto.customerPhone || '')
+      .replace(/\s+/g, '')
+      .trim();
+
+    if (!phone) {
+      throw new HttpException(
+        { message: 'mobile_money.phone is required for KES payment request' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const resData = await this.paystackService.chargeKesMobileMoney({
+      email: dto.customerEmail,
+      amountKobo,
+      reference: dto.txRef,
+      phone,
+      provider,
+      metadata: {
+        flow: 'payment_request',
+        customerName: dto.customerName ?? '',
+        customerPhone: phone,
+        app: 'digikuntz-payments',
+      },
+    });
+
+    await this.payinModel.create({
+      userId: dto.userId,
+      transactionId: dto.transactionId,
+      txRef: dto.txRef,
+      amount: dto.amount,
+      currency: dto.currency,
+      customerEmail: dto.customerEmail,
+      customerName: dto.customerName,
+      channel: 'mobile_money',
+      status: PayinStatus.PENDING,
+      provider: PayinProvider.PAYSTACK,
+      raw: resData,
+    });
+
+    return {
+      status: PayinStatus.PENDING,
+      transactionId: dto.transactionId,
+      txRef: dto.txRef,
+      amount: dto.amount,
+      currency: dto.currency,
+      customerEmail: dto.customerEmail,
+      provider: PayinProvider.PAYSTACK,
+      details: resData?.data ?? resData,
+      redirect_url: null,
+    };
   }
 
   private mapPaystackStatusToLocal(status?: string): PayinStatus {

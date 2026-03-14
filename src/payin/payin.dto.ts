@@ -45,6 +45,12 @@ export class CreatePayinDto {
   customerPhone?: string;
 
   @IsOptional()
+  mobileMoney?: {
+    phone: string;
+    provider: string;
+  };
+
+  @IsOptional()
   @IsString()
   txRef?: string;
 

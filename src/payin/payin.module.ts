@@ -38,12 +38,14 @@ import { AppCacheModule } from '../cache/cache.module';
 import { OperationNotificationService } from 'src/notification/operation-notification.service';
 import { FundraisingModule } from 'src/fundraising/fundraising.module';
 import { PaystackModule } from 'src/paystack/paystack.module';
+import { PaymentRequestModule } from 'src/payment-request/payment-request.module';
 
 @Module({
   imports: [
     ConfigModule,
     HttpModule,
     PaystackModule,
+    forwardRef(() => PaymentRequestModule),
     WhatsappModule,
     forwardRef(() => FundraisingModule),
     forwardRef(() => PlansModule),
