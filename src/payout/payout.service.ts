@@ -3,6 +3,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-enum-comparison */ /* eslint-disable @typescript-eslint/no-unsafe-call */ /* eslint-disable @typescript-eslint/no-unsafe-return */ /* eslint-disable @typescript-eslint/no-unsafe-assignment */ /* eslint-disable @typescript-eslint/no-unsafe-member-access */ /* eslint-disable prettier/prettier */
 
 import {
+  Inject,
+  forwardRef,
   Injectable,
   HttpException,
   HttpStatus,
@@ -58,6 +60,7 @@ export class PayoutService {
     private readonly paystackService: PaystackService,
     @InjectModel(Payout.name)
     private readonly payoutModel: mongoose.Model<PayoutDocument>,
+    @Inject(forwardRef(() => TransactionService))
     private transactionService: TransactionService,
     private emailService: EmailService,
     private operationNotificationService: OperationNotificationService,

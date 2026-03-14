@@ -62,6 +62,7 @@ export class FlutterwaveService {
     @InjectModel(Payout.name) private payoutModel: Model<PayoutDocument>,
     private payinService: PayinService,
     private payoutService: PayoutService,
+    @Inject(forwardRef(() => TransactionService))
     private transactionService: TransactionService,
     private balanceService: BalanceService,
     private subscriptionService: SubscriptionService,

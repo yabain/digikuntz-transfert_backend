@@ -59,6 +59,32 @@ export class PaystackService {
     return normalized;
   }
 
+  private buildKesPhoneCandidates(input?: string): string[] {
+    const raw = String(input || '').trim();
+    const digits = raw.replace(/\D/g, '');
+    if (!digits) return [];
+
+    let national = '';
+    if (digits.startsWith('254') && digits.length === 12) {
+      national = digits.slice(3); // 79xxxxxxx
+    } else if (digits.startsWith('0') && digits.length === 10) {
+      national = digits.slice(1); // 79xxxxxxx
+    } else if (digits.length === 9 && (digits.startsWith('7') || digits.startsWith('1'))) {
+      national = digits;
+    } else {
+      national = digits;
+    }
+
+    const e164NoPlus = national.length === 9 ? `254${national}` : digits;
+    const e164Plus = `+${e164NoPlus}`;
+    const localWithZero = national.length === 9 ? `0${national}` : '';
+    const localNoZero = national.length === 9 ? national : '';
+
+    return Array.from(
+      new Set([e164Plus, e164NoPlus, localWithZero, localNoZero].filter(Boolean)),
+    );
+  }
+
   async initializeKesMpesaPayment(payload: {
     email: string;
     amountKobo: number;
@@ -93,28 +119,62 @@ export class PaystackService {
     metadata?: Record<string, any>;
   }) {
     const provider = this.normalizeKesMobileMoneyProvider(payload.provider);
-    const body: any = {
-      email: payload.email,
-      amount: payload.amountKobo,
-      currency: 'KES',
-      reference: payload.reference,
-      mobile_money: {
-        phone: payload.phone,
-        provider,
-      },
-      metadata: payload.metadata ?? {},
-    };
-
-    try {
-      const res = await firstValueFrom(
-        this.http.post(`${this.baseUrl}/charge`, body, {
-          headers: this.headers(),
-        }),
+    const phoneCandidates = this.buildKesPhoneCandidates(payload.phone);
+    if (!phoneCandidates.length) {
+      throw new HttpException(
+        {
+          message: 'Unable to initiate Paystack mobile money request',
+          details: {
+            status: false,
+            message: 'Invalid phone number format',
+            code: 'invalid_params',
+          },
+        },
+        HttpStatus.BAD_REQUEST,
       );
-      return res.data;
-    } catch (error: any) {
-      this.throwHttpFromAxios(error, 'Unable to initiate Paystack mobile money request');
     }
+
+    let lastError: any;
+    for (const phone of phoneCandidates) {
+      const body: any = {
+        email: payload.email,
+        amount: payload.amountKobo,
+        currency: 'KES',
+        reference: payload.reference,
+        mobile_money: {
+          phone,
+          provider,
+        },
+        metadata: payload.metadata ?? {},
+      };
+
+      try {
+        const res = await firstValueFrom(
+          this.http.post(`${this.baseUrl}/charge`, body, {
+            headers: this.headers(),
+          }),
+        );
+        return res.data;
+      } catch (error: any) {
+        lastError = error;
+        const code = String(error?.response?.data?.code || '').toLowerCase();
+        const message = String(error?.response?.data?.message || '').toLowerCase();
+        const isPhoneFormatError =
+          code.includes('invalid_params') &&
+          message.includes('phone number format');
+        if (!isPhoneFormatError) {
+          this.throwHttpFromAxios(
+            error,
+            'Unable to initiate Paystack mobile money request',
+          );
+        }
+      }
+    }
+
+    this.throwHttpFromAxios(
+      lastError,
+      'Unable to initiate Paystack mobile money request',
+    );
   }
 
   async verifyTransaction(reference: string) {

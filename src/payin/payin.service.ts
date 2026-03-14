@@ -148,6 +148,31 @@ export class PayinService {
     );
   }
 
+  private normalizeKesMsisdnStrict(raw: string): string {
+    const digits = String(raw || '').replace(/\D/g, '');
+    if (!digits) {
+      throw new HttpException(
+        { message: 'Invalid KES mobile number: empty phone' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (digits.startsWith('254') && digits.length === 12) {
+      return digits;
+    }
+    if (digits.startsWith('0') && digits.length === 10) {
+      return `254${digits.slice(1)}`;
+    }
+    if (digits.length === 9 && (digits.startsWith('7') || digits.startsWith('1'))) {
+      return `254${digits}`;
+    }
+
+    throw new HttpException(
+      { message: 'Invalid KES mobile number format. Expected 254XXXXXXXXX' },
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+
   private unwrapAxiosError(error: unknown): {
     fwData?: FWErrorPayload;
     message: string;
@@ -359,9 +384,9 @@ export class PayinService {
     }
 
     const provider = String(dto.mobileMoney?.provider || 'm-pesa');
-    const phone = String(dto.mobileMoney?.phone || dto.customerPhone || '')
-      .replace(/\s+/g, '')
-      .trim();
+    const phone = this.normalizeKesMsisdnStrict(
+      String(dto.mobileMoney?.phone || dto.customerPhone || ''),
+    );
 
     if (!phone) {
       throw new HttpException(

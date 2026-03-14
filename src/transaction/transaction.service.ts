@@ -12,6 +12,8 @@
 import { HttpService } from '@nestjs/axios';
 import {
   Injectable,
+  Inject,
+  forwardRef,
   NotFoundException,
   Logger,
   // UnauthorizedException,
@@ -27,6 +29,8 @@ import { PayinService } from 'src/payin/payin.service';
 import { UpdateTransactionDto } from './update-transaction.dto';
 import { SystemService } from 'src/system/system.service';
 import { OperationNotificationService } from 'src/notification/operation-notification.service';
+import { PaymentRequestService } from 'src/payment-request/payment-request.service';
+import { PaymentRequestStatus } from 'src/payment-request/payment-request.schema';
 // import { CreateTransactionDto } from './create-transaction.dto';
 
 @Injectable()
@@ -45,6 +49,8 @@ export class TransactionService {
     private payinService: PayinService,
     private systemService: SystemService,
     private operationNotificationService: OperationNotificationService,
+    @Inject(forwardRef(() => PaymentRequestService))
+    private paymentRequestService: PaymentRequestService,
   ) { }
 
   async findAll(query: Query): Promise<Transaction[]> {
@@ -320,16 +326,31 @@ export class TransactionService {
       }
     }
     if (payin.status === 'successful') {
+      if (transactionData?.transactionType === 'paymentRequest') {
+        await this.paymentRequestService.handlePaymentRequest(transactionData);
+      }
       return this.updateTransactionStatus(
         transactionData._id,
         TStatus.PAYINSUCCESS,
       );
     } else if (payin.status === 'cancelled') {
+      if (transactionData?.transactionType === 'paymentRequest') {
+        await this.paymentRequestService.updatePaymentRequestStatusByTransaction(
+          String(transactionData._id),
+          PaymentRequestStatus.CANCELED,
+        );
+      }
       return this.updateTransactionStatus(
         transactionData._id,
         TStatus.PAYINCLOSED,
       );
     } else if (payin.status === 'failed') {
+      if (transactionData?.transactionType === 'paymentRequest') {
+        await this.paymentRequestService.updatePaymentRequestStatusByTransaction(
+          String(transactionData._id),
+          PaymentRequestStatus.FAILED,
+        );
+      }
       return this.updateTransactionStatus(
         transactionData._id,
         TStatus.PAYINERROR,

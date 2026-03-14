@@ -27,6 +27,7 @@ export class SubscriptionService {
   constructor(
     @InjectModel(Subscription.name)
     private subscriptionModel: mongoose.Model<Subscription>,
+    @Inject(forwardRef(() => ItemService))
     private itemService: ItemService,
     private optionsService: OptionsService,
     @Inject(forwardRef(() => WhatsappService))
@@ -34,6 +35,7 @@ export class SubscriptionService {
     private userService: UserService,
     @Inject(forwardRef(() => PlansService))
     private plansService: PlansService,
+    @Inject(forwardRef(() => TransactionService))
     private transactionService: TransactionService,
     private operationNotificationService: OperationNotificationService,
   ) { }

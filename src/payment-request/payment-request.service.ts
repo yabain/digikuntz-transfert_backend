@@ -41,6 +41,23 @@ export class PaymentRequestService {
     return String(value || '').replace(/\s+/g, '').trim();
   }
 
+  private normalizeKesMsisdnStrict(value: string): string {
+    const digits = String(value || '').replace(/\D/g, '');
+    if (!digits) {
+      throw new BadRequestException('Invalid KES mobile number: empty phone');
+    }
+
+    if (digits.startsWith('254') && digits.length === 12) return digits;
+    if (digits.startsWith('0') && digits.length === 10) return `254${digits.slice(1)}`;
+    if (digits.length === 9 && (digits.startsWith('7') || digits.startsWith('1'))) {
+      return `254${digits}`;
+    }
+
+    throw new BadRequestException(
+      'Invalid KES mobile number format. Expected 254XXXXXXXXX',
+    );
+  }
+
   async createCurrentUserPaymentRequest(userId: string, data: CreatePaymentRequestDto) {
     const currentUser: any = await this.userService.getUserById(userId);
     if (!currentUser) {
@@ -57,7 +74,10 @@ export class PaymentRequestService {
       );
     }
 
-    const senderPhone = this.normalizePhoneForDisplay(data.mobile_money?.phone);
+    const senderPhone =
+      currency === 'KES'
+        ? this.normalizeKesMsisdnStrict(data.mobile_money?.phone)
+        : this.normalizePhoneForDisplay(data.mobile_money?.phone);
     const senderName =
       data.email?.split('@')?.[0] || 'Payment Request Customer';
     const transactionData = {

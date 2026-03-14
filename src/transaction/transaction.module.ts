@@ -37,11 +37,13 @@ import { SubscriptionModule } from 'src/plans/subscription/subscription.module';
 import { SystemModule } from 'src/system/system.module';
 import { OperationNotificationService } from 'src/notification/operation-notification.service';
 import { PaystackModule } from 'src/paystack/paystack.module';
+import { PaymentRequestModule } from 'src/payment-request/payment-request.module';
 
 @Module({
   imports: [
     HttpModule,
     PaystackModule,
+    forwardRef(() => PaymentRequestModule),
     forwardRef(() => WhatsappModule),
     AppCacheModule,
     forwardRef(() => SubscriptionModule),

@@ -20,6 +20,7 @@ import { UserModule } from 'src/user/user.module';
 import { SystemModule } from 'src/system/system.module';
 import { OperationNotificationService } from 'src/notification/operation-notification.service';
 import { PaystackModule } from 'src/paystack/paystack.module';
+import { PaymentRequestModule } from 'src/payment-request/payment-request.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { PaystackModule } from 'src/paystack/paystack.module';
     forwardRef(() => EmailModule),
     forwardRef(() => PlansModule),
     forwardRef(() => UserModule),
+    forwardRef(() => PaymentRequestModule),
     MongooseModule.forFeature([
       { name: Payin.name, schema: PayinSchema },
       { name: Payout.name, schema: PayoutSchema },
