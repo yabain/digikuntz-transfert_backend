@@ -357,10 +357,15 @@ export class FlutterwaveService {
     // console.log('(fw service: verifyPayin) resp payin data: ', payin);
     if (payin.status === 'cancelled') {
       if (transaction.transactionType === 'paymentRequest') {
+        await this.transactionService.updateTransactionStatus(
+          String(payin.transactionId),
+          this.tStatus.PAYINCLOSED,
+        );
         await this.paymentRequestService.updatePaymentRequestStatusByTransaction(
           String(payin.transactionId),
           PaymentRequestStatus.CANCELED,
         );
+        return { message: 'Payin cancelled', status: 'cancelled' };
       }
       /* Keep the transaction "pending" because the user can
       relaunch new payment attempts on the flutterwave front
@@ -376,10 +381,16 @@ export class FlutterwaveService {
       return { message: 'Payin pending', status: 'pending' };
     } else if (payin.status === 'failed') {
       if (transaction.transactionType === 'paymentRequest') {
+        await this.transactionService.updateTransactionStatus(
+          String(payin.transactionId),
+          this.tStatus.PAYINERROR,
+          payin?.raw,
+        );
         await this.paymentRequestService.updatePaymentRequestStatusByTransaction(
           String(payin.transactionId),
           PaymentRequestStatus.FAILED,
         );
+        return { message: 'Payin failed', status: 'failed' };
       }
       /* Keep the transaction "pending" because the user can
         relaunch new payment attempts on the flutterwave front
