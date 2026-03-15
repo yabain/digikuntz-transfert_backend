@@ -299,21 +299,6 @@ export class FlutterwaveService {
         );
       }
 
-      if (options?.paymentRequestMode === true) {
-        return this.payinService.createPaymentRequestPayin({
-          amount,
-          txRef,
-          transactionId: savedTransaction._id,
-          currency: savedTransaction.senderCurrency,
-          customerEmail: savedTransaction.senderEmail,
-          customerName: savedTransaction.senderName,
-          customerPhone: savedTransaction.senderContact,
-          status: 'pending',
-          userId,
-          mobileMoney: options?.paymentRequestInput?.mobile_money,
-        });
-      }
-
       return this.payinService.createPayin({
         amount,
         txRef,
@@ -593,11 +578,24 @@ export class FlutterwaveService {
   async handleSubscription(transaction) {
     console.log('In handleSubscription transaction: ', transaction);
     try {
+      const getEntityId = (value: any): string | undefined => {
+        if (!value) return undefined;
+        if (typeof value === 'string') return value;
+        if (typeof value === 'object' && value._id) {
+          return value._id?.toString?.() || String(value._id);
+        }
+        return value?.toString?.();
+      };
+
       const subscriberId =
-        transaction?.userId?._id?.toString() ||
-        transaction?.userId?.toString() ||
-        transaction?.senderId?.toString();
-      const planId = transaction?.planId?.toString() || transaction?.planId._id?.toString();
+        getEntityId(transaction?.userId) || getEntityId(transaction?.senderId);
+      const planId = getEntityId(transaction?.planId);
+
+      if (!subscriberId || !planId) {
+        throw new NotFoundException(
+          'Missing subscriberId or planId for subscription transaction',
+        );
+      }
 
       // console.log('handleSubscription - userId: ', subscriberId);
       // console.log('handleSubscription - planId: ', planId);
@@ -633,11 +631,8 @@ export class FlutterwaveService {
       // this.whatsappService.sendNewSubscriberMessage(transaction.planId.toString(), transaction.userId.toString(), transaction._id.toString());
       return;
     } catch (err) {
-      // console.log('(fw service: handleSubscription) Error: ', err);
-      return {
-        message: '(fw service: handleSubscription) Error: ' + err,
-        status: 'error',
-      };
+      console.error('(fw service: handleSubscription) Error: ', err);
+      throw err;
     }
   }
 

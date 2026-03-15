@@ -112,10 +112,6 @@ export class PaymentRequestService {
     const initResp: any = await this.flutterwaveService.createPayin(
       transactionData,
       userId,
-      {
-      paymentRequestMode: true,
-      paymentRequestInput: data,
-      },
     );
 
     const transactionId = String(initResp?.transactionId || '');
