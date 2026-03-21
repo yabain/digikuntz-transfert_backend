@@ -481,6 +481,20 @@ export class TransactionService {
     }
     return transaction;
   }
+
+  async claimTransactionForPayout(transactionId: string): Promise<any | null> {
+    if (!mongoose.Types.ObjectId.isValid(transactionId)) {
+      throw new NotFoundException('Invalid transaction ID');
+    }
+
+    return this.transactionModel
+      .findOneAndUpdate(
+        { _id: transactionId, status: TStatus.PAYINSUCCESS },
+        { status: TStatus.PAYOUTPENDING },
+        { new: true },
+      )
+      .exec();
+  }
   
   async updateTransactionTxRef(
     transactionId: string,

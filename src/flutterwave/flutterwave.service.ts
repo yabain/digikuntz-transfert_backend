@@ -6,6 +6,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 import {
+  ConflictException,
   HttpException,
   HttpStatus,
   Injectable,
@@ -170,9 +171,25 @@ export class FlutterwaveService {
     }
 
     const url = `${this.fwBaseUrlV3}/transactions`;
-    const res = await firstValueFrom(this.http.get(url, { headers, params }));
-    // console.log('res: ', res.data);
-    return res.data;
+    try {
+      const res = await firstValueFrom(this.http.get(url, { headers, params }));
+      return res.data;
+    } catch (err: any) {
+      if (err?.response) {
+        throw new HttpException(
+          err.response.data,
+          err.response?.status || HttpStatus.BAD_GATEWAY,
+        );
+      }
+      throw new HttpException(
+        {
+          message: 'Flutterwave API connection error while listing payin transactions',
+          code: err?.code || 'FW_NETWORK_ERROR',
+          details: err?.message || err,
+        },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
   }
 
   async listPayoutTransactions(
@@ -203,8 +220,25 @@ export class FlutterwaveService {
     }
 
     const url = `${this.fwBaseUrlV3}/transfers`;
-    const res = await firstValueFrom(this.http.get(url, { headers, params }));
-    return res.data;
+    try {
+      const res = await firstValueFrom(this.http.get(url, { headers, params }));
+      return res.data;
+    } catch (err: any) {
+      if (err?.response) {
+        throw new HttpException(
+          err.response.data,
+          err.response?.status || HttpStatus.BAD_GATEWAY,
+        );
+      }
+      throw new HttpException(
+        {
+          message: 'Flutterwave API connection error while listing payout transactions',
+          code: err?.code || 'FW_NETWORK_ERROR',
+          details: err?.message || err,
+        },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
   }
 
   private getDateRangeLastMonth(periode: number = 1) {
@@ -327,6 +361,7 @@ export class FlutterwaveService {
   }
 
   async verifyPayin(txRef: string) {
+    // console.log('payin in verifyPayin txRef: ', txRef);
     const payin: any = await this.payinService.verifyPayin(txRef);
     // console.log('payin in verifyPayin: ', payin);
     if (!payin) {
@@ -339,18 +374,22 @@ export class FlutterwaveService {
     if (!transaction) {
       throw new NotFoundException('Transaction not found');
     }
+    const isPaystackPayin =
+      String(payin?.provider || '').toLowerCase() === 'paystack';
 
     // console.log('(fw service: verifyPayin) resp payin data: ', payin);
     if (payin.status === 'cancelled') {
-      if (transaction.transactionType === 'paymentRequest') {
+      if (isPaystackPayin || transaction.transactionType === 'paymentRequest') {
         await this.transactionService.updateTransactionStatus(
           String(payin.transactionId),
           this.tStatus.PAYINCLOSED,
         );
-        await this.paymentRequestService.updatePaymentRequestStatusByTransaction(
-          String(payin.transactionId),
-          PaymentRequestStatus.CANCELED,
-        );
+        if (transaction.transactionType === 'paymentRequest') {
+          await this.paymentRequestService.updatePaymentRequestStatusByTransaction(
+            String(payin.transactionId),
+            PaymentRequestStatus.CANCELED,
+          );
+        }
         return { message: 'Payin cancelled', status: 'cancelled' };
       }
       /* Keep the transaction "pending" because the user can
@@ -366,16 +405,18 @@ export class FlutterwaveService {
       // return { message: 'Payin cancelled', status: 'cancelled' };
       return { message: 'Payin pending', status: 'pending' };
     } else if (payin.status === 'failed') {
-      if (transaction.transactionType === 'paymentRequest') {
+      if (isPaystackPayin || transaction.transactionType === 'paymentRequest') {
         await this.transactionService.updateTransactionStatus(
           String(payin.transactionId),
           this.tStatus.PAYINERROR,
           payin?.raw,
         );
-        await this.paymentRequestService.updatePaymentRequestStatusByTransaction(
-          String(payin.transactionId),
-          PaymentRequestStatus.FAILED,
-        );
+        if (transaction.transactionType === 'paymentRequest') {
+          await this.paymentRequestService.updatePaymentRequestStatusByTransaction(
+            String(payin.transactionId),
+            PaymentRequestStatus.FAILED,
+          );
+        }
         return { message: 'Payin failed', status: 'failed' };
       }
       /* Keep the transaction "pending" because the user can
@@ -778,9 +819,17 @@ export class FlutterwaveService {
 
   // ---------- Payouts ----------
   async payout(transactionId: string, userId: any, retrying: boolean = false) {
-    const transaction = await this.transactionService.findById(transactionId);
-    if (!transaction || transaction.status !== TStatus.PAYINSUCCESS) {
-      throw new NotFoundException('Transaction not found or not payin success');
+    const transaction = await this.transactionService.claimTransactionForPayout(
+      transactionId,
+    );
+    if (!transaction) {
+      const current = await this.transactionService.findById(transactionId);
+      if (!current) {
+        throw new NotFoundException('Transaction not found');
+      }
+      throw new ConflictException(
+        'Payout already initiated or transaction not eligible for payout',
+      );
     }
     const newTxRef = this.payoutService.generateTxRef('txPayout');
     transaction.reference = newTxRef;
@@ -802,12 +851,26 @@ export class FlutterwaveService {
 
     // KES payouts are processed through Paystack (M-Pesa / mobile money flow).
     if (String(payloadPayout.destinationCurrency).toUpperCase() === 'KES') {
-      await this.payoutService.initiatePaystackPayout(
-        transaction,
-        String(userId),
-        newTxRef,
-      );
-      return this.transactionService.findById(transactionId);
+      try {
+        await this.payoutService.initiatePaystackPayout(
+          transaction,
+          String(userId),
+          newTxRef,
+        );
+        return this.transactionService.findById(transactionId);
+      } catch (err: any) {
+        const errorPayload = err?.response?.data ?? {
+          message: err?.message ?? 'Paystack payout initiation failed',
+        };
+        await this.transactionService
+          .updateTransactionStatus(
+            transactionId,
+            TStatus.PAYOUTERROR,
+            errorPayload,
+          )
+          .catch(() => undefined);
+        throw err;
+      }
     }
 
     // console.log('Payout creation: ', payloadPayout);
@@ -863,7 +926,7 @@ export class FlutterwaveService {
       );
 
       // console.log('res of fw: ', res);
-      const doc = await this.payoutService.createPayout(payloadPayout, res);
+      const doc = await this.payoutService.createPayout(payloadPayout, res.data);
 
       const resp = { api: 'v3', ...res.data, saved: doc };
       // const update = await this.transactionService.updateTransactionStatus(
@@ -886,8 +949,13 @@ export class FlutterwaveService {
       // console.log('update: ', update)
       return update;
     } catch (err) {
+      const fwDetails = err?.response?.data ?? {
+        message: err?.message ?? 'Flutterwave payout failed',
+      };
+      await this.transactionService
+        .updateTransactionStatus(transactionId, TStatus.PAYOUTERROR, fwDetails)
+        .catch(() => undefined);
       if (err?.response) {
-        const fwDetails = err.response.data;
         console.error('FW Error:', fwDetails);
         if (this.isInsufficientPayoutBalance(fwDetails)) {
           throw new HttpException(

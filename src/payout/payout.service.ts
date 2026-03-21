@@ -147,7 +147,7 @@ export class PayoutService {
         ? this.normalizePaystackStatus(providerData?.data?.status)
         : this.normalizeStatus(providerData?.data?.data?.status);
 
-    return await this.payoutModel.create({
+    const created = await this.payoutModel.create({
       reference: payloadPayout.reference,
       txRef: payloadPayout.txRef,
       transactionId: payloadPayout.transactionId,
@@ -162,7 +162,10 @@ export class PayoutService {
       narration: this.toAlphanumeric(payloadPayout.narration),
       status,
       raw: providerData,
-    })
+    });
+
+    // Always return a plain JSON object (avoid circular Mongoose internals in downstream raw saves)
+    return created?.toObject?.() ?? created;
   }
 
   /**
@@ -542,7 +545,7 @@ export class PayoutService {
     await this.transactionService.updateTransactionStatus(
       String(transaction._id),
       TStatus.PAYOUTPENDING,
-      saved,
+      saved?.toObject?.() ? saved.toObject() : saved,
     );
     await this.transactionService.updateTransactionTxRef(
       String(transaction._id),
@@ -674,7 +677,7 @@ export class PayoutService {
       .toPromise();
 
     // 5) Save new payout record and update transaction status
-    const saved = await this.createPayout(payloadPayout, res);
+    const saved = await this.createPayout(payloadPayout, res.data);
     await this.transactionService.updateTransactionStatus(
       transactionIdStr,
       TStatus.PAYOUTPENDING,

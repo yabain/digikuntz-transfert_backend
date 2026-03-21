@@ -442,13 +442,13 @@ export class PayinService {
     if (normalized === 'success') return PayinStatus.SUCCESSFUL;
     if (
       normalized === 'pending' ||
-      normalized === 'abandoned' ||
       normalized === 'ongoing' ||
       normalized === 'processing' ||
       normalized === 'queued'
     ) {
       return PayinStatus.PENDING;
     }
+    if (normalized === 'abandoned') return PayinStatus.CANCELLED;
     if (normalized === 'failed') return PayinStatus.FAILED;
     if (normalized === 'cancelled') return PayinStatus.CANCELLED;
     return PayinStatus.PENDING;
