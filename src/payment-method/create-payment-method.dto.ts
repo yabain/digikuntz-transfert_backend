@@ -35,6 +35,14 @@ export class CreatePaymentMethodDto {
   @IsMongoId()
   countryId: string;
 
+  @ApiProperty({ example: 'FW_OM_CM' })
+  @IsMongoId()
+  code: string;
+
+  @ApiProperty({ example: 'XAF' })
+  @IsMongoId()
+  currency: string;
+
   @ApiProperty({
     enum: PaymentMethodProvider,
     example: PaymentMethodProvider.FLUTTERWAVEXAF,

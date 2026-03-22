@@ -61,6 +61,25 @@ export class PaymentMethodService {
     return paymentMethod;
   }
 
+  async findByCountryAndProvider(
+    countryId: string,
+    provider: string,
+  ): Promise<PaymentMethod[]> {
+    return this.paymentMethodModel
+      .find({ countryId, provider })
+      .sort({ name: 1 })
+      .populate('countryId');
+  }
+
+  async findByCountry(
+    countryId: string,
+  ): Promise<PaymentMethod[]> {
+    return this.paymentMethodModel
+      .find({ countryId })
+      .sort({ name: 1 })
+      .populate('countryId');
+  }
+
   async update(id: string, dto: UpdatePaymentMethodDto): Promise<PaymentMethod> {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       throw new NotFoundException('Invalid payment method ID');

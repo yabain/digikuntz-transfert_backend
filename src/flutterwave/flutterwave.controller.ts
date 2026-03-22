@@ -182,8 +182,8 @@ export class FlutterwaveController {
   @ApiParam({ name: 'code', example: 'CM', description: 'Country code' })
   @ApiResponse({ status: 200, description: 'Bank/operator list returned.' })
   @ApiResponse({ status: 401, description: 'Authentication required.' })
-  @UseGuards(AuthGuard('jwt'))
-  @UsePipes(ValidationPipe)
+  // @UseGuards(AuthGuard('jwt'))
+  // @UsePipes(ValidationPipe)
   getBanksList(@Param('code') countryCode: string) {
     return this.fw.getBanksList(countryCode);
   }

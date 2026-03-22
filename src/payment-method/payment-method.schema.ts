@@ -26,6 +26,12 @@ export class PaymentMethod extends Document {
   @Prop({ required: true, trim: true })
   image: string;
 
+  @Prop({ required: true, trim: true })
+  currency: string;
+
+  @Prop({ required: true, trim: true })
+  code: string;
+
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Country', required: true  })
   countryId: Country;
 

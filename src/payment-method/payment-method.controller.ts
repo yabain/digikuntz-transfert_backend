@@ -66,6 +66,14 @@ export class PaymentMethodController {
     return this.paymentMethodService.findById(id);
   }
 
+  @Get('country/:id')
+  @ApiOperation({ summary: 'Get payment method by ID' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiResponse({ status: 200, description: 'Payment method returned.' })
+  async findByCountryId(@Param('id') id: string): Promise<PaymentMethod[]> {
+    return this.paymentMethodService.findByCountry(id);
+  }
+
   @Put(':id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update payment method by ID' })
