@@ -374,24 +374,8 @@ export class FlutterwaveService {
     if (!transaction) {
       throw new NotFoundException('Transaction not found');
     }
-    const isPaystackPayin =
-      String(payin?.provider || '').toLowerCase() === 'paystack';
-
     // console.log('(fw service: verifyPayin) resp payin data: ', payin);
     if (payin.status === 'cancelled') {
-      if (isPaystackPayin || transaction.transactionType === 'paymentRequest') {
-        await this.transactionService.updateTransactionStatus(
-          String(payin.transactionId),
-          this.tStatus.PAYINCLOSED,
-        );
-        if (transaction.transactionType === 'paymentRequest') {
-          await this.paymentRequestService.updatePaymentRequestStatusByTransaction(
-            String(payin.transactionId),
-            PaymentRequestStatus.CANCELED,
-          );
-        }
-        return { message: 'Payin cancelled', status: 'cancelled' };
-      }
       /* Keep the transaction "pending" because the user can
       relaunch new payment attempts on the flutterwave front
       and if the status is no longer in this "pending" state,
@@ -405,20 +389,6 @@ export class FlutterwaveService {
       // return { message: 'Payin cancelled', status: 'cancelled' };
       return { message: 'Payin pending', status: 'pending' };
     } else if (payin.status === 'failed') {
-      if (isPaystackPayin || transaction.transactionType === 'paymentRequest') {
-        await this.transactionService.updateTransactionStatus(
-          String(payin.transactionId),
-          this.tStatus.PAYINERROR,
-          payin?.raw,
-        );
-        if (transaction.transactionType === 'paymentRequest') {
-          await this.paymentRequestService.updatePaymentRequestStatusByTransaction(
-            String(payin.transactionId),
-            PaymentRequestStatus.FAILED,
-          );
-        }
-        return { message: 'Payin failed', status: 'failed' };
-      }
       /* Keep the transaction "pending" because the user can
         relaunch new payment attempts on the flutterwave front
         and if the status is no longer in this "pending" state,

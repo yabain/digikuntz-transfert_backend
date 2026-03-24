@@ -7,6 +7,7 @@ import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
 
 @Injectable()
 export class PayinCron {
+  private PAYIN_CLOSE_MINUTES: number = 300; // 300 Minutes (5hours)
   private readonly logger = new Logger(PayinCron.name);
   constructor(
     private payinService: PayinService,
@@ -20,7 +21,7 @@ export class PayinCron {
     // console.log('(Payin cron) pendings resp : ', pendings);
     for (const p of pendings) {
       try {
-        if (this.payinService.hasExpiredInMinutes(p.createdAt, 480)) {
+        if (this.payinService.hasExpiredInMinutes(p.createdAt, this.PAYIN_CLOSE_MINUTES)) {
           // console.log('(Payin cron) verifying after 480 minutes txRef: ', p.txRef);
           await this.fw.verifyAndClosePayin(p.txRef);
         } else {

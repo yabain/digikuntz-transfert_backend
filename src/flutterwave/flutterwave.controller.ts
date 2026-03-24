@@ -182,8 +182,8 @@ export class FlutterwaveController {
   @ApiParam({ name: 'code', example: 'CM', description: 'Country code' })
   @ApiResponse({ status: 200, description: 'Bank/operator list returned.' })
   @ApiResponse({ status: 401, description: 'Authentication required.' })
-  // @UseGuards(AuthGuard('jwt'))
-  // @UsePipes(ValidationPipe)
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
   getBanksList(@Param('code') countryCode: string) {
     return this.fw.getBanksList(countryCode);
   }
@@ -255,12 +255,12 @@ export class FlutterwaveController {
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'perPage', required: false, type: Number, example: 20 })
   @ApiResponse({ status: 200, description: 'Payment plans returned.' })
-  // @UseGuards(AuthGuard('jwt'))
-  // @UsePipes(ValidationPipe)
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
   listPaymentPlans(@Query() query: ExpressQuery, @Req() req) {
-    // if (!req.user.isAdmin) {
-    //   throw new NotFoundException('Unauthorised');
-    // }
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unauthorised');
+    }
     // Supports optional pagination params: page, perPage
     return this.fw.getPaymentPlans({
       page: query?.page as any,
@@ -284,13 +284,13 @@ export class FlutterwaveController {
   })
   @ApiResponse({ status: 201, description: 'Payment plan created.' })
   @ApiResponse({ status: 400, description: 'Invalid plan payload.' })
-  // @UseGuards(AuthGuard('jwt'))
-  // @UsePipes(ValidationPipe)
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
   createPaymentPlan(@Body() planPayload: any, @Req() req) {
     console.log('Payload', planPayload);
-    // if (!req.user.isAdmin) {
-    //   throw new NotFoundException('Unauthorised');
-    // }
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unauthorised');
+    }
     return this.fw.createPaymentPlan(planPayload);
   }
 
@@ -321,12 +321,12 @@ export class FlutterwaveController {
   })
   @ApiResponse({ status: 201, description: 'Virtual card created.' })
   @ApiResponse({ status: 400, description: 'Invalid card payload.' })
-  // @UseGuards(AuthGuard('jwt'))
-  // @UsePipes(ValidationPipe)
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
   createVirtualCard(@Body() cardPayload: Record<string, any>, @Req() req, @Param('countryWallet') countryWallet) {
-    // if (!req.user.isAdmin) {
-    //   throw new NotFoundException('Unauthorised');
-    // }
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unauthorised');
+    }
     return this.fw.createVirtualCard(countryWallet, cardPayload);
   }
 
@@ -334,12 +334,12 @@ export class FlutterwaveController {
   @ApiOperation({ summary: 'Get virtual cards list by wallet country' })
   @ApiParam({ name: 'countryWallet', example: 'NG' })
   @ApiResponse({ status: 200, description: 'Virtual cards list returned.' })
-  // @UseGuards(AuthGuard('jwt'))
-  // @UsePipes(ValidationPipe)
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
   getVirtualCardsList(@Req() req, @Param('countryWallet') countryWallet) {
-    // if (!req.user.isAdmin) {
-    //   throw new NotFoundException('Unauthorised');
-    // }
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unauthorised');
+    }
     return this.fw.getVirtualCards(countryWallet);
   }
 

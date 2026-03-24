@@ -505,7 +505,7 @@ export class PayinService {
     };
   }
 
-  private async verifyPaystackByReference(reference: string) {
+  private async verifyPaystackByReference(reference: string, closeMode = false) {
     // console.log('Reference Paystack verification: ', reference);
     const verifyResp = await this.paystackService.verifyTransaction(reference);
     // console.log('verifyPaystack By Reference raw: ', verifyResp);
@@ -513,11 +513,16 @@ export class PayinService {
     const providerStatus = verifyResp?.data?.status;
     const status = this.mapPaystackStatusToLocal(providerStatus);
 
+    const nextStatus =
+      status === PayinStatus.SUCCESSFUL || closeMode
+        ? status
+        : PayinStatus.PENDING;
+
     const updated = await this.payinModel
       .findOneAndUpdate(
         { txRef: reference },
         {
-          status,
+          status: nextStatus,
           provider: PayinProvider.PAYSTACK,
           raw: verifyResp,
         },
@@ -717,7 +722,7 @@ export class PayinService {
       .exec();
 
     if (localAnyRef?.provider === PayinProvider.PAYSTACK) {
-      return this.verifyPaystackByReference(String(localAnyRef.txRef));
+      return this.verifyPaystackByReference(String(localAnyRef.txRef), saveLocal);
     }
 
     // console.log('verifyPayin: idOrTxRef', idOrTxRef);
@@ -756,14 +761,18 @@ export class PayinService {
         return this.handleVerifyPayin(idOrTxRef, saveLocal);
       }
 
-      // Mise à jour générique locale -> FAILED (si existe)
-      await this.payinModel
-        .findOneAndUpdate(
-          { txRef: idOrTxRef },
-          { status: PayinStatus.FAILED, error: fwData ?? message },
-          { new: true },
-        )
-        .exec();
+      if (saveLocal) {
+        // On ne marque en failed qu'en mode close; sinon on laisse pending.
+        await this.payinModel
+          .findOneAndUpdate(
+            { txRef: idOrTxRef },
+            { status: PayinStatus.FAILED, error: fwData ?? message },
+            { new: true },
+          )
+          .exec();
+      } else {
+        return this.handleVerifyPayin(idOrTxRef, false);
+      }
 
       throw new HttpException({ message }, HttpStatus.BAD_GATEWAY);
     }
