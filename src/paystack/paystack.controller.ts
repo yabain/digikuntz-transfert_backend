@@ -49,6 +49,8 @@ export class PaystackController {
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
   @ApiQuery({ name: 'status', required: false, type: String, example: 'success' })
+  @ApiQuery({ name: 'currency', required: false, type: String, example: 'KES' })
+  @ApiQuery({ name: 'reference', required: false, type: String, example: 'txPayin-1773009446520-a49201e1' })
   @ApiQuery({ name: 'from', required: false, type: String, example: '2026-03-01' })
   @ApiQuery({ name: 'to', required: false, type: String, example: '2026-03-31' })
   @ApiResponse({ status: 200, description: 'Payin transactions returned.' })

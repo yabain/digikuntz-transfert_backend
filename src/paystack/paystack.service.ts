@@ -260,8 +260,8 @@ export class PaystackService {
     const params: Record<string, any> = {
       page,
       perPage: limit,
-      currency: 'KES',
     };
+    if (query?.currency) params.currency = query.currency;
     if (query?.status) params.status = query.status;
     if (query?.from) params.from = query.from;
     if (query?.to) params.to = query.to;
@@ -274,8 +274,24 @@ export class PaystackService {
     );
 
     const items = Array.isArray(res?.data?.data) ? res.data.data : [];
+    let normalized = this.sortByCreatedAtDesc(items);
+
+    // Optional exact-reference lookup to avoid missing a just-initiated transaction in list pages.
+    if (query?.reference) {
+      try {
+        const byReference = await this.verifyTransaction(String(query.reference));
+        const tx = byReference?.data;
+        if (tx?.reference) {
+          const exists = normalized.some((item: any) => item?.reference === tx.reference);
+          if (!exists) normalized = this.sortByCreatedAtDesc([tx, ...normalized]);
+        }
+      } catch (_) {
+        // Keep normal list response if exact lookup fails.
+      }
+    }
+
     return {
-      data: this.sortByCreatedAtDesc(items),
+      data: normalized,
       pagination: {
         page,
         limit,
