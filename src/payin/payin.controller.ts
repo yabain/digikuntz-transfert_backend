@@ -124,6 +124,19 @@ export class PayinController {
     this.logger.log(
       `[M-Pesa callback] received payload keys=${Object.keys(payload || {}).join(',')}`,
     );
+
+    // Safaricom expects a fast HTTP 200 acknowledgment.
+    // Process callback asynchronously to avoid retries/timeouts.
+    void this.processMpesaCallbackAsync(payload, txRef);
+
+    return {
+      ResultCode: 0,
+      ResultDesc: 'Accepted',
+      statusCode: HttpStatus.OK,
+    };
+  }
+
+  private async processMpesaCallbackAsync(payload: any, txRef?: string) {
     const callbackResult = await this.payinService.handleMpesaStkCallback(
       payload,
       txRef,
@@ -138,13 +151,7 @@ export class PayinController {
         cb?.ResultDesc || '',
       )}" localStatus=${String(callbackResult?.status || 'n/a')}`,
     );
-    if (!callbackResult?.accepted || !callbackResult?.txRef) {
-      return {
-        ResultCode: 0,
-        ResultDesc: 'Accepted',
-        callbackResult,
-      };
-    }
+    if (!callbackResult?.accepted || !callbackResult?.txRef) return;
 
     try {
       if (callbackResult.status === 'successful') {
@@ -163,14 +170,5 @@ export class PayinController {
         error?.message || error,
       );
     }
-
-    // Safaricom expects HTTP 200 to acknowledge callback reception.
-    return {
-      ResultCode: 0,
-      ResultDesc: 'Accepted',
-      statusCode: HttpStatus.OK,
-      txRef: callbackResult.txRef,
-      payinStatus: callbackResult.status,
-    };
   }
 }

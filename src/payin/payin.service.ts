@@ -350,6 +350,11 @@ export class PayinService {
     );
     const resData = res.data;
 
+    const checkoutRequestId =
+      resData?.CheckoutRequestID || resData?.data?.CheckoutRequestID || '';
+    const merchantRequestId =
+      resData?.MerchantRequestID || resData?.data?.MerchantRequestID || '';
+
     await this.payinModel.create({
       userId: dto.userId,
       transactionId: dto.transactionId,
@@ -408,6 +413,11 @@ export class PayinService {
       callbackUrl: this.buildMpesaCallbackUrlWithTxRef(dto.txRef),
     });
 
+    const checkoutRequestId =
+      resData?.CheckoutRequestID || resData?.data?.CheckoutRequestID || '';
+    const merchantRequestId =
+      resData?.MerchantRequestID || resData?.data?.MerchantRequestID || '';
+
     await this.payinModel.create({
       userId: dto.userId,
       transactionId: dto.transactionId,
@@ -419,7 +429,11 @@ export class PayinService {
       channel: 'mobile_money',
       status: PayinStatus.PENDING,
       provider: PayinProvider.MPESA,
-      raw: resData,
+      raw: {
+        ...resData,
+        checkoutRequestId,
+        merchantRequestId,
+      },
     });
 
     return {
@@ -480,6 +494,11 @@ export class PayinService {
       raw: resData,
     }, null, 2));
 
+    const checkoutRequestId =
+      resData?.CheckoutRequestID || resData?.data?.CheckoutRequestID || '';
+    const merchantRequestId =
+      resData?.MerchantRequestID || resData?.data?.MerchantRequestID || '';
+
     const payin = await this.payinModel.create({
       userId: dto.userId,
       transactionId: dto.transactionId,
@@ -491,7 +510,11 @@ export class PayinService {
       channel: 'mobile_money',
       status: PayinStatus.PENDING,
       provider: PayinProvider.MPESA,
-      raw: resData,
+      raw: {
+        ...resData,
+        checkoutRequestId,
+        merchantRequestId,
+      },
     });
 
     console.log('payin resp: ', payin);
@@ -518,6 +541,7 @@ export class PayinService {
       );
     }
     const checkoutRequestId =
+      local?.raw?.checkoutRequestId ||
       local?.raw?.CheckoutRequestID ||
       local?.raw?.data?.CheckoutRequestID ||
       local?.raw?.Body?.stkCallback?.CheckoutRequestID;
@@ -890,6 +914,7 @@ export class PayinService {
       payin = await this.payinModel
         .findOne({
           $or: [
+            { 'raw.checkoutRequestId': checkoutRequestId },
             { 'raw.CheckoutRequestID': checkoutRequestId },
             { 'raw.data.CheckoutRequestID': checkoutRequestId },
             { 'raw.Body.stkCallback.CheckoutRequestID': checkoutRequestId },
@@ -903,10 +928,10 @@ export class PayinService {
       payin = await this.payinModel
         .findOne({
           $or: [
+            { 'raw.merchantRequestId': merchantRequestId },
             { 'raw.MerchantRequestID': merchantRequestId },
             { 'raw.data.MerchantRequestID': merchantRequestId },
             { 'raw.Body.stkCallback.MerchantRequestID': merchantRequestId },
-            { 'raw.merchantRequestId': merchantRequestId },
           ],
         })
         .lean()
