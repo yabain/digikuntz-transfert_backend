@@ -113,6 +113,22 @@ export class MpesaService {
     );
   }
 
+  private formatAccountReference(reference: string): string {
+    const normalized = String(reference || '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+    if (!normalized) return 'DIGIKUNTZ';
+    return normalized.slice(0, 12);
+  }
+
+  private formatTransactionDesc(desc?: string): string {
+    const normalized = String(desc || 'Payment')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!normalized) return 'Payment';
+    return normalized.slice(0, 13);
+  }
+
   private async getAccessToken(): Promise<string> {
     this.ensureCoreConfig();
     const now = Date.now();
@@ -199,11 +215,20 @@ export class MpesaService {
       PartyB: this.stkPartyB,
       PhoneNumber: payload.phone,
       CallBackURL: callback,
-      AccountReference: payload.reference,
-      TransactionDesc: payload.description || 'Payment',
+      AccountReference: this.formatAccountReference(payload.reference),
+      TransactionDesc: this.formatTransactionDesc(payload.description),
     };
 
-    return this.post('/mpesa/stkpush/v1/processrequest', body);
+    this.logger.log(
+      `STK push request: phone=${payload.phone}, amount=${Math.round(
+        Number(payload.amount),
+      )}, type=${this.stkTransactionType}, partyB=${this.stkPartyB}, callback=${callback}`,
+    );
+    const response = await this.post('/mpesa/stkpush/v1/processrequest', body);
+    this.logger.log(
+      `STK push accepted: checkoutRequestId=${response?.CheckoutRequestID || response?.data?.CheckoutRequestID || ''}, responseCode=${response?.ResponseCode || response?.data?.ResponseCode || ''}`,
+    );
+    return response;
   }
 
   async queryStkStatus(checkoutRequestId: string) {

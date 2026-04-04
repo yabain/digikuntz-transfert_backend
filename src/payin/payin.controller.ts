@@ -120,6 +120,9 @@ export class PayinController {
   @ApiProduces('application/json')
   @ApiResponse({ status: 200, description: 'Callback accepted and processed.' })
   async mpesaCallback(@Body() payload: any) {
+    this.logger.log(
+      `[M-Pesa callback] received payload keys=${Object.keys(payload || {}).join(',')}`,
+    );
     const callbackResult = await this.payinService.handleMpesaStkCallback(payload);
     if (!callbackResult?.accepted || !callbackResult?.txRef) {
       return {
