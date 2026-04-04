@@ -290,7 +290,7 @@ export class MpesaService {
     );
     if (resultCode === 0) return 'successful';
     if (resultCode === 1032) return 'cancelled';
-    if ([1, 2001, 1019, 1037, 1025].includes(resultCode)) return 'failed';
+    if (Number.isFinite(resultCode) && resultCode > 0) return 'failed';
     return 'pending';
   }
 }
