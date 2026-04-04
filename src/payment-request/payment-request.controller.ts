@@ -53,7 +53,7 @@ export class PaymentRequestController {
   @ApiBearerAuth()
   @ApiOperation({
     summary:
-      'Create a mobile money payment request for current user (XAF/NGN via Flutterwave, KES via Paystack)',
+      'Create a mobile money payment request for current user (XAF/NGN via Flutterwave, KES via M-Pesa)',
   })
   @ApiBody({ type: CreatePaymentRequestDto })
   @ApiResponse({

@@ -18,6 +18,9 @@ export class User extends Document {
   @Prop()
   resetPasswordToken: string;
 
+  @Prop({ type: Date, default: null })
+  resetPasswordTokenExpiresAt: Date | null;
+
   @Prop()
   accountType: UserType;
 

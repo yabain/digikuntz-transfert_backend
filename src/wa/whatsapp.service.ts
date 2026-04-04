@@ -4,11 +4,15 @@
 /* eslint-disable @typescript-eslint/no-misused-promises */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import { Injectable, Logger, OnModuleInit, Inject, forwardRef } from '@nestjs/common';
-import { Client, LocalAuth, MessageMedia } from 'whatsapp-web.js';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as QR from 'qrcode';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  Inject,
+  forwardRef,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import { EmailService } from 'src/email/email.service';
 import { ConfigService } from '@nestjs/config';
 import { User } from 'src/user/user.schema';
@@ -16,51 +20,40 @@ import mongoose from 'mongoose';
 import { InjectModel } from '@nestjs/mongoose';
 import { UserService } from 'src/user/user.service';
 import { PlansService } from 'src/plans/plans.service';
+import { HttpService } from '@nestjs/axios';
+import { firstValueFrom } from 'rxjs';
 
-type ConnState =
-  | 'NO_CLIENT'
-  | 'INITIALIZING'
-  | 'CONNECTED'
-  | 'UNPAIRED'
-  | 'TIMEOUT'
-  | 'UNKNOWN';
+type ConnState = 'CONNECTED' | 'DISABLED' | 'MISCONFIGURED' | 'UNKNOWN';
 
 @Injectable()
 export class WhatsappService implements OnModuleInit {
   private readonly logger = new Logger(WhatsappService.name);
-  private readonly bootRetryDelayMs = 15000;
-
-  private client: Client | null = null;
-  private ready = false;
-  private sendOnStart: boolean = false;
-
-  // mémoire: dernier QR + statut
-  private lastQr: string | null = null;
-  private lastState: ConnState = 'NO_CLIENT';
+  private lastState: ConnState = 'UNKNOWN';
+  private sendOnStart = false;
   private frontUrl = '';
   private alertEmail = 'flambel55@gmail.com,f.sanou@yaba-in.com';
   private alertPhoneNumber = '691224472';
   private alertCountryCode = '237';
   private currentFailNumber = 0;
-  private readonly maxFailNumber = 6; // ★ alerte après 6 échecs (comme demandé)
-
-  // chemins de session
-  private readonly authDataPath = '.wwebjs_session';
-  private readonly clientId = 'default';
-  private booting = false;
-  private reinitializing = false;
+  private readonly maxFailNumber = 6;
+  private metaEnabled = true;
+  private metaApiVersion = 'v22.0';
+  private metaPhoneNumberId = '';
+  private metaAccessToken = '';
+  private metaUseTemplates = true;
+  private startupTemplateTestEnabled = false;
+  private startupTemplateTestName = 'dk_whatsapp_on';
+  private startupTemplateTestLang = 'en';
 
   onModuleInit() {
-    // Non-blocking startup: do not block Nest bootstrap on WhatsApp init.
-    setImmediate(() => {
-      void this.bootInBackground();
-    });
+    setImmediate(() => void this.bootstrapMeta());
   }
 
   constructor(
     @InjectModel(User.name) private userModel: mongoose.Model<User>,
     private config: ConfigService,
     private email: EmailService,
+    private readonly http: HttpService,
     private userService: UserService,
     @Inject(forwardRef(() => PlansService))
     private planService: PlansService,
@@ -72,401 +65,424 @@ export class WhatsappService implements OnModuleInit {
       this.config.get<string>('ALERT_PHONE') || this.alertPhoneNumber;
     this.alertCountryCode =
       this.config.get<string>('ALERT_COUNTRY_CODE') || this.alertCountryCode;
+    this.metaEnabled =
+      String(this.config.get<string>('WHATSAPP_META_ENABLED') || 'true') !==
+      'false';
+    this.metaApiVersion =
+      this.config.get<string>('WHATSAPP_META_API_VERSION') || 'v22.0';
+    this.metaPhoneNumberId =
+      this.config.get<string>('WHATSAPP_META_PHONE_NUMBER_ID') || '';
+    this.metaAccessToken =
+      this.config.get<string>('WHATSAPP_META_ACCESS_TOKEN') || '';
+    this.metaUseTemplates =
+      String(this.config.get<string>('WHATSAPP_META_USE_TEMPLATES') || 'true') !==
+      'false';
+    this.startupTemplateTestEnabled =
+      String(
+        this.config.get<string>('NODE_ENV') === 'development' ? 'false': 'true',
+      ) !== 'false';
+    this.startupTemplateTestName =
+      this.config.get<string>('WHATSAPP_STARTUP_TEMPLATE_TEST_NAME') ||
+      this.startupTemplateTestName;
+    this.startupTemplateTestLang =
+      this.config.get<string>('WHATSAPP_STARTUP_TEMPLATE_TEST_LANG') ||
+      this.startupTemplateTestLang;
   }
 
-  /** Détecte s'il existe une session LocalAuth sur disque */
-  private hasPreviousSession(): boolean {
-    try {
-      // Structure LocalAuth : <dataPath>/session-<clientId> (ou similaire selon versions).
-      // On checke plusieurs patterns par précaution.
-      const candidates = [
-        path.join(this.authDataPath, `session-${this.clientId}`),
-        path.join(this.authDataPath, `Session-${this.clientId}`),
-        path.join(this.authDataPath, this.clientId),
-        this.authDataPath,
-      ];
-      return candidates.some(
-        (p) => fs.existsSync(p) && fs.readdirSync(p).length > 0,
-      );
-    } catch {
-      return false;
+  private async bootstrapMeta() {
+    if (!this.metaEnabled) {
+      this.lastState = 'DISABLED';
+      this.logger.warn('WhatsApp Meta integration is disabled');
+      return;
     }
-  }
-
-  /** Boot du client wwebjs avec LocalAuth (session persistée) */
-  private async boot() {
-    if (this.client || this.booting) return; // idempotent
-    this.booting = true;
-    this.lastState = 'INITIALIZING';
-
-    try {
-      const chromePath =
-        process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)
-          ? process.env.CHROME_PATH
-          : undefined;
-
-      const hadPrevSession = this.hasPreviousSession(); // ★
-
-      this.client = new Client({
-        authStrategy: new LocalAuth({
-          dataPath: this.authDataPath,
-          clientId: this.clientId,
-        }),
-        webVersionCache: {
-          type: 'local',
-        },
-        puppeteer: {
-          headless: true,
-          args:
-            process.platform === 'linux'
-              ? [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-              ]
-              : [],
-          executablePath: chromePath,
-        },
-        restartOnAuthFail: true,
-      });
-
-      // ---- Events
-      this.client.on('qr', (qr) => {
-        this.logger.log('QR reçu — scanne-le dans WhatsApp > Appareils liés');
-        this.lastQr = qr;
-        this.ready = false;
-        this.lastState = 'INITIALIZING';
-
-        // ★ Au démarrage SANS session, on notifie qu'une (re)connexion est requise.
-        if (!this.sendOnStart) {
-          void this.sendConnexionFailureAlert();
-          this.sendOnStart = true;
-        }
-      });
-
-      this.client.on('authenticated', () => {
-        this.logger.log('Authentifié');
-        this.lastQr = null;
-      });
-
-      this.client.on('ready', () => {
-        this.logger.log('Client prêt');
-        this.ready = true;
-        this.lastState = 'CONNECTED';
-        this.lastQr = null;
-
-        // ★ Service opérationnel => mail de succès
-        void this.sendMailWatsappserviceReady();
-        // reset compteur d'échecs d’envoi
-        this.currentFailNumber = 0;
-      });
-
-      this.client.on('change_state', (state) => {
-        this.logger.warn(`État WhatsApp: ${state}`);
-        this.lastState = (state as ConnState) ?? 'UNKNOWN';
-      });
-
-      this.client.on('auth_failure', (msg) => {
-        this.logger.error(`Échec auth: ${msg}`);
-        this.ready = false;
-        this.lastState = 'UNKNOWN';
-        this.lastQr = null;
-
-        // ★ Alerte échec d’authentification
-        void this.sendConnexionFailureAlert();
-      });
-
-      this.client.on('disconnected', (reason) => {
-        this.logger.warn(`Déconnecté: ${reason}`);
-        this.ready = false;
-        this.lastState = 'UNKNOWN';
-        this.lastQr = null;
-
-        // ★ Alerte déconnexion
-        void this.sendConnexionFailureAlert();
-
-        // relance douce
-        setTimeout(() => this.reinitialize().catch(() => { }), 1500);
-      });
-
-      if (!hadPrevSession && !this.sendOnStart) {
-        // ★ Dès le boot, s'il n'y a pas de session, on prévient immédiatement
-        // (utile si on n’attend pas l’event 'qr' pour informer).
-        void this.sendConnexionFailureAlert();
-        this.sendOnStart = true;
-      }
-
-      await this.client.initialize();
-    } finally {
-      this.booting = false;
-    }
-  }
-
-  private async bootInBackground() {
-    try {
-      await this.boot();
-    } catch (error: any) {
-      const errorMessage = error?.message ?? String(error);
+    if (!this.metaPhoneNumberId || !this.metaAccessToken) {
+      this.lastState = 'MISCONFIGURED';
       this.logger.error(
-        `WhatsApp background init failed: ${errorMessage}. Retrying in ${this.bootRetryDelayMs / 1000}s...`,
+        'WhatsApp Meta is misconfigured: missing WHATSAPP_META_PHONE_NUMBER_ID or WHATSAPP_META_ACCESS_TOKEN',
       );
-      this.ready = false;
-      this.lastState = 'TIMEOUT';
-
-      try {
-        await this.client?.destroy();
-      } catch {
-        this.logger.warn('Failed to destroy client after background init error');
-      } finally {
-        this.client = null;
+      if (!this.sendOnStart) {
+        this.sendOnStart = true;
+        await this.sendConnexionFailureAlert();
       }
-
-      setTimeout(() => {
-        void this.bootInBackground();
-      }, this.bootRetryDelayMs);
+      return;
     }
+    this.lastState = 'CONNECTED';
+    await this.sendMailWatsappserviceReady();
+    // await this.runStartupTemplateTest();
   }
 
-  private async reinitialize() {
-    if (this.reinitializing) return;
-    this.reinitializing = true;
-    try {
-      await this.client?.destroy();
-    } catch {
-      this.logger.warn('Failed to destroy client');
-    }
-    this.client = null;
-    try {
-      await this.boot();
-    } finally {
-      this.reinitializing = false;
-    }
-  }
-
-  /** ---- Public API (utilisées par le Controller) ---- */
-
-  /** Renvoie le dernier QR (brut + dataURL PNG) */
+  /** Not used in Meta mode; preserved for backward compatibility */
   async getQr(): Promise<{ qr: string | null; pngDataUrl?: string }> {
-    if (!this.lastQr) return { qr: null };
-    const pngDataUrl = await QR.toDataURL(this.lastQr);
-    return { qr: this.lastQr, pngDataUrl };
+    return { qr: null };
   }
 
-  /** Statut courant */
+  /** Status in Meta mode */
   async getStatus(): Promise<{ status: boolean; state: ConnState }> {
-    if (!this.client) return { status: false, state: 'NO_CLIENT' };
-    try {
-      const state = await (this.client as any).getState?.();
-      const norm: ConnState = (state as ConnState) ?? 'UNKNOWN';
-      this.lastState = norm;
-      return { status: this.ready, state: norm };
-    } catch {
-      return { status: this.ready, state: this.lastState };
-    }
+    const ok = this.metaEnabled && !!this.metaPhoneNumberId && !!this.metaAccessToken;
+    return { status: ok, state: ok ? 'CONNECTED' : this.lastState };
   }
 
-  /** Envoi d'un message texte */
+  /** Send plain text via WhatsApp Cloud API */
   async sendText(to: string, message: string, countryCode?: string) {
-    
-    this.assertClient();
-
     try {
-      await this.ensureInjectionReady();
-    } catch (e: any) {
-      const errorMessage = e?.message ?? String(e);
-      this.logger.error(`Failed to ensure injection ready: ${errorMessage}`);
-      this.currentFailNumber++;
-      await this.checkForMassFailure();
-      return {
-        success: false,
-        error: errorMessage.includes('Session closed')
-          ? 'WhatsApp session closed. Please wait for reconnection or check service status.'
-          : 'WhatsApp service not ready. Please try again later.'
-      };
-    }
-
-    try {
-      const phone = this.formatPhone(to, countryCode);
-      console.log('formatted phone: ', phone);
-      const wid = await this.client!.getNumberId(phone); // null si non WhatsApp
-      if (!wid?._serialized) {
-        // ★ échec logique d'envoi -> incrément + check
-        this.currentFailNumber++;
-        await this.checkForMassFailure();
-        return { success: false, error: 'Recipient is not on WhatsApp' };
-      }
-
-      await this.client!.sendMessage(wid._serialized, message);
-      // ★ succès -> reset compteur
+      await this.sendMetaPayload({
+        ...this.buildMetaEnvelope(to, countryCode, 'text'),
+        type: 'text',
+        text: {
+          preview_url: false,
+          body: message,
+        },
+      });
       this.currentFailNumber = 0;
       return { success: true };
     } catch (e: any) {
-      // ★ échec technique -> incrément + check
       const errorMessage = e?.message ?? String(e);
       this.logger.error(`Failed to send message: ${errorMessage}`);
       this.currentFailNumber++;
       await this.checkForMassFailure();
-
-      // Détecter si c'est une erreur de session fermée
-      if (
-        errorMessage.includes('Session closed') ||
-        errorMessage.includes('Protocol error') ||
-        errorMessage.includes('Target closed')
-      ) {
-        this.ready = false;
-        this.lastState = 'UNKNOWN';
-        // Tenter de réinitialiser en arrière-plan
-        void this.reinitialize().catch(() => { });
-        return {
-          success: false,
-          error: 'WhatsApp session closed. Reinitializing... Please try again in a few moments.'
-        };
-      }
-
       return { success: false, error: errorMessage || 'Send failed' };
     }
   }
 
-  /** Envoi d'un média (via URL) + légende optionnelle */
+  private async runStartupTemplateTest() {
+
+    this.logger.log('[WA Startup Test] Step 1/6: preparing test context');
+    const lang = this.resolveTemplateLang(this.startupTemplateTestLang);
+    const admins = await this.getAdminRecipients();
+    const recipients = admins.filter((admin) => this.getUserPhone(admin));
+    const candidates = Array.from(
+      new Set(
+        [
+      this.startupTemplateTestName,
+      'dk_whatsapp_on',
+        ].filter(Boolean),
+      ),
+    );
+
+    if (!recipients.length) {
+      this.logger.warn('[WA Startup Test] No admin recipient found, skipping startup template send');
+      return;
+    }
+
+    this.logger.log(
+      `[WA Startup Test] Step 2/6: targets=${recipients.length} admin(s), templates=${candidates.join(', ')}, language=${lang}`,
+    );
+
+    for (const recipient of recipients) {
+      const to = this.getUserPhone(recipient);
+      const countryCode = this.getUserCountryCode(recipient);
+      const recipientLang = this.getUserLanguage(recipient) || lang;
+      let sent = false;
+      for (const name of candidates) {
+        try {
+          this.logger.log(
+            `[WA Startup Test] Step 3/6: sending template "${name}" to admin "${to}"`,
+          );
+          await this.sendMetaTemplateMessage(
+            to,
+            countryCode,
+            name,
+            recipientLang,
+          );
+          this.logger.log(
+            `[WA Startup Test] Step 4/6: template "${name}" accepted by Meta for admin "${to}"`,
+          );
+          sent = true;
+          break;
+        } catch (error: any) {
+          const details =
+            typeof error?.getResponse === 'function'
+              ? error.getResponse()
+              : error?.response?.data || error;
+          this.logger.warn(
+            `[WA Startup Test] template "${name}" failed for admin "${to}": ${JSON.stringify(details)}`,
+          );
+        }
+      }
+      if (!sent) {
+        this.logger.error(
+          `[WA Startup Test] All template candidates failed for admin "${to}"`,
+        );
+      }
+    }
+
+    this.logger.log('[WA Startup Test] Step 5/6: startup test completed');
+    this.logger.log('[WA Startup Test] Step 6/6: done');
+  }
+
+  async sendPasswordResetMessage(user: any, token: string) {
+    console.log('In sendPasswordResetMessage');
+    console.log(
+      'Sending reset password message to: ',
+      user?.whatsapp || user?.phone,
+      ' with token: ',
+      token,
+    );
+    if (!user) return;
+    const countryCode = user.countryId?.code || user.countryId;
+    const tokenString = String(token || '');
+    const resetToken = tokenString.includes('/')
+      ? tokenString.split('/').pop() || tokenString
+      : tokenString;
+    const resetUrl = `${this.frontUrl}/auth/new-password/${resetToken}`;
+    if (this.metaUseTemplates) {
+      try {
+        const lang = this.resolveTemplateLang(user.language);
+        const templateName = 'dk_reset_password';
+        console.log(
+          `Sending ${templateName} to ${user.whatsapp || user.phone} with userName: ${this.showName(user)} and token: `,
+          resetToken,
+        );
+        await this.sendMetaTemplateMessage(
+          user.whatsapp || user.phone,
+          countryCode,
+          templateName,
+          lang,
+          [this.showName(user)],
+          resetToken,
+        );
+        return { success: true };
+      } catch (error) {
+        const details =
+          typeof error?.getResponse === 'function'
+            ? error.getResponse()
+            : error?.response?.data || error;
+        this.logger.warn(
+          `Template send failed (password reset), fallback text: ${JSON.stringify(details)}`,
+        );
+      }
+    }
+    const message =
+      user.language === 'fr'
+        ? `*Réinitialisation de mot de passe*\n\nHello ${this.showName(user)},\nVeuillez réinitialiser votre mot de passe via ce lien:\n${resetUrl}\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
+        : `*Password reset*\n\nHello ${this.showName(user)},\nPlease reset your password using this link:\n${resetUrl}\n\n> This is an automatic message from digiKUNTZ Payments.`;
+    return await this.sendText(user.whatsapp || user.phone, message, countryCode);
+  }
+
+  async sendWelcomeMessage(user: any, countryCode: string) {
+    if (this.metaUseTemplates) {
+      try {
+        const lang = this.resolveTemplateLang(user?.language);
+        await this.sendMetaTemplateMessage(
+          user.phone,
+          countryCode,
+          `dk_welcome_account_creation`,
+          lang,
+          [this.showName(user)],
+        );
+        return { success: true };
+      } catch (error) {
+        this.logger.warn(`Template send failed (welcome), fallback text: ${error?.message ?? error}`);
+      }
+    }
+  }
+
+
+
+
+  /** ---- Public API (utilisées par le Controller) ---- */
+
+
+  /** Send media (image URL) via WhatsApp Cloud API */
   async sendMediaUrl(
     to: string,
     fileUrl: string,
     caption?: string,
     countryCode?: string,
   ) {
-    this.assertClient();
-
     try {
-      await this.ensureInjectionReady();
-    } catch (e: any) {
-      const errorMessage = e?.message ?? String(e);
-      this.logger.error(`Failed to ensure injection ready: ${errorMessage}`);
-      this.currentFailNumber++;
-      await this.checkForMassFailure();
-      return {
-        success: false,
-        error: errorMessage.includes('Session closed')
-          ? 'WhatsApp session closed. Please wait for reconnection or check service status.'
-          : 'WhatsApp service not ready. Please try again later.'
-      };
-    }
-
-    try {
-      const phone = this.formatPhone(to, countryCode);
-      const wid = await this.client!.getNumberId(phone);
-      if (!wid?._serialized) {
-        // ★ échec logique d'envoi -> incrément + check
-        this.currentFailNumber++;
-        await this.checkForMassFailure();
-        return { success: false, error: 'Recipient is not on WhatsApp' };
-      }
-
-      const media = await MessageMedia.fromUrl(fileUrl);
-      await this.client!.sendMessage(wid._serialized, media, { caption });
-
-      // ★ succès -> reset compteur
+      await this.sendMetaPayload({
+        ...this.buildMetaEnvelope(to, countryCode, 'image'),
+        type: 'image',
+        image: {
+          link: fileUrl,
+          caption: caption || '',
+        },
+      });
       this.currentFailNumber = 0;
       return { success: true };
     } catch (e: any) {
-      // ★ échec technique -> incrément + check
       const errorMessage = e?.message ?? String(e);
       this.logger.error(`Failed to send media: ${errorMessage}`);
       this.currentFailNumber++;
       await this.checkForMassFailure();
-
-      // Détecter si c'est une erreur de session fermée
-      if (
-        errorMessage.includes('Session closed') ||
-        errorMessage.includes('Protocol error') ||
-        errorMessage.includes('Target closed')
-      ) {
-        this.ready = false;
-        this.lastState = 'UNKNOWN';
-        // Tenter de réinitialiser en arrière-plan
-        void this.reinitialize().catch(() => { });
-        return {
-          success: false,
-          error: 'WhatsApp session closed. Reinitializing... Please try again in a few moments.'
-        };
-      }
-
       return { success: false, error: errorMessage || 'Send failed' };
     }
   }
 
-  // ---------- Helpers ----------
-  private assertClient() {
-    if (!this.client) throw new Error('Client not initialized');
-    if (!this.ready)
-      this.logger.warn('Client not ready yet, tentative d’envoi…');
+  async sendTemplate(
+    to: string,
+    templateName: string,
+    language: string,
+    bodyParams: string[] = [],
+    buttonUrlParam?: string,
+    countryCode?: string,
+  ) {
+    try {
+      await this.sendMetaTemplateMessage(
+        to,
+        countryCode,
+        templateName,
+        language,
+        bodyParams,
+        buttonUrlParam,
+      );
+      this.currentFailNumber = 0;
+      return { success: true };
+    } catch (e: any) {
+      const errorMessage = e?.message ?? String(e);
+      this.logger.error(`Failed to send template: ${errorMessage}`);
+      this.logger.error(`Raw: ${e}`);
+      this.currentFailNumber++;
+      await this.checkForMassFailure();
+      return { success: false, error: errorMessage || 'Send failed' };
+    }
   }
 
-  /** ping d'injection: échoue tant que l'injection n'est pas prête */
-  private async ensureInjectionReady(timeoutMs = 60_000) {
-    if (!this.client) throw new Error('Client not initialized');
-    const start = Date.now();
-    let lastErr: any;
-    while (Date.now() - start < timeoutMs) {
+  private getMetaBaseUrl(): string {
+    return `https://graph.facebook.com/${this.metaApiVersion}/${this.metaPhoneNumberId}/messages`;
+  }
+
+  private assertMetaReady() {
+    if (!this.metaEnabled) {
+      throw new HttpException(
+        'WhatsApp Meta integration disabled',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    if (!this.metaPhoneNumberId || !this.metaAccessToken) {
+      throw new HttpException(
+        'WhatsApp Meta integration misconfigured',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+  }
+
+  private async sendMetaPayload(payload: Record<string, any>) {
+    this.assertMetaReady();
+    try {
+      const res = await firstValueFrom(
+        this.http.post(this.getMetaBaseUrl(), payload, {
+          headers: {
+            Authorization: `Bearer ${this.metaAccessToken}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 20000,
+        }),
+      );
+      return res.data;
+    } catch (error: any) {
+      const details = error?.response?.data || error?.message || error;
+      throw new HttpException(
+        {
+          message: 'Failed to send WhatsApp message via Meta Cloud API',
+          details,
+        },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+  }
+
+  private resolveTemplateLang(language?: string): string {
+    return String(language || 'fr').toLowerCase().startsWith('en') ? 'en' : 'fr';
+  }
+
+  private buildMetaEnvelope(
+    to: string,
+    countryCode: string | undefined,
+    type: 'text' | 'image' | 'template',
+  ) {
+    return {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: this.formatPhone(to, countryCode),
+      type,
+    };
+  }
+
+  private async sendMetaTemplateMessage(
+    to: string,
+    countryCode: string | undefined,
+    templateName: string,
+    language: string,
+    bodyParams: string[] = [],
+    buttonUrlParam?: string,
+  ) {
+    const components: any[] = [];
+
+    if (bodyParams.length) {
+      components.push({
+        type: 'body',
+        parameters: bodyParams.map((text) => ({ type: 'text', text: String(text ?? '') })),
+      });
+    }
+
+    if (buttonUrlParam) {
+      components.push({
+        type: 'button',
+        sub_type: 'url',
+        index: 0,
+        parameters: [{ type: 'text', text: String(buttonUrlParam) }],
+      });
+    }
+
+    return this.sendMetaPayload({
+      ...this.buildMetaEnvelope(to, countryCode, 'template'),
+      type: 'template',
+      template: {
+        name: templateName,
+        language: { code: this.resolveTemplateLang(language) },
+        ...(components.length ? { components } : {}),
+      },
+    });
+  }
+
+  private async sendMetaTemplateByPriority(
+    to: string,
+    countryCode: string | undefined,
+    templateNames: string[],
+    language: string,
+    bodyParams: string[] = [],
+    buttonUrlParam?: string,
+  ) {
+    let lastError: any;
+    for (const templateName of templateNames) {
       try {
-        const state = await (this.client as any).getState?.();
-        if (!this.ready || state !== 'CONNECTED') {
-          await new Promise((r) => setTimeout(r, 300));
-          continue;
-        }
-
-        const page = (this.client as any).pupPage;
-        if (!page) {
-          await new Promise((r) => setTimeout(r, 300));
-          continue;
-        }
-
-        const injected = await page.evaluate(() => {
-          const w = window as any;
-          // Avoid heavy calls like getChats() that can break during transient WA updates.
-          return Boolean(w?.WWebJS && (w?.Store || w?.webpackChunkbuild));
-        });
-
-        if (injected) return;
-        await new Promise((r) => setTimeout(r, 300));
-      } catch (e: any) {
-        lastErr = e;
-        const errorMessage = e?.message ?? String(e);
-
-        // Détecter si la session est fermée
-        if (
-          errorMessage.includes('Session closed') ||
-          errorMessage.includes('Protocol error') ||
-          errorMessage.includes('Target closed')
-        ) {
-          this.logger.warn('Session closed detected, attempting to reinitialize...');
-          this.ready = false;
-          this.lastState = 'UNKNOWN';
-
-          // Tenter de réinitialiser le client
-          try {
-            await this.reinitialize();
-            // Attendre un peu après la réinitialisation
-            await new Promise((r) => setTimeout(r, 2000));
-            // Continue polling after reinitialization
-            continue;
-          } catch (reinitErr) {
-            this.logger.error('Failed to reinitialize client: ' + (reinitErr?.message ?? reinitErr));
-          }
-
-          throw new Error('Session closed and reinitialization failed');
-        }
-
-        await new Promise((r) => setTimeout(r, 300));
+        return await this.sendMetaTemplateMessage(
+          to,
+          countryCode,
+          templateName,
+          language,
+          bodyParams,
+          buttonUrlParam,
+        );
+      } catch (error) {
+        lastError = error;
       }
     }
-    const timeoutMessage = lastErr?.message ?? 'Timed out waiting for ready/injection';
-    this.logger.error('Injection timeout: ' + timeoutMessage);
-    throw new Error('Injection not ready: ' + timeoutMessage);
+    throw lastError;
   }
 
   private formatPhone(to: string, cc?: string) {
-    let s = to.replace(/\D/g, '');
-    if (cc && !s.startsWith(cc)) s = cc + s;
+    const rawTo = String(to || '').trim();
+    let s = rawTo.replace(/\D/g, '');
+    if (!s) return s;
+    let country = String(cc || '').replace(/\D/g, '');
+
+    // Guard against invalid country values (e.g. Mongo ObjectId) accidentally passed in.
+    if (country.length < 1 || country.length > 4) {
+      country = '';
+    }
+
+    // If caller already provided an international number (+...), keep it as-is.
+    if (rawTo.startsWith('+')) {
+      return s;
+    }
+
+    if (country && !s.startsWith(country)) {
+      if (s.startsWith('0')) s = s.slice(1);
+      s = `${country}${s}`;
+    }
     return s;
   }
 
@@ -487,6 +503,11 @@ export class WhatsappService implements OnModuleInit {
   }
 
   private async sendMailWatsappserviceReady() {
+    if (!this.startupTemplateTestEnabled) {
+      this.logger.log('[WA Startup Test] Disabled by config');
+      return;
+    }
+
     try {
       await this.email.sendWhatsappAlert(
         '✅ WhatsApp Service Ready ✅',
@@ -495,9 +516,11 @@ export class WhatsappService implements OnModuleInit {
     } catch (e) {
       this.logger.error('Failed to send mail watsappservice ready');
     }
+
+    await this.runStartupTemplateTest();
   }
 
-  // ---------- Emails / Notifications ----------
+  // ---------- Notifications ----------
   private async sendConnexionFailureAlert() {
     try {
       await this.email.sendWhatsappAlert(
@@ -513,8 +536,50 @@ export class WhatsappService implements OnModuleInit {
     return (user as any).name || `${user.firstName} ${user.lastName}`;
   }
 
+  private async getAdminRecipients() {
+    return this.userModel
+      .find({ isAdmin: true, isActive: { $ne: false } })
+      .select('name firstName lastName language whatsapp phone countryId')
+      .populate('countryId', 'code')
+      .lean();
+  }
+
+  private getUserLanguage(user: any): 'en' | 'fr' {
+    return this.resolveTemplateLang(user?.language) === 'en' ? 'en' : 'fr';
+  }
+
+  private getUserPhone(user: any): string {
+    return String(user?.whatsapp || user?.phone || '');
+  }
+
+  private getUserCountryCode(user: any): string | undefined {
+    return String((user as any)?.countryId?.code || user?.countryId || '').trim() || undefined;
+  }
+
   // MONEY SENT SUCCESSFULLY (Msg for receiver)
   async sendMessageForTransferReceiver(transactionData, language: string = 'fr') {
+    if (this.metaUseTemplates) {
+      try {
+        const lang = this.resolveTemplateLang(language);
+        await this.sendMetaTemplateMessage(
+          transactionData.receiverContact,
+          transactionData.receiverCountryCode,
+          `dk_transfer_success_receiver`,
+          lang,
+          [
+            transactionData.receiverName,
+            String(transactionData.estimation),
+            transactionData.receiverCurrency,
+            transactionData.senderName,
+            transactionData.transactionRef || transactionData._id,
+          ],
+          String(transactionData._id),
+        );
+        return { success: true };
+      } catch (error) {
+        this.logger.warn(`Template send failed (transfer receiver), fallback text: ${error?.message ?? error}`);
+      }
+    }
     const message = this.buildMessageForTransferReceiver(
       transactionData,
       language,
@@ -554,6 +619,28 @@ export class WhatsappService implements OnModuleInit {
 
   // MONEY SENT SUCCESSFULLY (Msg for sender)
   async sendMessageForTransferSender(transactionData, language: string = 'fr') {
+    if (this.metaUseTemplates) {
+      try {
+        const lang = this.resolveTemplateLang(language);
+        await this.sendMetaTemplateMessage(
+          transactionData.senderContact,
+          transactionData.senderCountryCode,
+          `dk_transfer_success_sender`,
+          lang,
+          [
+            transactionData.senderName,
+            String(transactionData.estimation),
+            transactionData.senderCurrency,
+            transactionData.receiverName,
+            transactionData.transactionRef || transactionData._id,
+          ],
+          String(transactionData._id),
+        );
+        return { success: true };
+      } catch (error) {
+        this.logger.warn(`Template send failed (transfer sender), fallback text: ${error?.message ?? error}`);
+      }
+    }
     const message = this.buildMessageForTransferSender(
       transactionData,
       language,
@@ -594,33 +681,6 @@ export class WhatsappService implements OnModuleInit {
   }
 
   // ACCOUNT CREATION MESSAGE
-  async sendWelcomeMessage(user: any, countryCode: string) {
-    const message = this.buildAccountCreationMessage(user);
-    return await this.sendText(user.phone, message, countryCode);
-  }
-
-  private buildAccountCreationMessage(user: any): string {
-    if (user.language === 'fr')
-      return (
-        `*Bienvenue ${this.showName(user)} !*\n\n` +
-        `Votre compte *digiKUNTZ Payments* a été créé avec succès.\n` +
-        `Nous sommes ravis de vous accueillir chez-nous chez-vous.\n` +
-        `Votre solution intelligente tout-en-un pour la gestion de vos paiements.\n` +
-        `Vous pouvez dès à présent effectuer vos transactions et gérer vos abonnements facilement.\n` +
-        `\n _Accédez à votre compte_ : ${this.frontUrl} \n` +
-        `\n\n> Ceci est un message automatique du service WhatsApp de digiKUNTZ Payments.`
-      );
-    else
-      return (
-        `*Welcome ${this.showName(user)} !*\n\n` +
-        `Your *digiKUNTZ Payments* account has been successfully created.\n` +
-        `We are delighted to welcome you to our platform.*\n` +
-        `Your smart all-in-one solution for payments management.\n` +
-        `You can now make payments and manage your plans easily.\n` +
-        `\n _Access your account_ : ${this.frontUrl}/dashboard` +
-        `\n\n> This is an automatic message from the digiKUNTZ Payments WhatsApp service.`
-      );
-  }
 
   // BALANCE CREDITED
   async sendBalanceCreditedMessage(transaction: any, language: string) {
@@ -698,6 +758,29 @@ export class WhatsappService implements OnModuleInit {
   async sendupgradeSubscriberMessage(planId: string, userId: string, transactionId: string) {
     const plan = await this.planService.getPlansById(planId);
     const user = await this.userService.getUserById(userId);
+    if (this.metaUseTemplates) {
+      try {
+        const lang = this.resolveTemplateLang(user?.language);
+        await this.sendMetaTemplateMessage(
+          user.phone.toString(),
+          user.countryId.code.toString(),
+          `dk_subscription_user`,
+          lang,
+          [
+            this.showName(user),
+            plan?.title ?? '',
+            plan?.subTitle ?? '',
+            String(plan?.amount ?? plan?.price ?? ''),
+            String(plan?.currency ?? ''),
+            transactionId,
+          ],
+          transactionId,
+        );
+        return { success: true };
+      } catch (error) {
+        this.logger.warn(`Template send failed (subscription user upgrade), fallback text: ${error?.message ?? error}`);
+      }
+    }
     const message = this.buildUpgradeSubscriberMessage(plan, user, transactionId);
 
     console.log('sendNewSubscriberMessage user: ', user);
@@ -735,6 +818,29 @@ export class WhatsappService implements OnModuleInit {
   async sendNewSubscriberMessage(planId: string, userId: string, transactionId: string) {
     const plan = await this.planService.getPlansById(planId);
     const user = await this.userService.getUserById(userId);
+    if (this.metaUseTemplates) {
+      try {
+        const lang = this.resolveTemplateLang(user?.language);
+        await this.sendMetaTemplateMessage(
+          user.phone.toString(),
+          user.countryId.code.toString(),
+          `dk_subscription_user`,
+          lang,
+          [
+            this.showName(user),
+            plan?.title ?? '',
+            plan?.subTitle ?? '',
+            String(plan?.amount ?? plan?.price ?? ''),
+            String(plan?.currency ?? ''),
+            transactionId,
+          ],
+          transactionId,
+        );
+        return { success: true };
+      } catch (error) {
+        this.logger.warn(`Template send failed (subscription user), fallback text: ${error?.message ?? error}`);
+      }
+    }
     const message = this.buildNewSubscriberMessage(plan, user, transactionId);
 
     console.log('sendNewSubscriberMessage user: ', user);
@@ -823,6 +929,25 @@ export class WhatsappService implements OnModuleInit {
   async sendNewSubscriberMessageForPlanAuthor(plan, user) {
     if (!plan || !user) return;
     if (!user.phone || !user.countryId?.code) return;
+    if (this.metaUseTemplates) {
+      try {
+        const lang = this.resolveTemplateLang(user?.language);
+        await this.sendMetaTemplateMessage(
+          user.phone.toString(),
+          user.countryId.code.toString(),
+          `dk_subscription_author`,
+          lang,
+          [
+            this.showName(user),
+            plan?.title ?? '',
+            plan?.subTitle ?? '',
+          ],
+        );
+        return { success: true };
+      } catch (error) {
+        this.logger.warn(`Template send failed (subscription author), fallback text: ${error?.message ?? error}`);
+      }
+    }
 
     const message = this.buildNewSubscriberMessageForPlanAuthor(plan, user);
 
@@ -861,12 +986,49 @@ export class WhatsappService implements OnModuleInit {
 
   // NEED VALIDATION PAYMENT (ADMIN)
   async sendNeedValidationMessage(transaction: any, language: any) {
-    const message = this.buildNeedValidationMessage(transaction, language);
-    return await this.sendText(
-      this.alertPhoneNumber,
-      message,
-      this.alertCountryCode,
-    );
+    const admins = await this.getAdminRecipients();
+    if (!admins.length) {
+      const fallbackLanguage = this.resolveTemplateLang(language || 'fr');
+      const message = this.buildNeedValidationMessage(transaction, fallbackLanguage);
+      return await this.sendText(
+        this.alertPhoneNumber,
+        message,
+        this.alertCountryCode,
+      );
+    }
+
+    for (const admin of admins) {
+      const to = this.getUserPhone(admin);
+      if (!to) continue;
+      const lang = this.getUserLanguage(admin);
+      const countryCode = this.getUserCountryCode(admin);
+      if (this.metaUseTemplates) {
+        try {
+          await this.sendMetaTemplateMessage(
+            to,
+            countryCode,
+            'dk_admin_payout_pending',
+            lang,
+            [
+              String(transaction.transactionType ?? ''),
+              String(transaction.senderName ?? ''),
+              String(transaction.receiverName ?? ''),
+              String(transaction.estimation ?? ''),
+              String(transaction.receiverCurrency || transaction.senderCurrency || ''),
+              String(transaction._id || transaction.transactionRef || ''),
+            ],
+          );
+          continue;
+        } catch (error) {
+          this.logger.warn(`Template send failed (admin payout pending -> ${to}), fallback text: ${error?.message ?? error}`);
+        }
+      }
+
+      const message = this.buildNeedValidationMessage(transaction, lang);
+      await this.sendText(to, message, countryCode);
+    }
+
+    return { success: true };
   }
 
   private buildNeedValidationMessage(
@@ -929,6 +1091,26 @@ export class WhatsappService implements OnModuleInit {
     const language = user.language || 'fr';
     const message = this.buildWithdrawalMessage(transaction, language);
     const countryCode = user.countryId?.code || user.countryId;
+    if (this.metaUseTemplates) {
+      try {
+        const lang = this.resolveTemplateLang(language);
+        await this.sendMetaTemplateMessage(
+          user.whatsapp || user.phone,
+          countryCode,
+          `dk_withdrawal_success`,
+          lang,
+          [
+            String(transaction.estimation),
+            transaction.receiverCurrency,
+            transaction.transactionRef || transaction._id,
+          ],
+          String(transaction._id),
+        );
+        return { success: true };
+      } catch (error) {
+        this.logger.warn(`Template send failed (withdrawal), fallback text: ${error?.message ?? error}`);
+      }
+    }
     return await this.sendText(
       user.whatsapp || user.phone,
       message,
@@ -966,6 +1148,26 @@ export class WhatsappService implements OnModuleInit {
     const language = user.language || 'fr';
     const message = this.buildServiceMessage(transaction, language);
     const countryCode = user.countryId?.code || user.countryId;
+    if (this.metaUseTemplates) {
+      try {
+        const lang = this.resolveTemplateLang(language);
+        await this.sendMetaTemplateMessage(
+          user.whatsapp || user.phone,
+          countryCode,
+          `dk_service_payment_sender`,
+          lang,
+          [
+            String(transaction.estimation),
+            transaction.receiverCurrency,
+            transaction.transactionRef || transaction._id,
+          ],
+          String(transaction._id),
+        );
+        return { success: true };
+      } catch (error) {
+        this.logger.warn(`Template send failed (service sender), fallback text: ${error?.message ?? error}`);
+      }
+    }
     return await this.sendText(
       user.whatsapp || user.phone,
       message,
@@ -978,6 +1180,27 @@ export class WhatsappService implements OnModuleInit {
     const language = user.language || 'fr';
     const message = this.buildServiceReceivedMessage(transaction, language);
     const countryCode = user.countryId?.code || user.countryId;
+    if (this.metaUseTemplates) {
+      try {
+        const lang = this.resolveTemplateLang(language);
+        await this.sendMetaTemplateMessage(
+          user.whatsapp || user.phone,
+          countryCode,
+          `dk_service_payment_receiver`,
+          lang,
+          [
+            String(transaction.estimation),
+            transaction.receiverCurrency,
+            transaction.senderName,
+            transaction.transactionRef || transaction._id,
+          ],
+          String(transaction._id),
+        );
+        return { success: true };
+      } catch (error) {
+        this.logger.warn(`Template send failed (service receiver), fallback text: ${error?.message ?? error}`);
+      }
+    }
     return await this.sendText(
       user.whatsapp || user.phone,
       message,
@@ -1030,20 +1253,24 @@ export class WhatsappService implements OnModuleInit {
     );
   }
 
-  async sendPasswordResetMessage(user: any, token: string) {
-    if (!user) return;
-    const countryCode = user.countryId?.code || user.countryId;
-    const resetUrl = `${this.frontUrl}/auth/new-password/${token}`;
-    const message =
-      user.language === 'fr'
-        ? `*Réinitialisation de mot de passe*\n\nHello ${this.showName(user)},\nVeuillez réinitialiser votre mot de passe via ce lien:\n${resetUrl}\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
-        : `*Password reset*\n\nHello ${this.showName(user)},\nPlease reset your password using this link:\n${resetUrl}\n\n> This is an automatic message from digiKUNTZ Payments.`;
-    return await this.sendText(user.whatsapp || user.phone, message, countryCode);
-  }
-
   async sendPasswordUpdatedMessage(user: any) {
     if (!user) return;
     const countryCode = user.countryId?.code || user.countryId;
+    if (this.metaUseTemplates) {
+      try {
+        const lang = this.resolveTemplateLang(user.language);
+        await this.sendMetaTemplateMessage(
+          user.whatsapp || user.phone,
+          countryCode,
+          `dk_password_updated`,
+          lang,
+          [this.showName(user)],
+        );
+        return { success: true };
+      } catch (error) {
+        this.logger.warn(`Template send failed (password updated), fallback text: ${error?.message ?? error}`);
+      }
+    }
     const message =
       user.language === 'fr'
         ? `*Mot de passe modifié*\n\nHello ${this.showName(user)},\nVotre mot de passe a été mis à jour avec succès.\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
@@ -1052,6 +1279,26 @@ export class WhatsappService implements OnModuleInit {
   }
 
   async sendPayoutFailedAdminMessage(transaction: any, language: string = 'fr') {
+    if (this.metaUseTemplates) {
+      try {
+        const lang = this.resolveTemplateLang(language);
+        await this.sendMetaTemplateMessage(
+          this.alertPhoneNumber,
+          this.alertCountryCode,
+          `dk_admin_payout_failed`,
+          lang,
+          [
+            String(transaction.transactionType ?? ''),
+            String(transaction.transactionRef || transaction._id || ''),
+            String(transaction.estimation ?? ''),
+            String(transaction.senderCurrency || transaction.receiverCurrency || ''),
+          ],
+        );
+        return { success: true };
+      } catch (error) {
+        this.logger.warn(`Template send failed (admin payout failed), fallback text: ${error?.message ?? error}`);
+      }
+    }
     const message =
       language === 'fr'
         ? `*Échec payout*\n\nUn payout a échoué.\nType: ${transaction.transactionType}\nRéférence: ${transaction.transactionRef || transaction._id}\nMontant: ${transaction.estimation} ${transaction.senderCurrency || transaction.receiverCurrency}\n\n> Alerte automatique digiKUNTZ Payments.`
@@ -1062,6 +1309,24 @@ export class WhatsappService implements OnModuleInit {
   async sendTransactionRejectedMessage(transaction: any, user: any) {
     if (!user) return;
     const countryCode = user.countryId?.code || user.countryId;
+    if (this.metaUseTemplates) {
+      try {
+        const lang = this.resolveTemplateLang(user.language);
+        await this.sendMetaTemplateMessage(
+          user.whatsapp || user.phone,
+          countryCode,
+          `dk_transaction_rejected`,
+          lang,
+          [
+            this.showName(user),
+            String(transaction.transactionRef || transaction._id || ''),
+          ],
+        );
+        return { success: true };
+      } catch (error) {
+        this.logger.warn(`Template send failed (transaction rejected), fallback text: ${error?.message ?? error}`);
+      }
+    }
     const message =
       user.language === 'fr'
         ? `*Transaction rejetée*\n\nHello ${this.showName(user)},\nVotre transaction a été rejetée par l'administrateur.\nRéférence: ${transaction.transactionRef || transaction._id}\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
@@ -1076,6 +1341,27 @@ export class WhatsappService implements OnModuleInit {
   ) {
     if (!donor) return;
     const countryCode = donor.countryId?.code || donor.countryId;
+    if (this.metaUseTemplates) {
+      try {
+        const lang = this.resolveTemplateLang(donor.language);
+        await this.sendMetaTemplateMessage(
+          donor.whatsapp || donor.phone,
+          countryCode,
+          `dk_fundraising_donor`,
+          lang,
+          [
+            this.showName(donor),
+            String(transaction.estimation ?? ''),
+            String(fundraising.currency ?? ''),
+            String(fundraising.title ?? ''),
+            String(transaction.transactionRef || transaction._id || ''),
+          ],
+        );
+        return { success: true };
+      } catch (error) {
+        this.logger.warn(`Template send failed (fundraising donor), fallback text: ${error?.message ?? error}`);
+      }
+    }
     const message =
       donor.language === 'fr'
         ? `*Don effectué avec succès !*\n\nHello ${this.showName(donor)},\nVotre don de *${transaction.estimation} ${fundraising.currency}* pour la collecte *${fundraising.title}* a été confirmé.\nRéférence: ${transaction.transactionRef || transaction._id}\n\n> Ceci est un message automatique de digiKUNTZ Payments.`
@@ -1103,6 +1389,28 @@ export class WhatsappService implements OnModuleInit {
         : 'Anonymous';
     const showDonor = transaction.donorVisibility !== false;
     const donorLabel = showDonor ? donorName : owner.language === 'fr' ? 'Anonyme' : 'Anonymous';
+    if (this.metaUseTemplates) {
+      try {
+        const lang = this.resolveTemplateLang(owner.language);
+        await this.sendMetaTemplateMessage(
+          owner.whatsapp || owner.phone,
+          countryCode,
+          `dk_fundraising_owner`,
+          lang,
+          [
+            this.showName(owner),
+            String(transaction.estimation ?? ''),
+            String(fundraising.currency ?? ''),
+            String(fundraising.title ?? ''),
+            String(donorLabel),
+            String(transaction.transactionRef || transaction._id || ''),
+          ],
+        );
+        return { success: true };
+      } catch (error) {
+        this.logger.warn(`Template send failed (fundraising owner), fallback text: ${error?.message ?? error}`);
+      }
+    }
     const message =
       owner.language === 'fr'
         ? `*Nouveau don reçu !*\n\nHello ${this.showName(owner)},\nVous avez reçu un don de *${transaction.estimation} ${fundraising.currency}* pour la collecte *${fundraising.title}*.\nDonateur: ${donorLabel}\nRéférence: ${transaction.transactionRef || transaction._id}\n\n> Ceci est un message automatique de digiKUNTZ Payments.`

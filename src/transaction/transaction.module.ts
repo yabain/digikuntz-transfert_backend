@@ -38,11 +38,13 @@ import { SystemModule } from 'src/system/system.module';
 import { OperationNotificationService } from 'src/notification/operation-notification.service';
 import { PaystackModule } from 'src/paystack/paystack.module';
 import { PaymentRequestModule } from 'src/payment-request/payment-request.module';
+import { MpesaModule } from 'src/mpesa/mpesa.module';
 
 @Module({
   imports: [
     HttpModule,
     PaystackModule,
+    MpesaModule,
     forwardRef(() => PaymentRequestModule),
     forwardRef(() => WhatsappModule),
     AppCacheModule,

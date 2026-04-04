@@ -1,9 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
+  Body,
   Controller,
   Get,
   NotFoundException,
   Param,
+  Post,
   Req,
   UseGuards,
   UsePipes,
@@ -50,5 +52,19 @@ export class PayoutController {
   verifyPayout(@Param('id') reference: string) {
     console.log('verifyPayout tx: ', reference);
     return this.payoutService.verifyPayout(reference);
+  }
+
+  @Post('mpesa/result')
+  @ApiOperation({ summary: 'M-Pesa B2C result callback' })
+  @ApiResponse({ status: 201, description: 'Result callback processed.' })
+  mpesaResult(@Body() payload: any) {
+    return this.payoutService.handleMpesaB2CResult(payload);
+  }
+
+  @Post('mpesa/timeout')
+  @ApiOperation({ summary: 'M-Pesa B2C timeout callback' })
+  @ApiResponse({ status: 201, description: 'Timeout callback processed.' })
+  mpesaTimeout(@Body() payload: any) {
+    return this.payoutService.handleMpesaB2CTimeout(payload);
   }
 }

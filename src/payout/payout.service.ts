@@ -26,7 +26,7 @@ import { TransactionService } from 'src/transaction/transaction.service';
 import { randomBytes } from 'crypto';
 import { EmailService } from 'src/email/email.service';
 import { OperationNotificationService } from 'src/notification/operation-notification.service';
-import { PaystackService } from 'src/paystack/paystack.service';
+import { MpesaService } from 'src/mpesa/mpesa.service';
 
 @Injectable()
 export class PayoutService {
@@ -57,7 +57,7 @@ export class PayoutService {
   constructor(
     private readonly http: HttpService,
     private readonly config: ConfigService,
-    private readonly paystackService: PaystackService,
+    private readonly mpesaService: MpesaService,
     @InjectModel(Payout.name)
     private readonly payoutModel: mongoose.Model<PayoutDocument>,
     @Inject(forwardRef(() => TransactionService))
@@ -69,10 +69,10 @@ export class PayoutService {
     this.fwSecretNGN = this.config.get<string>('FLUTTERWAVE_SECRET_KEY_NGN');
   }
 
-  private normalizePaystackStatus(status?: string): string {
-    const normalized = String(status ?? '').toLowerCase();
-    if (normalized === 'success') return PayoutStatus.SUCCESSFUL;
-    if (normalized === 'failed' || normalized === 'reversed')
+  private normalizeMpesaPayoutStatus(raw?: any): string {
+    const resultCode = Number(raw?.ResultCode ?? raw?.Result?.ResultCode);
+    if (resultCode === 0) return PayoutStatus.SUCCESSFUL;
+    if ([1, 1032, 2001, 1025, 1037].includes(resultCode))
       return PayoutStatus.FAILED;
     return PayoutStatus.PROCESSING;
   }
@@ -143,8 +143,8 @@ export class PayoutService {
     provider: PayoutProvider = PayoutProvider.FLUTTERWAVE,
   ) {
     const status =
-      provider === PayoutProvider.PAYSTACK
-        ? this.normalizePaystackStatus(providerData?.data?.status)
+      provider === PayoutProvider.PAYSTACK || provider === PayoutProvider.MPESA
+        ? this.normalizeMpesaPayoutStatus(providerData)
         : this.normalizeStatus(providerData?.data?.data?.status);
 
     const created = await this.payoutModel.create({
@@ -266,7 +266,10 @@ export class PayoutService {
       throw new NotFoundException('Payout not found');
     }
 
-    if (localPayout.provider === PayoutProvider.PAYSTACK) {
+    if (
+      localPayout.provider === PayoutProvider.PAYSTACK ||
+      localPayout.provider === PayoutProvider.MPESA
+    ) {
       return this.verifyPaystackPayout(reference, updateOnPending);
     }
 
@@ -331,191 +334,53 @@ export class PayoutService {
     throw new NotFoundException('Payout not found on Flutterwave');
   }
 
-  async initiatePaystackPayout(
+  async initiateMpesaPayout(
     transaction: any,
     userId: string,
     reference: string,
   ) {
-    const rawCandidates = [
-      transaction?.bankAccountNumber,
-      transaction?.receiverMobileAccountNumber,
-      transaction?.receiverContact,
-      transaction?.senderContact,
-    ]
-      .map((value) => String(value || '').trim())
-      .filter(Boolean);
-
-    const normalizedPrimary = this.normalizeKenyanMsisdn(rawCandidates[0] || '');
+    const normalizedPrimary = this.normalizeKenyanMsisdn(
+      String(
+        transaction?.bankAccountNumber ||
+          transaction?.receiverMobileAccountNumber ||
+          transaction?.receiverContact ||
+          transaction?.senderContact ||
+          '',
+      ),
+    );
     if (!normalizedPrimary) {
       throw new HttpException(
-        { message: 'Missing recipient mobile account number for Paystack payout' },
+        { message: 'Missing recipient mobile account number for M-Pesa payout' },
         HttpStatus.BAD_REQUEST,
       );
     }
-
-    const accountCandidates = Array.from(
-      new Set(
-        rawCandidates.flatMap((value) => {
-          const digits = value.replace(/\D/g, '');
-          const normalized = this.normalizeKenyanMsisdn(value);
-          const variants = [normalized, digits];
-          if (normalized.startsWith('254')) {
-            variants.push(`0${normalized.slice(3)}`);
-            variants.push(normalized.slice(3));
-          }
-          return variants.filter(Boolean);
-        }),
-      ),
-    );
-
     const amount = Number(transaction?.receiverAmount);
-    const amountSmallestUnit = Math.round(amount * 100);
-    if (!Number.isFinite(amountSmallestUnit) || amountSmallestUnit <= 0) {
+    if (!Number.isFinite(amount) || amount <= 0) {
       throw new HttpException(
         { message: 'Invalid payout amount' },
         HttpStatus.BAD_REQUEST,
       );
     }
 
-    const configuredBankCode = this.config.get<string>('PAYSTACK_MPESA_BANK_CODE');
-    const resolvedBankCode =
-      await this.paystackService.resolveKesMpesaBankCode(configuredBankCode);
-    const bankCodeCandidates = Array.from(
-      new Set(
-        [
-          configuredBankCode,
-          transaction?.bankCode,
-          resolvedBankCode,
-          'MPESA',
-          'MPS',
-        ]
-          .map((value) => String(value || '').trim().toUpperCase())
-          .filter(Boolean),
-      ),
-    );
-
-    let recipient: any;
     let transfer: any;
-    let selectedBankCode = resolvedBankCode;
-    let selectedAccountNumber = normalizedPrimary;
-    const attempts: Array<Record<string, any>> = [];
     try {
-      for (const bankCode of bankCodeCandidates) {
-        for (const accountNumber of accountCandidates) {
-          try {
-            recipient = await this.paystackService.createKesMpesaTransferRecipient({
-              name: transaction?.receiverName || 'Recipient',
-              accountNumber,
-              bankCode,
-              description: this.toAlphanumeric(
-                transaction?.raisonForTransfer || 'Payout',
-              ),
-            });
-
-            const recipientCode = recipient?.data?.recipient_code;
-            if (!recipientCode) {
-              attempts.push({
-                bankCode,
-                accountNumber,
-                error: recipient,
-              });
-              continue;
-            }
-
-            selectedBankCode = bankCode;
-            selectedAccountNumber = accountNumber;
-            transfer = await this.paystackService.initiateKesPayout({
-              recipientCode,
-              amountSmallestUnit,
-              reference,
-              reason: transaction?.raisonForTransfer || 'Payout',
-            });
-            break;
-          } catch (innerError: any) {
-            const innerDetails =
-              innerError?.response?.data || innerError?.message || innerError;
-            const innerCode = String(innerDetails?.code || '').toLowerCase();
-            const innerType = String(innerDetails?.type || '').toLowerCase();
-            attempts.push({
-              bankCode,
-              accountNumber,
-              error: innerDetails,
-            });
-
-            // Stop retry loop for business errors that won't be fixed by trying another format.
-            if (
-              innerCode === 'insufficient_balance' ||
-              innerCode === 'transfer_creation_error' ||
-              innerCode === 'api_error' ||
-              innerType === 'api_error'
-            ) {
-              if (this.isInsufficientPayoutBalance(innerDetails)) {
-                throw this.buildInsufficientBalanceException(
-                  'paystack',
-                  innerDetails,
-                );
-              }
-              if (this.isThirdPartyPayoutBlocked(innerDetails)) {
-                throw this.buildPayoutCapabilityException(
-                  'paystack',
-                  innerDetails,
-                );
-              }
-              throw new HttpException(
-                {
-                  message: 'Paystack payout blocked',
-                  details: innerDetails,
-                },
-                HttpStatus.BAD_GATEWAY,
-              );
-            }
-          }
-        }
-        if (transfer) break;
-      }
-
-      if (!transfer) {
-        throw new HttpException(
-          {
-            message: 'Unable to create Paystack transfer recipient',
-            details: attempts[attempts.length - 1] || recipient,
-          },
-          HttpStatus.BAD_GATEWAY,
-        );
-      }
+      transfer = await this.mpesaService.initiateB2CPayout({
+        phone: normalizedPrimary,
+        amount,
+        reference,
+        remarks: this.toAlphanumeric(transaction?.raisonForTransfer || 'Payout'),
+        occasion: reference,
+      });
     } catch (error: any) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
       const details = error?.response?.data || error?.message || error;
-      if (this.isInsufficientPayoutBalance(details)) {
-        throw this.buildInsufficientBalanceException('paystack', details, {
-          reference,
-          bankCode: selectedBankCode,
-          normalizedMsisdn: selectedAccountNumber,
-          amountSmallestUnit,
-          attempts,
-        });
-      }
-      if (this.isThirdPartyPayoutBlocked(details)) {
-        throw this.buildPayoutCapabilityException('paystack', details, {
-          reference,
-          bankCode: selectedBankCode,
-          normalizedMsisdn: selectedAccountNumber,
-          amountSmallestUnit,
-          attempts,
-        });
-      }
       throw new HttpException(
         {
-          message: 'Paystack payout initiation failed',
+          message: 'M-Pesa payout initiation failed',
           details,
           context: {
             reference,
-            bankCode: selectedBankCode,
-            normalizedMsisdn: selectedAccountNumber,
-            amountSmallestUnit,
-            attempts,
+            normalizedMsisdn: normalizedPrimary,
+            amount,
           },
         },
         HttpStatus.BAD_GATEWAY,
@@ -531,15 +396,15 @@ export class PayoutService {
       amount: Number(transaction?.receiverAmount),
       sourceCurrency: transaction?.receiverCurrency,
       destinationCurrency: transaction?.receiverCurrency,
-      accountBankCode: selectedBankCode,
-      accountNumber: selectedAccountNumber,
+      accountBankCode: 'MPESA',
+      accountNumber: normalizedPrimary,
       narration: transaction?.raisonForTransfer || 'Payout',
     };
 
     const saved = await this.createPayout(
       payloadPayout,
       transfer,
-      PayoutProvider.PAYSTACK,
+      PayoutProvider.MPESA,
     );
 
     await this.transactionService.updateTransactionStatus(
@@ -555,25 +420,29 @@ export class PayoutService {
     return saved;
   }
 
+  // Backward compatibility for existing internal calls.
+  async initiatePaystackPayout(
+    transaction: any,
+    userId: string,
+    reference: string,
+  ) {
+    return this.initiateMpesaPayout(transaction, userId, reference);
+  }
+
   async verifyPaystackPayout(reference: string, updateOnPending: boolean = false) {
     const existing: any = await this.payoutModel.findOne({ reference }).lean().exec();
     if (!existing) {
       throw new NotFoundException('Payout not found');
     }
-
-    const paystackPayout = await this.paystackService.fetchTransferByReference(reference);
-    if (!paystackPayout) {
-      throw new NotFoundException('Payout not found on Paystack');
-    }
-
-    const nextStatus = this.normalizePaystackStatus(paystackPayout?.status);
+    const providerPayload = existing?.raw || {};
+    const nextStatus = this.normalizeMpesaPayoutStatus(providerPayload);
     const oldStatus = existing.status;
 
     if (oldStatus !== nextStatus) {
       await this.updatePayout({
         reference,
         status: nextStatus,
-        ...paystackPayout,
+        ...providerPayload,
       });
     }
 
@@ -581,7 +450,7 @@ export class PayoutService {
       const transaction = await this.transactionService.updateTransactionStatus(
         String(existing.transactionId),
         TStatus.PAYOUTSUCCESS,
-        paystackPayout,
+        providerPayload,
       );
       if (transaction.transactionType === 'transfer') {
         void this.operationNotificationService.notifyTransferSuccess(transaction);
@@ -594,7 +463,7 @@ export class PayoutService {
       const transaction = await this.transactionService.updateTransactionStatus(
         String(existing.transactionId),
         TStatus.PAYOUTERROR,
-        paystackPayout,
+        providerPayload,
       );
       void this.operationNotificationService.notifyAdminPayoutFailed(transaction);
     }
@@ -606,11 +475,116 @@ export class PayoutService {
       await this.transactionService.updateTransactionStatus(
         String(existing.transactionId),
         TStatus.PAYOUTPENDING,
-        paystackPayout,
+        providerPayload,
       );
     }
 
-    return paystackPayout;
+    return providerPayload;
+  }
+
+  async handleMpesaB2CResult(payload: any) {
+    const result = payload?.Result || payload?.Body?.Result || payload || {};
+    const conversationId = String(result?.ConversationID || '');
+    const originatorConversationId = String(
+      result?.OriginatorConversationID || '',
+    );
+    const referenceCandidates = [conversationId, originatorConversationId].filter(
+      Boolean,
+    );
+    if (!referenceCandidates.length) {
+      return { success: false, message: 'Missing conversation identifiers' };
+    }
+
+    const payout: any = await this.payoutModel
+      .findOne({
+        $or: [
+          { reference: { $in: referenceCandidates } },
+          { 'raw.ConversationID': { $in: referenceCandidates } },
+          { 'raw.OriginatorConversationID': { $in: referenceCandidates } },
+        ],
+      })
+      .lean()
+      .exec();
+
+    if (!payout) {
+      return {
+        success: false,
+        message: 'Payout not found for callback',
+        context: { referenceCandidates },
+      };
+    }
+
+    const nextStatus = this.normalizeMpesaPayoutStatus(result);
+    await this.updatePayout({
+      reference: payout.reference,
+      status: nextStatus,
+      ...result,
+    });
+
+    if (nextStatus === PayoutStatus.SUCCESSFUL) {
+      const transaction = await this.transactionService.updateTransactionStatus(
+        String(payout.transactionId),
+        TStatus.PAYOUTSUCCESS,
+        result,
+      );
+      if (transaction.transactionType === 'transfer') {
+        void this.operationNotificationService.notifyTransferSuccess(transaction);
+      } else if (transaction.transactionType === 'withdrawal') {
+        void this.operationNotificationService.notifyWithdrawalSuccess(transaction);
+      }
+    } else if (nextStatus === PayoutStatus.FAILED) {
+      const transaction = await this.transactionService.updateTransactionStatus(
+        String(payout.transactionId),
+        TStatus.PAYOUTERROR,
+        result,
+      );
+      void this.operationNotificationService.notifyAdminPayoutFailed(transaction);
+    } else {
+      await this.transactionService.updateTransactionStatus(
+        String(payout.transactionId),
+        TStatus.PAYOUTPENDING,
+        result,
+      );
+    }
+
+    return { success: true, reference: payout.reference, status: nextStatus };
+  }
+
+  async handleMpesaB2CTimeout(payload: any) {
+    const result = payload?.Result || payload || {};
+    const conversationId = String(
+      result?.ConversationID || result?.OriginatorConversationID || '',
+    );
+    if (!conversationId) {
+      return { success: false, message: 'Missing conversation id' };
+    }
+    const payout: any = await this.payoutModel
+      .findOne({
+        $or: [
+          { reference: conversationId },
+          { 'raw.ConversationID': conversationId },
+          { 'raw.OriginatorConversationID': conversationId },
+        ],
+      })
+      .lean()
+      .exec();
+
+    if (!payout) {
+      return { success: false, message: 'Payout not found for timeout' };
+    }
+
+    await this.updatePayout({
+      reference: payout.reference,
+      status: PayoutStatus.FAILED,
+      ...result,
+    });
+    const transaction = await this.transactionService.updateTransactionStatus(
+      String(payout.transactionId),
+      TStatus.PAYOUTERROR,
+      result,
+    );
+    void this.operationNotificationService.notifyAdminPayoutFailed(transaction);
+    return { success: true, reference: payout.reference, status: PayoutStatus.FAILED };
   }
 
   async retryPayout(reference: string) {

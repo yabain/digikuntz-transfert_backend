@@ -11,6 +11,7 @@ export type PayoutDocument = HydratedDocument<Payout>;
 export enum PayoutProvider {
   FLUTTERWAVE = 'flutterwave',
   PAYSTACK = 'paystack',
+  MPESA = 'mpesa',
 }
 
 export enum PayoutStatus {

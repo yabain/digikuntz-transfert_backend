@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { HttpModule } from '@nestjs/axios';
 import { WhatsappService } from './whatsapp.service';
 import { WhatsappController } from './whatsapp.controller';
 import { EmailService } from 'src/email/email.service';
@@ -18,6 +19,7 @@ import { PlansModule } from 'src/plans/plans.module';
 
 @Module({
   imports: [
+    HttpModule,
     UserModule,
     forwardRef(() => PlansModule),
     MongooseModule.forFeature([

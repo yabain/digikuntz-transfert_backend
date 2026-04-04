@@ -18,6 +18,7 @@ import {
 import { WhatsappService } from './whatsapp.service';
 import { SendTextDto } from './dto/send-text.dto';
 import { SendMediaDto } from './dto/send-media.dto';
+import { SendTemplateDto } from './dto/send-template.dto';
 
 @ApiTags('whatsapp')
 @Controller('wa')
@@ -69,6 +70,30 @@ export class WhatsappController {
         dto.to,
         dto.fileUrl,
         dto.caption,
+        dto.countryCode,
+      );
+    } catch (e: any) {
+      throw new HttpException(
+        { success: false, error: e?.message ?? String(e) },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  /** Envoi template Meta */
+  @Post('send-template')
+  @ApiOperation({ summary: 'Send WhatsApp template message' })
+  @ApiBody({ type: SendTemplateDto })
+  @ApiResponse({ status: 201, description: 'Template message sent.' })
+  @ApiResponse({ status: 400, description: 'Invalid payload or send failure.' })
+  async sendTemplate(@Body() dto: SendTemplateDto) {
+    try {
+      return await this.wa.sendTemplate(
+        dto.to,
+        dto.templateName,
+        dto.language,
+        dto.bodyParams || [],
+        dto.buttonUrlParam,
         dto.countryCode,
       );
     } catch (e: any) {

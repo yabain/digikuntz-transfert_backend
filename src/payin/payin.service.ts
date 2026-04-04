@@ -20,7 +20,7 @@ import { Payin, PayinDocument, PayinProvider, PayinStatus } from './payin.schema
 import { CreatePayinDto } from './payin.dto';
 import { ConfigService } from '@nestjs/config';
 import { Query } from 'express-serve-static-core';
-import { PaystackService } from 'src/paystack/paystack.service';
+import { MpesaService } from 'src/mpesa/mpesa.service';
 
 type InitPayinPayload = {
   amount: number;
@@ -69,7 +69,7 @@ export class PayinService {
   constructor(
     private readonly http: HttpService,
     private readonly config: ConfigService,
-    private readonly paystackService: PaystackService,
+    private readonly mpesaService: MpesaService,
     @InjectModel(Payin.name)
     private readonly payinModel: mongoose.Model<PayinDocument>,
   ) {
@@ -233,7 +233,7 @@ export class PayinService {
   async createPayin(dto: CreatePayinDto) {
     const txRef = dto.txRef ?? this.generateTxRef('txPayin');
 
-    // KES payments are processed with Paystack (M-Pesa channel).
+    // KES payments are processed directly with M-Pesa (Daraja API).
     if (String(dto.currency).toUpperCase() === 'KES') {
       return this.createKesMpesaPayin({ ...dto, txRef });
     }
@@ -375,8 +375,8 @@ export class PayinService {
   private async createKesMobileMoneyRequest(
     dto: CreatePayinDto & { txRef: string },
   ) {
-    const amountKobo = Math.round(Number(dto.amount) * 100);
-    if (!Number.isFinite(amountKobo) || amountKobo <= 0) {
+    const amount = Math.round(Number(dto.amount));
+    if (!Number.isFinite(amount) || amount <= 0) {
       throw new HttpException(
         { message: 'Invalid payment amount' },
         HttpStatus.BAD_REQUEST,
@@ -395,18 +395,11 @@ export class PayinService {
       );
     }
 
-    const resData = await this.paystackService.chargeKesMobileMoney({
-      email: dto.customerEmail,
-      amountKobo,
-      reference: dto.txRef,
+    const resData = await this.mpesaService.initiateStkPush({
       phone,
-      provider,
-      metadata: {
-        flow: 'payment_request',
-        customerName: dto.customerName ?? '',
-        customerPhone: phone,
-        app: 'digikuntz-payments',
-      },
+      amount,
+      reference: dto.txRef,
+      description: `Payment request ${provider}`,
     });
 
     await this.payinModel.create({
@@ -419,7 +412,7 @@ export class PayinService {
       customerName: dto.customerName,
       channel: 'mobile_money',
       status: PayinStatus.PENDING,
-      provider: PayinProvider.PAYSTACK,
+      provider: PayinProvider.MPESA,
       raw: resData,
     });
 
@@ -430,57 +423,43 @@ export class PayinService {
       amount: dto.amount,
       currency: dto.currency,
       customerEmail: dto.customerEmail,
-      provider: PayinProvider.PAYSTACK,
+      provider: PayinProvider.MPESA,
       details: resData?.data ?? resData,
       redirect_url: null,
     };
   }
 
-  private mapPaystackStatusToLocal(status?: string): PayinStatus {
-    console.log('Paystack Status for map: ', status);
-    const normalized = String(status ?? '').toLowerCase();
-    if (normalized === 'success') return PayinStatus.SUCCESSFUL;
-    if (
-      normalized === 'pending' ||
-      normalized === 'ongoing' ||
-      normalized === 'processing' ||
-      normalized === 'queued'
-    ) {
-      return PayinStatus.PENDING;
-    }
-    if (normalized === 'abandoned') return PayinStatus.CANCELLED;
-    if (normalized === 'failed') return PayinStatus.FAILED;
-    if (normalized === 'cancelled') return PayinStatus.CANCELLED;
+  private mapMpesaStatusToLocal(raw?: any): PayinStatus {
+    const status = this.mpesaService.mapStkStatusToLocal(raw);
+    if (status === 'successful') return PayinStatus.SUCCESSFUL;
+    if (status === 'failed') return PayinStatus.FAILED;
+    if (status === 'cancelled') return PayinStatus.CANCELLED;
     return PayinStatus.PENDING;
   }
 
   private async createKesMpesaPayin(dto: CreatePayinDto & { txRef: string }) {
-    const amountKobo = Math.round(Number(dto.amount) * 100);
-    if (!Number.isFinite(amountKobo) || amountKobo <= 0) {
+    const amount = Math.round(Number(dto.amount));
+    if (!Number.isFinite(amount) || amount <= 0) {
       throw new HttpException(
         { message: 'Invalid payment amount' },
         HttpStatus.BAD_REQUEST,
       );
     }
-
-    const callbackUrl =
-      dto.redirectUrl || this.config.get<string>('PAYSTACK_CALLBACK_URL_KES');
-
-    const resData = await this.paystackService.initializeKesMpesaPayment({
-      email: dto.customerEmail,
-      amountKobo,
+    const phone = this.normalizeKesMsisdnStrict(String(dto.customerPhone || ''));
+    if (!phone) {
+      throw new HttpException(
+        { message: 'customerPhone is required for KES M-Pesa payin' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const resData = await this.mpesaService.initiateStkPush({
+      phone,
+      amount,
       reference: dto.txRef,
-      callbackUrl,
-      metadata: {
-        channel: 'mobile_money',
-        provider: 'mpesa',
-        customerName: dto.customerName ?? '',
-        customerPhone: dto.customerPhone ?? '',
-        app: 'digikuntz-payments',
-      },
+      description: 'Payin',
     });
 
-    await this.payinModel.create({
+    console.log('payin payload to mpesa:', JSON.stringify({
       userId: dto.userId,
       transactionId: dto.transactionId,
       txRef: dto.txRef,
@@ -490,9 +469,25 @@ export class PayinService {
       customerName: dto.customerName,
       channel: 'mobile_money',
       status: PayinStatus.PENDING,
-      provider: PayinProvider.PAYSTACK,
+      provider: PayinProvider.MPESA,
+      raw: resData,
+    }, null, 2));
+
+    const payin = await this.payinModel.create({
+      userId: dto.userId,
+      transactionId: dto.transactionId,
+      txRef: dto.txRef,
+      amount: dto.amount,
+      currency: dto.currency,
+      customerEmail: dto.customerEmail,
+      customerName: dto.customerName,
+      channel: 'mobile_money',
+      status: PayinStatus.PENDING,
+      provider: PayinProvider.MPESA,
       raw: resData,
     });
+
+    console.log('payin resp: ', payin);
 
     return {
       status: PayinStatus.PENDING,
@@ -501,17 +496,78 @@ export class PayinService {
       amount: dto.amount,
       currency: dto.currency,
       customerEmail: dto.customerEmail,
-      redirect_url: resData?.data?.authorization_url,
+      provider: PayinProvider.MPESA,
+      redirect_url: null,
+      details: resData?.data ?? resData,
     };
   }
 
-  private async verifyPaystackByReference(reference: string, closeMode = false) {
-    // console.log('Reference Paystack verification: ', reference);
-    const verifyResp = await this.paystackService.verifyTransaction(reference);
-    // console.log('verifyPaystack By Reference raw: ', verifyResp);
-    // console.log('verifyPaystack By Reference: ', verifyResp.data);
-    const providerStatus = verifyResp?.data?.status;
-    const status = this.mapPaystackStatusToLocal(providerStatus);
+  private async verifyMpesaByReference(reference: string, closeMode = false) {
+    const local = await this.payinModel.findOne({ txRef: reference }).lean().exec();
+    if (!local) {
+      throw new HttpException(
+        { message: `Local transaction ${reference} not found` },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    const checkoutRequestId =
+      local?.raw?.CheckoutRequestID ||
+      local?.raw?.data?.CheckoutRequestID ||
+      local?.raw?.Body?.stkCallback?.CheckoutRequestID;
+
+    if (!checkoutRequestId) {
+      const fallbackStatus = closeMode ? PayinStatus.CANCELLED : PayinStatus.PENDING;
+      return this.payinModel
+        .findOneAndUpdate(
+          { txRef: reference },
+          { status: fallbackStatus, provider: PayinProvider.MPESA },
+          { new: true },
+        )
+        .lean()
+        .exec();
+    }
+
+    let verifyResp: any;
+    try {
+      verifyResp = await this.mpesaService.queryStkStatus(checkoutRequestId);
+    } catch (error: any) {
+      const details =
+        typeof error?.getResponse === 'function'
+          ? error.getResponse()
+          : error?.response?.data || error;
+      const errorCode = String(details?.details?.errorCode || details?.errorCode || '');
+      const errorMessage = String(
+        details?.details?.errorMessage || details?.errorMessage || details?.message || '',
+      ).toLowerCase();
+      const isTemporaryUnavailable =
+        errorCode === '500.002.1001' ||
+        errorMessage.includes('temporarily unavailable');
+
+      if (isTemporaryUnavailable) {
+        this.logger.warn(
+          `verifyMpesaByReference: temporary M-Pesa outage for txRef=${reference}, keeping pending`,
+        );
+        return this.payinModel
+          .findOneAndUpdate(
+            { txRef: reference },
+            {
+              status: PayinStatus.PENDING,
+              provider: PayinProvider.MPESA,
+              raw: {
+                ...(local?.raw || {}),
+                lastQueryError: details,
+                lastQueryAt: new Date().toISOString(),
+              },
+            },
+            { new: true },
+          )
+          .lean()
+          .exec();
+      }
+
+      throw error;
+    }
+    const status = this.mapMpesaStatusToLocal(verifyResp);
 
     const nextStatus =
       status === PayinStatus.SUCCESSFUL || closeMode
@@ -523,7 +579,7 @@ export class PayinService {
         { txRef: reference },
         {
           status: nextStatus,
-          provider: PayinProvider.PAYSTACK,
+          provider: PayinProvider.MPESA,
           raw: verifyResp,
         },
         { new: true },
@@ -722,7 +778,10 @@ export class PayinService {
       .exec();
 
     if (localAnyRef?.provider === PayinProvider.PAYSTACK) {
-      return this.verifyPaystackByReference(String(localAnyRef.txRef), saveLocal);
+      return this.verifyMpesaByReference(String(localAnyRef.txRef), saveLocal);
+    }
+    if (localAnyRef?.provider === PayinProvider.MPESA) {
+      return this.verifyMpesaByReference(String(localAnyRef.txRef), saveLocal);
     }
 
     // console.log('verifyPayin: idOrTxRef', idOrTxRef);
@@ -788,6 +847,88 @@ export class PayinService {
 
     this.logger.debug('handleVerifyPayin: returning local record only');
     return this.payinModel.findOne({ txRef: txRef }).lean().exec();
+  }
+
+  async handleMpesaStkCallback(payload: any) {
+    const callback = payload?.Body?.stkCallback || payload?.stkCallback || payload || {};
+    const checkoutRequestId = String(callback?.CheckoutRequestID || '');
+    const merchantRequestId = String(callback?.MerchantRequestID || '');
+    const resultCode = Number(callback?.ResultCode);
+    const resultDesc = String(callback?.ResultDesc || '');
+
+    const metadataItems = Array.isArray(callback?.CallbackMetadata?.Item)
+      ? callback.CallbackMetadata.Item
+      : [];
+    const findItem = (name: string) =>
+      metadataItems.find((item: any) => String(item?.Name || '').toLowerCase() === name.toLowerCase());
+
+    const accountReference =
+      String(
+        findItem('AccountReference')?.Value ||
+        findItem('BillRefNumber')?.Value ||
+        '',
+      ).trim();
+
+    let payin: any = null;
+    if (accountReference) {
+      payin = await this.payinModel.findOne({ txRef: accountReference }).lean().exec();
+    }
+
+    if (!payin && checkoutRequestId) {
+      payin = await this.payinModel
+        .findOne({
+          $or: [
+            { 'raw.CheckoutRequestID': checkoutRequestId },
+            { 'raw.data.CheckoutRequestID': checkoutRequestId },
+            { 'raw.Body.stkCallback.CheckoutRequestID': checkoutRequestId },
+          ],
+        })
+        .lean()
+        .exec();
+    }
+
+    if (!payin) {
+      return {
+        accepted: false,
+        message: 'Payin not found for callback',
+        context: { checkoutRequestId, merchantRequestId, accountReference },
+      };
+    }
+
+    const nextStatus = this.mapMpesaStatusToLocal(callback);
+    const mergedRaw = {
+      ...(payin?.raw || {}),
+      callback: payload,
+      checkoutRequestId,
+      merchantRequestId,
+      resultCode,
+      resultDesc,
+      callbackReceivedAt: new Date().toISOString(),
+    };
+
+    const updated = await this.payinModel
+      .findOneAndUpdate(
+        { txRef: payin.txRef },
+        {
+          status: nextStatus,
+          provider: PayinProvider.MPESA,
+          raw: mergedRaw,
+        },
+        { new: true },
+      )
+      .lean()
+      .exec();
+
+    return {
+      accepted: true,
+      txRef: payin.txRef,
+      transactionId: String(payin.transactionId),
+      status: nextStatus,
+      resultCode,
+      resultDesc,
+      checkoutRequestId,
+      payin: updated,
+    };
   }
 
   /**

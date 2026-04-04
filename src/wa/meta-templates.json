@@ -1,0 +1,400 @@
+{
+  "provider": "meta_whatsapp_cloud_api",
+  "default_base_url": "https://payments.digikuntz.com",
+  "notes": {
+    "variables": "Human-readable aliases are used in content (e.g. {{user_name}}). In Meta dashboard, keep numeric placeholders {{1}}, {{2}}, ... mapped by the 'index' field below.",
+    "buttons": "For dynamic URL buttons, this file uses named aliases in url_template for readability; in Meta dashboard configure numeric URL variable and map it to the same field."
+  },
+  "templates": [
+    {
+      "key": "dk_welcome_account_creation",
+      "name_fr": "dk_welcome_account_creation_fr",
+      "name_en": "dk_welcome_account_creation_en",
+      "category": "UTILITY",
+      "title": {
+        "fr": "Bienvenue sur digiKUNTZ Payments",
+        "en": "Welcome to digiKUNTZ Payments"
+      },
+      "variables": [
+        { "index": 1, "name": "user_name", "type": "text", "backend_source": "showName(user)" }
+      ],
+      "content": {
+        "fr": "Bienvenue {{user_name}} ! Votre compte digiKUNTZ Payments a été créé avec succès.",
+        "en": "Welcome {{user_name}}! Your digiKUNTZ Payments account has been successfully created."
+      },
+      "button": {
+        "type": "URL_STATIC",
+        "text_fr": "Accéder au compte",
+        "text_en": "Open account",
+        "url": "https://payments.digikuntz.com"
+      }
+    },
+    {
+      "key": "dk_reset_password",
+      "name_fr": "dk_reset_password_2_fr",
+      "name_en": "dk_reset_password_2_en",
+      "category": "UTILITY",
+      "title": {
+        "fr": "Réinitialisation de mot de passe",
+        "en": "Password reset"
+      },
+      "variables": [
+        { "index": 1, "name": "user_name", "type": "text", "backend_source": "showName(user)" }
+      ],
+      "content": {
+        "fr": "Hello {{user_name}}, veuillez cliquer sur le bouton ci-dessous pour réinitialiser votre mot de passe.",
+        "en": "Hello {{user_name}}, please click the button below to reset your password."
+      },
+      "button": {
+        "type": "URL_DYNAMIC",
+        "text_fr": "Réinitialiser",
+        "text_en": "Reset",
+        "url_template": "https://payments.digikuntz.com/auth/new-password/{{reset_token}}",
+        "url_param": {
+          "index": 1,
+          "name": "reset_token",
+          "backend_source": "resetToken"
+        }
+      }
+    },
+    {
+      "key": "dk_password_updated",
+      "name_fr": "dk_password_updated_fr",
+      "name_en": "dk_password_updated_en",
+      "category": "UTILITY",
+      "title": {
+        "fr": "Mot de passe modifié",
+        "en": "Password updated"
+      },
+      "variables": [
+        { "index": 1, "name": "user_name", "type": "text", "backend_source": "showName(user)" }
+      ],
+      "content": {
+        "fr": "Hello {{user_name}}, votre mot de passe a été mis à jour avec succès.",
+        "en": "Hello {{user_name}}, your password has been successfully updated."
+      }
+    },
+    {
+      "key": "dk_transfer_success_receiver",
+      "name_fr": "dk_transfer_success_receiver_fr",
+      "name_en": "dk_transfer_success_receiver_en",
+      "category": "UTILITY",
+      "title": {
+        "fr": "Paiement reçu",
+        "en": "Payment received"
+      },
+      "variables": [
+        { "index": 1, "name": "receiver_name", "type": "text", "backend_source": "transaction.receiverName" },
+        { "index": 2, "name": "amount", "type": "text", "backend_source": "transaction.estimation" },
+        { "index": 3, "name": "currency", "type": "text", "backend_source": "transaction.receiverCurrency" },
+        { "index": 4, "name": "sender_name", "type": "text", "backend_source": "transaction.senderName" },
+        { "index": 5, "name": "transaction_ref", "type": "text", "backend_source": "transaction.transactionRef || transaction._id" }
+      ],
+      "content": {
+        "fr": "Hello {{receiver_name}}, vous avez reçu {{amount}} {{currency}} de la part de {{sender_name}}. Référence: {{transaction_ref}}",
+        "en": "Hello {{receiver_name}}, you received {{amount}} {{currency}} from {{sender_name}}. Reference: {{transaction_ref}}"
+      },
+      "button": {
+        "type": "URL_DYNAMIC",
+        "text_fr": "Voir le reçu",
+        "text_en": "View receipt",
+        "url_template": "https://payments.digikuntz.com/invoice/{{transaction_id}}",
+        "url_param": {
+          "index": 1,
+          "name": "transaction_id",
+          "backend_source": "transaction._id"
+        }
+      }
+    },
+    {
+      "key": "dk_transfer_success_sender",
+      "name_fr": "dk_transfer_success_sender_fr",
+      "name_en": "dk_transfer_success_sender_en",
+      "category": "UTILITY",
+      "title": {
+        "fr": "Transfert effectué",
+        "en": "Transfer completed"
+      },
+      "variables": [
+        { "index": 1, "name": "sender_name", "type": "text", "backend_source": "transaction.senderName" },
+        { "index": 2, "name": "amount", "type": "text", "backend_source": "transaction.estimation" },
+        { "index": 3, "name": "currency", "type": "text", "backend_source": "transaction.senderCurrency" },
+        { "index": 4, "name": "receiver_name", "type": "text", "backend_source": "transaction.receiverName" },
+        { "index": 5, "name": "transaction_ref", "type": "text", "backend_source": "transaction.transactionRef || transaction._id" }
+      ],
+      "content": {
+        "fr": "Hello {{sender_name}}, vous avez envoyé {{amount}} {{currency}} à {{receiver_name}}. Référence: {{transaction_ref}}",
+        "en": "Hello {{sender_name}}, you sent {{amount}} {{currency}} to {{receiver_name}}. Reference: {{transaction_ref}}"
+      },
+      "button": {
+        "type": "URL_DYNAMIC",
+        "text_fr": "Voir le reçu",
+        "text_en": "View receipt",
+        "url_template": "https://payments.digikuntz.com/invoice/{{transaction_id}}",
+        "url_param": {
+          "index": 1,
+          "name": "transaction_id",
+          "backend_source": "transaction._id"
+        }
+      }
+    },
+    {
+      "key": "dk_withdrawal_success",
+      "name_fr": "dk_withdrawal_success_fr",
+      "name_en": "dk_withdrawal_success_en",
+      "category": "UTILITY",
+      "title": {
+        "fr": "Retrait effectué",
+        "en": "Withdrawal successful"
+      },
+      "variables": [
+        { "index": 1, "name": "amount", "type": "text", "backend_source": "transaction.estimation" },
+        { "index": 2, "name": "currency", "type": "text", "backend_source": "transaction.receiverCurrency" },
+        { "index": 3, "name": "transaction_ref", "type": "text", "backend_source": "transaction.transactionRef || transaction._id" }
+      ],
+      "content": {
+        "fr": "Votre retrait de {{amount}} {{currency}} a été effectué avec succès. Référence: {{transaction_ref}}",
+        "en": "Your withdrawal of {{amount}} {{currency}} was successful. Reference: {{transaction_ref}}"
+      },
+      "button": {
+        "type": "URL_DYNAMIC",
+        "text_fr": "Voir le reçu",
+        "text_en": "View receipt",
+        "url_template": "https://payments.digikuntz.com/invoice/{{transaction_id}}",
+        "url_param": {
+          "index": 1,
+          "name": "transaction_id",
+          "backend_source": "transaction._id"
+        }
+      }
+    },
+    {
+      "key": "dk_service_payment_sender",
+      "name_fr": "dk_service_payment_sender_fr",
+      "name_en": "dk_service_payment_sender_en",
+      "category": "UTILITY",
+      "title": {
+        "fr": "Paiement de service effectué",
+        "en": "Service payment successful"
+      },
+      "variables": [
+        { "index": 1, "name": "amount", "type": "text", "backend_source": "transaction.estimation" },
+        { "index": 2, "name": "currency", "type": "text", "backend_source": "transaction.receiverCurrency" },
+        { "index": 3, "name": "transaction_ref", "type": "text", "backend_source": "transaction.transactionRef || transaction._id" }
+      ],
+      "content": {
+        "fr": "Votre paiement de service de {{amount}} {{currency}} est confirmé. Référence: {{transaction_ref}}",
+        "en": "Your service payment of {{amount}} {{currency}} is confirmed. Reference: {{transaction_ref}}"
+      },
+      "button": {
+        "type": "URL_DYNAMIC",
+        "text_fr": "Voir le reçu",
+        "text_en": "View receipt",
+        "url_template": "https://payments.digikuntz.com/invoice/{{transaction_id}}",
+        "url_param": {
+          "index": 1,
+          "name": "transaction_id",
+          "backend_source": "transaction._id"
+        }
+      }
+    },
+    {
+      "key": "dk_service_payment_receiver",
+      "name_fr": "dk_service_payment_receiver_fr",
+      "name_en": "dk_service_payment_receiver_en",
+      "category": "UTILITY",
+      "title": {
+        "fr": "Paiement de service reçu",
+        "en": "Service payment received"
+      },
+      "variables": [
+        { "index": 1, "name": "amount", "type": "text", "backend_source": "transaction.estimation" },
+        { "index": 2, "name": "currency", "type": "text", "backend_source": "transaction.receiverCurrency" },
+        { "index": 3, "name": "sender_name", "type": "text", "backend_source": "transaction.senderName" },
+        { "index": 4, "name": "transaction_ref", "type": "text", "backend_source": "transaction.transactionRef || transaction._id" }
+      ],
+      "content": {
+        "fr": "Vous avez reçu un paiement de service de {{amount}} {{currency}} de {{sender_name}}. Référence: {{transaction_ref}}",
+        "en": "You received a service payment of {{amount}} {{currency}} from {{sender_name}}. Reference: {{transaction_ref}}"
+      },
+      "button": {
+        "type": "URL_DYNAMIC",
+        "text_fr": "Voir le reçu",
+        "text_en": "View receipt",
+        "url_template": "https://payments.digikuntz.com/invoice/{{transaction_id}}",
+        "url_param": {
+          "index": 1,
+          "name": "transaction_id",
+          "backend_source": "transaction._id"
+        }
+      }
+    },
+    {
+      "key": "dk_subscription_user",
+      "name_fr": "dk_subscription_user_fr",
+      "name_en": "dk_subscription_user_en",
+      "category": "UTILITY",
+      "title": {
+        "fr": "Abonnement activé",
+        "en": "Subscription activated"
+      },
+      "variables": [
+        { "index": 1, "name": "user_name", "type": "text", "backend_source": "showName(user)" },
+        { "index": 2, "name": "plan_title", "type": "text", "backend_source": "plan.title" },
+        { "index": 3, "name": "plan_subtitle", "type": "text", "backend_source": "plan.subTitle" },
+        { "index": 4, "name": "amount", "type": "text", "backend_source": "transaction.estimation" },
+        { "index": 5, "name": "currency", "type": "text", "backend_source": "transaction.receiverCurrency" },
+        { "index": 6, "name": "transaction_id", "type": "text", "backend_source": "transactionId" }
+      ],
+      "content": {
+        "fr": "Hello *{{user_name}}*, Nous avons reçu votre paiement pour *{{plan_title}} ({{plan_subtitle}})*. Montant: *{{amount}} {{currency}}*. Référence: *{{transaction_id}}*. Merci de faire confiance à *digiKUNTZ Payments*.",
+        "en": "Hello *{{user_name}}*, We have received your payment for *{{plan_title}} ({{plan_subtitle}})*. Amount: *{{amount}} {{currency}}*. Reference: *{{transaction_id}}*. Thank you for trusting *digiKUNTZ Payments*."
+      },
+      "button": {
+        "type": "URL_DYNAMIC",
+        "text_fr": "Voir le reçu",
+        "text_en": "View receipt",
+        "url_template": "https://payments.digikuntz.com/invoice/{{transaction_id}}",
+        "url_param": {
+          "index": 1,
+          "name": "transaction_id",
+          "backend_source": "transactionId"
+        }
+      }
+    },
+    {
+      "key": "dk_subscription_author",
+      "name_fr": "dk_subscription_author_fr",
+      "name_en": "dk_subscription_author_en",
+      "category": "UTILITY",
+      "title": {
+        "fr": "Nouveau souscripteur",
+        "en": "New subscriber"
+      },
+      "variables": [
+        { "index": 1, "name": "author_name", "type": "text", "backend_source": "showName(author)" },
+        { "index": 2, "name": "plan_title", "type": "text", "backend_source": "plan.title" },
+        { "index": 3, "name": "plan_subtitle", "type": "text", "backend_source": "plan.subTitle" }
+      ],
+      "content": {
+        "fr": "Hello {{author_name}}, vous avez un nouvel abonné à {{plan_title}} ({{plan_subtitle}}).",
+        "en": "Hello {{author_name}}, you have a new subscriber for {{plan_title}} ({{plan_subtitle}})."
+      },
+      "button": {
+        "type": "URL_STATIC",
+        "text_fr": "Ouvrir le compte",
+        "text_en": "Open account",
+        "url": "https://payments.digikuntz.com"
+      }
+    },
+    {
+      "key": "dk_admin_payout_pending",
+      "name_fr": "dk_admin_payout_pending_fr",
+      "name_en": "dk_admin_payout_pending_en",
+      "category": "UTILITY",
+      "title": {
+        "fr": "Payout en attente de validation",
+        "en": "Payout pending approval"
+      },
+      "variables": [
+        { "index": 1, "name": "tx_type", "type": "text", "backend_source": "transaction.transactionType" },
+        { "index": 2, "name": "sender_name", "type": "text", "backend_source": "transaction.senderName" },
+        { "index": 3, "name": "receiver_name", "type": "text", "backend_source": "transaction.receiverName" },
+        { "index": 4, "name": "amount", "type": "text", "backend_source": "transaction.estimation" },
+        { "index": 5, "name": "currency", "type": "text", "backend_source": "transaction.receiverCurrency || transaction.senderCurrency" },
+        { "index": 6, "name": "reference", "type": "text", "backend_source": "transaction._id || transaction.transactionRef" }
+      ],
+      "content": {
+        "fr": "Nouveau {{tx_type}} à valider. Expéditeur: {{sender_name}}, bénéficiaire: {{receiver_name}}, montant: {{amount}} {{currency}}, ref: {{reference}}",
+        "en": "New {{tx_type}} requires approval. Sender: {{sender_name}}, receiver: {{receiver_name}}, amount: {{amount}} {{currency}}, ref: {{reference}}"
+      },
+      "button": {
+        "type": "URL_STATIC",
+        "text_fr": "Ouvrir Admin",
+        "text_en": "Open Admin",
+        "url": "https://payments.digikuntz.com/admin-payments/payout"
+      }
+    },
+    {
+      "key": "dk_admin_payout_failed",
+      "name_fr": "dk_admin_payout_failed_fr",
+      "name_en": "dk_admin_payout_failed_en",
+      "category": "UTILITY",
+      "title": {
+        "fr": "Échec payout",
+        "en": "Payout failed"
+      },
+      "variables": [
+        { "index": 1, "name": "tx_type", "type": "text", "backend_source": "transaction.transactionType" },
+        { "index": 2, "name": "reference", "type": "text", "backend_source": "transaction.transactionRef || transaction._id" },
+        { "index": 3, "name": "amount", "type": "text", "backend_source": "transaction.estimation" },
+        { "index": 4, "name": "currency", "type": "text", "backend_source": "transaction.senderCurrency || transaction.receiverCurrency" }
+      ],
+      "content": {
+        "fr": "Échec payout. Type: {{tx_type}}, ref: {{reference}}, montant: {{amount}} {{currency}}",
+        "en": "Payout failed. Type: {{tx_type}}, ref: {{reference}}, amount: {{amount}} {{currency}}"
+      }
+    },
+    {
+      "key": "dk_transaction_rejected",
+      "name_fr": "dk_transaction_rejected_fr",
+      "name_en": "dk_transaction_rejected_en",
+      "category": "UTILITY",
+      "title": {
+        "fr": "Transaction rejetée",
+        "en": "Transaction rejected"
+      },
+      "variables": [
+        { "index": 1, "name": "user_name", "type": "text", "backend_source": "showName(user)" },
+        { "index": 2, "name": "reference", "type": "text", "backend_source": "transaction.transactionRef || transaction._id" }
+      ],
+      "content": {
+        "fr": "Hello {{user_name}}, votre transaction a été rejetée par l'administrateur. Référence: {{reference}}",
+        "en": "Hello {{user_name}}, your transaction was rejected by the administrator. Reference: {{reference}}"
+      }
+    },
+    {
+      "key": "dk_fundraising_donor",
+      "name_fr": "dk_fundraising_donor_fr",
+      "name_en": "dk_fundraising_donor_en",
+      "category": "UTILITY",
+      "title": {
+        "fr": "Don confirmé",
+        "en": "Donation confirmed"
+      },
+      "variables": [
+        { "index": 1, "name": "donor_name", "type": "text", "backend_source": "showName(donor)" },
+        { "index": 2, "name": "amount", "type": "text", "backend_source": "transaction.estimation" },
+        { "index": 3, "name": "currency", "type": "text", "backend_source": "fundraising.currency" },
+        { "index": 4, "name": "fundraising_title", "type": "text", "backend_source": "fundraising.title" },
+        { "index": 5, "name": "reference", "type": "text", "backend_source": "transaction.transactionRef || transaction._id" }
+      ],
+      "content": {
+        "fr": "Hello {{donor_name}}, votre don de {{amount}} {{currency}} pour {{fundraising_title}} est confirmé. Référence: {{reference}}",
+        "en": "Hello {{donor_name}}, your donation of {{amount}} {{currency}} to {{fundraising_title}} is confirmed. Reference: {{reference}}"
+      }
+    },
+    {
+      "key": "dk_fundraising_owner",
+      "name_fr": "dk_fundraising_owner_fr",
+      "name_en": "dk_fundraising_owner_en",
+      "category": "UTILITY",
+      "title": {
+        "fr": "Nouveau don reçu",
+        "en": "New donation received"
+      },
+      "variables": [
+        { "index": 1, "name": "owner_name", "type": "text", "backend_source": "showName(owner)" },
+        { "index": 2, "name": "amount", "type": "text", "backend_source": "transaction.estimation" },
+        { "index": 3, "name": "currency", "type": "text", "backend_source": "fundraising.currency" },
+        { "index": 4, "name": "fundraising_title", "type": "text", "backend_source": "fundraising.title" },
+        { "index": 5, "name": "donor_name", "type": "text", "backend_source": "donorVisibility ? donorName : Anonymous" },
+        { "index": 6, "name": "reference", "type": "text", "backend_source": "transaction.transactionRef || transaction._id" }
+      ],
+      "content": {
+        "fr": "Hello {{owner_name}}, vous avez reçu un don de {{amount}} {{currency}} pour {{fundraising_title}}. Donateur: {{donor_name}}. Référence: {{reference}}",
+        "en": "Hello {{owner_name}}, you received a donation of {{amount}} {{currency}} for {{fundraising_title}}. Donor: {{donor_name}}. Reference: {{reference}}"
+      }
+    }
+  ]
+}

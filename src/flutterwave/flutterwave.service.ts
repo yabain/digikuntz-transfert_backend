@@ -819,10 +819,10 @@ export class FlutterwaveService {
       type: this.getreceiverAccountType(transaction), // 'bank' | 'mobile_money' | 'wallet'
     };
 
-    // KES payouts are processed through Paystack (M-Pesa / mobile money flow).
+    // KES payouts are processed through direct M-Pesa integration (Daraja API).
     if (String(payloadPayout.destinationCurrency).toUpperCase() === 'KES') {
       try {
-        await this.payoutService.initiatePaystackPayout(
+        await this.payoutService.initiateMpesaPayout(
           transaction,
           String(userId),
           newTxRef,

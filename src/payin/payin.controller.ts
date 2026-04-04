@@ -10,6 +10,7 @@ import {
   Body,
   Get,
   Param,
+  HttpStatus,
   Req,
   Headers,
   Logger,
@@ -18,10 +19,12 @@ import {
   ApiBody,
   ApiOperation,
   ApiParam,
+  ApiProduces,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import { PayinService } from './payin.service';
+import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
 import axios from 'axios';
 import * as crypto from 'crypto';
 import { HttpException } from '@nestjs/common';
@@ -30,7 +33,10 @@ import { HttpException } from '@nestjs/common';
 @Controller('payin')
 export class PayinController {
   private readonly logger = new Logger(PayinController.name);
-  constructor(private payinService: PayinService) {}
+  constructor(
+    private payinService: PayinService,
+    private fwService: FlutterwaveService,
+  ) {}
 
   // 1) initialisation : backend crée txRef + enregistre, renvoie les données au front
   @Post('initialize')
@@ -104,5 +110,50 @@ export class PayinController {
   @ApiResponse({ status: 404, description: 'Payin not found.' })
   async getPayinByTxRef(@Param('txRef') txRef: string) {
     return this.payinService.getPayinByTxRef(txRef);
+  }
+
+  @Post('mpesa/callback')
+  @ApiOperation({
+    summary:
+      'M-Pesa STK callback endpoint (updates payin + transaction workflow)',
+  })
+  @ApiProduces('application/json')
+  @ApiResponse({ status: 200, description: 'Callback accepted and processed.' })
+  async mpesaCallback(@Body() payload: any) {
+    const callbackResult = await this.payinService.handleMpesaStkCallback(payload);
+    if (!callbackResult?.accepted || !callbackResult?.txRef) {
+      return {
+        ResultCode: 0,
+        ResultDesc: 'Accepted',
+        callbackResult,
+      };
+    }
+
+    try {
+      if (callbackResult.status === 'successful') {
+        await this.fwService.verifyPayin(callbackResult.txRef);
+      } else if (
+        callbackResult.status === 'failed' ||
+        callbackResult.status === 'cancelled'
+      ) {
+        await this.fwService.verifyAndClosePayin(callbackResult.txRef);
+      } else {
+        await this.fwService.verifyPayin(callbackResult.txRef);
+      }
+    } catch (error: any) {
+      this.logger.error(
+        `M-Pesa callback post-processing failed for txRef=${callbackResult.txRef}`,
+        error?.message || error,
+      );
+    }
+
+    // Safaricom expects HTTP 200 to acknowledge callback reception.
+    return {
+      ResultCode: 0,
+      ResultDesc: 'Accepted',
+      statusCode: HttpStatus.OK,
+      txRef: callbackResult.txRef,
+      payinStatus: callbackResult.status,
+    };
   }
 }

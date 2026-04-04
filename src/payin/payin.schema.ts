@@ -18,6 +18,7 @@ export enum PayinStatus {
 export enum PayinProvider {
   FLUTTERWAVE = 'flutterwave',
   PAYSTACK = 'paystack',
+  MPESA = 'mpesa',
 }
 
 @Schema({

@@ -208,12 +208,11 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
-    const resetToken = this.jwtService.sign(
-      { id: user._id },
-      { expiresIn: '1h' },
-    );
+    const resetToken = this.generateResetToken(String(user._id));
+    const resetExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
 
     user.resetPasswordToken = resetToken;
+    user.resetPasswordTokenExpiresAt = resetExpiresAt;
     await user.save();
 
     // const resetPwdUrl = `;token=${resetToken}`;
@@ -253,6 +252,7 @@ export class AuthService {
     const hashedPwd = await bcrypt.hash(newPassword, 10);
     user.password = hashedPwd;
     user.resetPasswordToken = ''; // Clear the reset token
+    user.resetPasswordTokenExpiresAt = null;
     await user.save();
     await this.revokedTokenModel.create({ token });
     void this.emailService.sendPasswordUpdatedEmail(user).catch((error) =>
@@ -266,19 +266,31 @@ export class AuthService {
 
   // token validation
   async verifyResetPwdToken(token: string): Promise<any> {
-    let userId: string;
-    try {
-      const decoded = this.jwtService.verify(token);
-      userId = decoded.id;
-    } catch (error) {
-      throw new BadRequestException('Invalid or expired token');
-    }
     const verify = await this.isTokenRevoked(token);
     if (verify === true) {
       throw new BadRequestException('Invalid or expired token');
     }
 
+    let userId: string | undefined;
+    try {
+      const decoded = this.jwtService.verify(token);
+      userId = decoded.id;
+    } catch {
+      const user = await this.userModel.findOne({
+        resetPasswordToken: token,
+        resetPasswordTokenExpiresAt: { $gt: new Date() },
+      });
+      if (!user) {
+        throw new BadRequestException('Invalid or expired token');
+      }
+      userId = String(user._id);
+    }
+
     return { userId };
+  }
+
+  private generateResetToken(userId: string): string {
+    return this.jwtService.sign({ id: userId }, { expiresIn: '1h' });
   }
 
   private sanitizeUser(user: any): any {
@@ -286,6 +298,7 @@ export class AuthService {
     const obj = user.toObject ? user.toObject() : user; // convert mongoose doc to object if needed
     delete obj.password;
     delete obj.resetPasswordToken;
+    delete obj.resetPasswordTokenExpiresAt;
     delete obj.balance;
     return obj;
   }
