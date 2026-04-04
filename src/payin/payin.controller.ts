@@ -124,6 +124,16 @@ export class PayinController {
       `[M-Pesa callback] received payload keys=${Object.keys(payload || {}).join(',')}`,
     );
     const callbackResult = await this.payinService.handleMpesaStkCallback(payload);
+    const cb = payload?.Body?.stkCallback || payload?.stkCallback || {};
+    this.logger.log(
+      `[M-Pesa callback] txRef=${callbackResult?.txRef || 'n/a'} checkoutRequestId=${String(
+        cb?.CheckoutRequestID || '',
+      )} merchantRequestId=${String(
+        cb?.MerchantRequestID || '',
+      )} resultCode=${String(cb?.ResultCode ?? '')} resultDesc="${String(
+        cb?.ResultDesc || '',
+      )}" localStatus=${String(callbackResult?.status || 'n/a')}`,
+    );
     if (!callbackResult?.accepted || !callbackResult?.txRef) {
       return {
         ResultCode: 0,
