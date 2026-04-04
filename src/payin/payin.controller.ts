@@ -12,6 +12,7 @@ import {
   Param,
   HttpStatus,
   Req,
+  Query,
   Headers,
   Logger,
 } from '@nestjs/common';
@@ -119,11 +120,14 @@ export class PayinController {
   })
   @ApiProduces('application/json')
   @ApiResponse({ status: 200, description: 'Callback accepted and processed.' })
-  async mpesaCallback(@Body() payload: any) {
+  async mpesaCallback(@Body() payload: any, @Query('txRef') txRef?: string) {
     this.logger.log(
       `[M-Pesa callback] received payload keys=${Object.keys(payload || {}).join(',')}`,
     );
-    const callbackResult = await this.payinService.handleMpesaStkCallback(payload);
+    const callbackResult = await this.payinService.handleMpesaStkCallback(
+      payload,
+      txRef,
+    );
     const cb = payload?.Body?.stkCallback || payload?.stkCallback || {};
     this.logger.log(
       `[M-Pesa callback] txRef=${callbackResult?.txRef || 'n/a'} checkoutRequestId=${String(

@@ -157,20 +157,25 @@ export class PayinService {
       );
     }
 
-    if (digits.startsWith('254') && digits.length === 12) {
+    if (/^2547\d{8}$/.test(digits)) {
       return digits;
-    }
-    if (digits.startsWith('0') && digits.length === 10) {
-      return `254${digits.slice(1)}`;
-    }
-    if (digits.length === 9 && (digits.startsWith('7') || digits.startsWith('1'))) {
-      return `254${digits}`;
     }
 
     throw new HttpException(
-      { message: 'Invalid KES mobile number format. Expected 254XXXXXXXXX' },
+      {
+        message:
+          'Invalid KES mobile number format. Expected 2547XXXXXXXX (example: 254701234567)',
+      },
       HttpStatus.BAD_REQUEST,
     );
+  }
+
+  private buildMpesaCallbackUrlWithTxRef(txRef: string): string | undefined {
+    const base = this.config.get<string>('MPESA_STK_CALLBACK_URL') || '';
+    if (!base) return undefined;
+
+    const separator = base.includes('?') ? '&' : '?';
+    return `${base}${separator}txRef=${encodeURIComponent(String(txRef || ''))}`;
   }
 
   private unwrapAxiosError(error: unknown): {
@@ -400,6 +405,7 @@ export class PayinService {
       amount,
       reference: dto.txRef,
       description: `Payment request ${provider}`,
+      callbackUrl: this.buildMpesaCallbackUrlWithTxRef(dto.txRef),
     });
 
     await this.payinModel.create({
@@ -457,6 +463,7 @@ export class PayinService {
       amount,
       reference: dto.txRef,
       description: 'Payin',
+      callbackUrl: this.buildMpesaCallbackUrlWithTxRef(dto.txRef),
     });
 
     console.log('payin payload to mpesa:', JSON.stringify({
@@ -541,6 +548,7 @@ export class PayinService {
       ).toLowerCase();
       const isTemporaryUnavailable =
         errorCode === '500.002.1001' ||
+        errorCode === '500.001.1001' ||
         errorMessage.includes('temporarily unavailable');
 
       if (isTemporaryUnavailable) {
@@ -849,7 +857,7 @@ export class PayinService {
     return this.payinModel.findOne({ txRef: txRef }).lean().exec();
   }
 
-  async handleMpesaStkCallback(payload: any) {
+  async handleMpesaStkCallback(payload: any, txRefHint?: string) {
     const callback = payload?.Body?.stkCallback || payload?.stkCallback || payload || {};
     const checkoutRequestId = String(callback?.CheckoutRequestID || '');
     const merchantRequestId = String(callback?.MerchantRequestID || '');
@@ -870,6 +878,10 @@ export class PayinService {
       ).trim();
 
     let payin: any = null;
+    if (txRefHint) {
+      payin = await this.payinModel.findOne({ txRef: String(txRefHint) }).lean().exec();
+    }
+
     if (accountReference) {
       payin = await this.payinModel.findOne({ txRef: accountReference }).lean().exec();
     }
@@ -887,11 +899,25 @@ export class PayinService {
         .exec();
     }
 
+    if (!payin && merchantRequestId) {
+      payin = await this.payinModel
+        .findOne({
+          $or: [
+            { 'raw.MerchantRequestID': merchantRequestId },
+            { 'raw.data.MerchantRequestID': merchantRequestId },
+            { 'raw.Body.stkCallback.MerchantRequestID': merchantRequestId },
+            { 'raw.merchantRequestId': merchantRequestId },
+          ],
+        })
+        .lean()
+        .exec();
+    }
+
     if (!payin) {
       return {
         accepted: false,
         message: 'Payin not found for callback',
-        context: { checkoutRequestId, merchantRequestId, accountReference },
+        context: { txRefHint, checkoutRequestId, merchantRequestId, accountReference },
       };
     }
 

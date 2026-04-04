@@ -37,21 +37,7 @@ export class PayoutService {
   private normalizeKenyanMsisdn(input?: string): string {
     const digits = String(input || '').replace(/\D/g, '');
     if (!digits) return '';
-
-    // 2540XXXXXXXXX -> 2547XXXXXXXX (remove trunk 0 after country code)
-    if (digits.length === 13 && digits.startsWith('2540')) {
-      return `254${digits.slice(4)}`;
-    }
-    // 07XXXXXXXX -> 2547XXXXXXXX
-    if (digits.length === 10 && digits.startsWith('0')) {
-      return `254${digits.slice(1)}`;
-    }
-    // 7XXXXXXXX -> 2547XXXXXXXX
-    if (digits.length === 9 && (digits.startsWith('7') || digits.startsWith('1'))) {
-      return `254${digits}`;
-    }
-    // 2547XXXXXXXX already normalized
-    return digits;
+    return /^2547\d{8}$/.test(digits) ? digits : '';
   }
 
   constructor(
@@ -350,7 +336,10 @@ export class PayoutService {
     );
     if (!normalizedPrimary) {
       throw new HttpException(
-        { message: 'Missing recipient mobile account number for M-Pesa payout' },
+        {
+          message:
+            'Invalid recipient mobile account number for M-Pesa payout. Expected 2547XXXXXXXX (example: 254701234567)',
+        },
         HttpStatus.BAD_REQUEST,
       );
     }
