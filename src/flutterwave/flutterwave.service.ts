@@ -109,6 +109,25 @@ export class FlutterwaveService {
     return { Authorization: `Bearer ${this.fwSecretNGN}` };
   }
 
+  private buildKesCustomerPhone(
+    senderContact: string,
+    senderCountryCode?: string,
+  ): string {
+    const raw = String(senderContact || '').trim();
+    const digits = raw.replace(/\D/g, '');
+    if (!digits) return raw;
+
+    if (/^2547\d{8}$/.test(digits)) return digits;
+
+    const cc = String(senderCountryCode || '').replace(/\D/g, '');
+    if (cc === '254') {
+      if (/^7\d{8}$/.test(digits)) return `254${digits}`;
+      if (/^07\d{8}$/.test(digits)) return `254${digits.slice(1)}`;
+    }
+
+    return raw;
+  }
+
   // ---------- Balance ----------
   async getBalance(countryWallet) {
     // console.log('Getting balance for wallet:', countryWallet);
@@ -334,13 +353,20 @@ export class FlutterwaveService {
       }
 
       return this.payinService.createPayin({
+        // KES flow goes to M-Pesa; pre-normalize phone for internal transfer payloads.
         amount,
         txRef,
         transactionId: savedTransaction._id,
         currency: savedTransaction.senderCurrency,
         customerEmail: savedTransaction.senderEmail,
         customerName: savedTransaction.senderName,
-        customerPhone: savedTransaction.senderContact,
+        customerPhone:
+          String(savedTransaction.senderCurrency || '').toUpperCase() === 'KES'
+            ? this.buildKesCustomerPhone(
+                String(savedTransaction.senderContact || ''),
+                String(savedTransaction.senderCountryCode || ''),
+              )
+            : savedTransaction.senderContact,
         status: 'pending',
         userId,
       });

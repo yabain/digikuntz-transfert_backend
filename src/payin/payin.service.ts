@@ -62,6 +62,8 @@ export class PayinService {
   private readonly fwBaseUrlV4: string; // conservé (non utilisé ici)
   private readonly secretHash?: string;
   private readonly redirectDefault?: string;
+  private readonly mpesaCallbackBase: string;
+  private readonly mpesaBaseUrl: string;
 
   private static readonly DEFAULT_CURRENCY = 'XAF';
   private static readonly HTTP_TIMEOUT_MS = 10_000;
@@ -73,6 +75,8 @@ export class PayinService {
     @InjectModel(Payin.name)
     private readonly payinModel: mongoose.Model<PayinDocument>,
   ) {
+    this.mpesaBaseUrl = this.config.get<string>('MPESA_BASE_URL') ?? 'https://api.safaricom.co.ke';
+    this.mpesaCallbackBase = this.config.get<string>('MPESA_STK_CALLBACK_URL') ?? 'https://app.digikuntz.com/payin/mpesa/callback';
     this.fwSecret = this.config.get<string>('FLUTTERWAVE_SECRET_KEY') ?? '';
     this.fwPublic = this.config.get<string>('FLUTTERWAVE_PUBLIC_KEY') ?? '';
     this.fwBaseUrlV3 =
@@ -170,12 +174,20 @@ export class PayinService {
     );
   }
 
-  private buildMpesaCallbackUrlWithTxRef(txRef: string): string | undefined {
-    const base = this.config.get<string>('MPESA_STK_CALLBACK_URL') || '';
-    if (!base) return undefined;
+  private normalizeKesMsisdnInternal(raw: string): string {
+    const digits = String(raw || '').replace(/\D/g, '');
+    if (!digits) return '';
+    if (/^2547\d{8}$/.test(digits)) return digits;
+    if (/^07\d{8}$/.test(digits)) return `254${digits.slice(1)}`;
+    if (/^7\d{8}$/.test(digits)) return `254${digits}`;
+    return digits;
+  }
 
-    const separator = base.includes('?') ? '&' : '?';
-    return `${base}${separator}txRef=${encodeURIComponent(String(txRef || ''))}`;
+  private buildMpesaCallbackUrlWithTxRef(txRef: string): string | undefined {
+    if (!this.mpesaCallbackBase) return undefined;
+
+    const separator = this.mpesaCallbackBase.includes('?') ? '&' : '?';
+    return `${this.mpesaCallbackBase}${separator}txRef=${encodeURIComponent(String(txRef || ''))}`;
   }
 
   private unwrapAxiosError(error: unknown): {
@@ -465,7 +477,10 @@ export class PayinService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    const phone = this.normalizeKesMsisdnStrict(String(dto.customerPhone || ''));
+    const normalizedFromInternal = this.normalizeKesMsisdnInternal(
+      String(dto.customerPhone || ''),
+    );
+    const phone = this.normalizeKesMsisdnStrict(normalizedFromInternal);
     if (!phone) {
       throw new HttpException(
         { message: 'customerPhone is required for KES M-Pesa payin' },
@@ -540,6 +555,16 @@ export class PayinService {
         HttpStatus.NOT_FOUND,
       );
     }
+
+    // Never reopen a terminal payin status (callback may have already closed it).
+    if (
+      local.status === PayinStatus.SUCCESSFUL ||
+      local.status === PayinStatus.FAILED ||
+      local.status === PayinStatus.CANCELLED
+    ) {
+      return local;
+    }
+
     const checkoutRequestId =
       local?.raw?.checkoutRequestId ||
       local?.raw?.CheckoutRequestID ||
@@ -577,13 +602,15 @@ export class PayinService {
 
       if (isTemporaryUnavailable) {
         this.logger.warn(
-          `verifyMpesaByReference: temporary M-Pesa outage for txRef=${reference}, keeping pending`,
+          `verifyMpesaByReference: temporary M-Pesa outage for txRef=${reference}, preserving local status=${String(local?.status || PayinStatus.PENDING)}`,
         );
+        const preservedStatus =
+          local?.status || (closeMode ? PayinStatus.CANCELLED : PayinStatus.PENDING);
         return this.payinModel
           .findOneAndUpdate(
             { txRef: reference },
             {
-              status: PayinStatus.PENDING,
+              status: preservedStatus,
               provider: PayinProvider.MPESA,
               raw: {
                 ...(local?.raw || {}),

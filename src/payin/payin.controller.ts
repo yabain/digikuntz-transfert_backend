@@ -142,6 +142,9 @@ export class PayinController {
       txRef,
     );
     const cb = payload?.Body?.stkCallback || payload?.stkCallback || {};
+    const metadataItems = Array.isArray(cb?.CallbackMetadata?.Item)
+      ? cb.CallbackMetadata.Item
+      : [];
     this.logger.log(
       `[M-Pesa callback] txRef=${callbackResult?.txRef || 'n/a'} checkoutRequestId=${String(
         cb?.CheckoutRequestID || '',
@@ -150,6 +153,17 @@ export class PayinController {
       )} resultCode=${String(cb?.ResultCode ?? '')} resultDesc="${String(
         cb?.ResultDesc || '',
       )}" localStatus=${String(callbackResult?.status || 'n/a')}`,
+    );
+    this.logger.debug(
+      `[M-Pesa callback][technical] ${JSON.stringify({
+        txRefHint: txRef || '',
+        resultCode: cb?.ResultCode ?? null,
+        resultDesc: cb?.ResultDesc ?? '',
+        checkoutRequestId: cb?.CheckoutRequestID || '',
+        merchantRequestId: cb?.MerchantRequestID || '',
+        callbackMetadata: metadataItems,
+        stkCallback: cb,
+      })}`,
     );
     if (!callbackResult?.accepted || !callbackResult?.txRef) return;
 

@@ -80,6 +80,20 @@ export class MpesaService {
     return this.config.get<string>('MPESA_B2C_TIMEOUT_URL') || '';
   }
 
+  private get balanceResultUrl(): string {
+    return (
+      this.config.get<string>('MPESA_BALANCE_RESULT_URL') ||
+      this.b2cResultUrl
+    );
+  }
+
+  private get balanceTimeoutUrl(): string {
+    return (
+      this.config.get<string>('MPESA_BALANCE_TIMEOUT_URL') ||
+      this.b2cTimeoutUrl
+    );
+  }
+
   private ensureCoreConfig() {
     if (
       !this.consumerKey ||
@@ -279,6 +293,48 @@ export class MpesaService {
     };
 
     return this.post('/mpesa/b2c/v1/paymentrequest', body);
+  }
+
+  async queryAccountBalance(payload?: {
+    remarks?: string;
+    resultUrl?: string;
+    timeoutUrl?: string;
+    identifierType?: '1' | '2' | '4';
+  }) {
+    if (!this.b2cInitiatorName || !this.b2cSecurityCredential) {
+      throw new HttpException(
+        {
+          message:
+            'Missing balance query config. Required: MPESA_B2C_INITIATOR_NAME, MPESA_B2C_SECURITY_CREDENTIAL',
+        },
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+
+    const resultUrl = payload?.resultUrl || this.balanceResultUrl;
+    const timeoutUrl = payload?.timeoutUrl || this.balanceTimeoutUrl;
+    if (!resultUrl || !timeoutUrl) {
+      throw new HttpException(
+        {
+          message:
+            'Missing balance callback URLs. Set MPESA_BALANCE_RESULT_URL and MPESA_BALANCE_TIMEOUT_URL (or MPESA_B2C_RESULT_URL and MPESA_B2C_TIMEOUT_URL)',
+        },
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+
+    const body = {
+      Initiator: this.b2cInitiatorName,
+      SecurityCredential: this.b2cSecurityCredential,
+      CommandID: 'AccountBalance',
+      PartyA: this.shortCode,
+      IdentifierType: payload?.identifierType || '4',
+      Remarks: payload?.remarks || 'Balance query',
+      QueueTimeOutURL: timeoutUrl,
+      ResultURL: resultUrl,
+    };
+
+    return this.post('/mpesa/accountbalance/v1/query', body);
   }
 
   mapStkStatusToLocal(
