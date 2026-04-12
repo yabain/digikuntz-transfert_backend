@@ -487,6 +487,15 @@ export class PayinService {
         HttpStatus.BAD_REQUEST,
       );
     }
+
+    console.log('payin payload to mpesa:', JSON.stringify({
+      phone,
+      amount,
+      reference: dto.txRef,
+      description: 'Payin',
+      callbackUrl: this.buildMpesaCallbackUrlWithTxRef(dto.txRef),
+    }, null, 2));
+    
     const resData = await this.mpesaService.initiateStkPush({
       phone,
       amount,
@@ -494,20 +503,6 @@ export class PayinService {
       description: 'Payin',
       callbackUrl: this.buildMpesaCallbackUrlWithTxRef(dto.txRef),
     });
-
-    console.log('payin payload to mpesa:', JSON.stringify({
-      userId: dto.userId,
-      transactionId: dto.transactionId,
-      txRef: dto.txRef,
-      amount: dto.amount,
-      currency: dto.currency,
-      customerEmail: dto.customerEmail,
-      customerName: dto.customerName,
-      channel: 'mobile_money',
-      status: PayinStatus.PENDING,
-      provider: PayinProvider.MPESA,
-      raw: resData,
-    }, null, 2));
 
     const checkoutRequestId =
       resData?.CheckoutRequestID || resData?.data?.CheckoutRequestID || '';

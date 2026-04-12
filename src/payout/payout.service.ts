@@ -6,6 +6,7 @@ import {
   Inject,
   forwardRef,
   Injectable,
+  Logger,
   HttpException,
   HttpStatus,
   NotFoundException,
@@ -30,6 +31,7 @@ import { MpesaService } from 'src/mpesa/mpesa.service';
 
 @Injectable()
 export class PayoutService {
+  private readonly logger = new Logger(PayoutService.name);
   private fwSecret: any;
   private fwSecretNGN: any;
   private fwBaseUrlV3 = 'https://api.flutterwave.com/v3';
@@ -313,6 +315,13 @@ export class PayoutService {
               TStatus.PAYOUTPENDING,
               payout
             );
+          if (
+            transaction &&
+            (transaction.transactionType === 'transfer' ||
+              transaction.transactionType === 'withdrawal')
+          ) {
+            void this.operationNotificationService.notifyAdminPayoutPending(transaction);
+          }
         }
       }
       return payout;
@@ -361,18 +370,38 @@ export class PayoutService {
         occasion: reference,
       });
     } catch (error: any) {
-      const details = error?.response?.data || error?.message || error;
+      const upstreamDetails =
+        typeof error?.getResponse === 'function'
+          ? error.getResponse()
+          : error?.response?.data || error?.message || error;
+      const upstreamStatus =
+        typeof error?.getStatus === 'function'
+          ? Number(error.getStatus())
+          : HttpStatus.BAD_GATEWAY;
+      const safeStatus =
+        Number.isInteger(upstreamStatus) &&
+        upstreamStatus >= 400 &&
+        upstreamStatus <= 599
+          ? upstreamStatus
+          : HttpStatus.BAD_GATEWAY;
+
+      this.logger.error(
+        `[M-Pesa payout] initiation failed | ref=${reference} | msisdn=${normalizedPrimary} | amount=${amount} | details=${JSON.stringify(upstreamDetails)}`,
+      );
+      void this.operationNotificationService
+        .notifyAdminPayoutFailed(transaction)
+        .catch(() => undefined);
       throw new HttpException(
         {
           message: 'M-Pesa payout initiation failed',
-          details,
+          details: upstreamDetails,
           context: {
             reference,
             normalizedMsisdn: normalizedPrimary,
             amount,
           },
         },
-        HttpStatus.BAD_GATEWAY,
+        safeStatus,
       );
     }
 

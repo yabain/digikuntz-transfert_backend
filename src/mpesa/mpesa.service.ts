@@ -233,6 +233,8 @@ export class MpesaService {
       TransactionDesc: this.formatTransactionDesc(payload.description),
     };
 
+    console.log('STK push request body:', JSON.stringify(body, null, 2));
+
     this.logger.log(
       `STK push request: phone=${payload.phone}, amount=${Math.round(
         Number(payload.amount),

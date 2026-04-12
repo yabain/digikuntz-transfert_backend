@@ -7,9 +7,9 @@
   },
   "templates": [
     {
-      "key": "dk_welcome_account_creation",
-      "name_fr": "dk_welcome_account_creation_fr",
-      "name_en": "dk_welcome_account_creation_en",
+      "key": "dk_account_creation",
+      "name_fr": "dk_account_creation_fr",
+      "name_en": "dk_account_creation_en",
       "category": "UTILITY",
       "title": {
         "fr": "Bienvenue sur digiKUNTZ Payments",

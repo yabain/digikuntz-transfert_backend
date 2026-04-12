@@ -452,11 +452,6 @@ export class FundraisingService {
     });
 
     await Promise.all([
-      this.balanceService.creditBalance(
-        String(fundraising.creatorId),
-        amount,
-        fundraising.currency,
-      ),
       this.fundraisingModel
         .findByIdAndUpdate(fundraising._id, {
           $inc: { collectedAmount: amount },

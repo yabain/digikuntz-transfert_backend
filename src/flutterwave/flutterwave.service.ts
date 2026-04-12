@@ -291,9 +291,19 @@ export class FlutterwaveService {
       status: 'transaction_payin_success',
     };
     // console.log('withdrawal raw: ', raw);
+    const balance = await this.balanceService.getBalanceByUserId(String(userId));
+    if (balance.balance < transactionData.paymentWithTaxes) {
+      throw new HttpException(
+        {
+          status: HttpStatus.BAD_REQUEST,
+          error: 'Insufficient balance',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
 
     try {
-      const balance = await this.balanceService.debitBalance(
+      const newBalance = await this.balanceService.debitBalance(
         String(userId),
         transactionData.paymentWithTaxes,
         transactionData.senderCurrency,
@@ -304,6 +314,16 @@ export class FlutterwaveService {
       if (!savedTransaction) {
         throw new NotFoundException('Error to save transaction details');
       }
+      
+
+    if (
+      transactionData?.transactionType === 'transfer' ||
+      transactionData?.transactionType === 'withdrawal'
+    ) {
+      void this.operationNotificationService
+        .notifyAdminPayoutPending(transactionData)
+        .catch(() => undefined);
+    }
 
       return { status: 'pending' };
     } catch (error) {
@@ -387,20 +407,16 @@ export class FlutterwaveService {
   }
 
   async verifyPayin(txRef: string) {
-    // console.log('payin in verifyPayin txRef: ', txRef);
     const payin: any = await this.payinService.verifyPayin(txRef);
-    // console.log('payin in verifyPayin: ', payin);
     if (!payin) {
       throw new NotFoundException('Payin not found');
     }
     const transaction = await this.transactionService.findById(
       String(payin.transactionId),
     );
-    // console.log('transaction: ', transaction);
     if (!transaction) {
       throw new NotFoundException('Transaction not found');
     }
-    // console.log('(fw service: verifyPayin) resp payin data: ', payin);
     if (payin.status === 'cancelled') {
       /* Keep the transaction "pending" because the user can
       relaunch new payment attempts on the flutterwave front
@@ -430,6 +446,14 @@ export class FlutterwaveService {
       return { message: 'Payin pending', status: 'pending' };
     } else if (payin.status === 'successful') {
       try {
+        if (transaction.transactionType !== 'withdrawal' && transaction.transactionType !== 'transfer') {
+          const newBalence = await this.balanceService.creditBalance(
+            transaction.receiverId,
+            Number(transaction.estimation),
+            transaction.senderCurrency,
+          );
+        }
+
         console.log('(fw service: verifyPayin) in handle successful transaction: ', transaction);
         if (transaction.transactionType === 'subscription') {
           await this.handleSubscription(transaction);
@@ -449,17 +473,10 @@ export class FlutterwaveService {
         if (transaction.transactionType === 'paymentRequest') {
           await this.handlePaymentRequest(transaction);
         }
-        if (
-          (transaction.transactionType === 'transfer' ||
-            transaction.transactionType === 'withdrawal') &&
-          transaction.status !== this.tStatus.PAYINSUCCESS
-        ) {
-          void this.operationNotificationService
-            .notifyAdminPayoutPending(transaction)
-            .catch((error) =>
-              console.error('notifyAdminPayoutPending failed:', error),
-            );
+        if (transaction.transactionType === 'transfer') {
+          await this.handleTransfer(transaction);
         }
+
         // console.log('updating transaction data')
         await this.transactionService.updateTransactionStatus(
           String(payin.transactionId),
@@ -474,6 +491,12 @@ export class FlutterwaveService {
         };
       }
     } else {
+      /* Keep the transaction "pending" because the user can
+        relaunch new payment attempts on the flutterwave front
+        and if the status is no longer in this "pending" state,
+        the cron will no longer update it with checks. The "payin cron"
+        will take care of closing after 15 minutes. */
+        
       // if (transaction.status !== this.tStatus.PAYINPENDING) {
       //   await this.transactionService.updateTransactionStatus(
       //     String(payin.transactionId),
@@ -568,16 +591,8 @@ export class FlutterwaveService {
         if (transaction.transactionType === 'paymentRequest') {
           await this.handlePaymentRequest(transaction);
         }
-        if (
-          (transaction.transactionType === 'transfer' ||
-            transaction.transactionType === 'withdrawal') &&
-          transaction.status !== this.tStatus.PAYINSUCCESS
-        ) {
-          void this.operationNotificationService
-            .notifyAdminPayoutPending(transaction)
-            .catch((error) =>
-              console.error('notifyAdminPayoutPending failed:', error),
-            );
+        if (transaction.transactionType === 'transfer') {
+          await this.handleTransfer(transaction);
         }
         // console.log('updating transaction data')
         await this.transactionService.updateTransactionStatus(
@@ -610,6 +625,16 @@ export class FlutterwaveService {
     }
 
     return { message: 'Unknow status', status: 'Unknow' };
+  }
+
+  handleTransfer(transaction) {
+    try {
+      void this.operationNotificationService
+        .notifyAdminPayoutPending(transaction)
+        .catch(() => undefined);
+    } catch (err) {
+      console.log('(fw service: handleTransfer) Error: ', err);
+    }
   }
 
   async handleSubscription(transaction) {
@@ -657,12 +682,6 @@ export class FlutterwaveService {
       }
 
       console.log('handleSubscription - resp: ', resp);
-      const newBalence = await this.balanceService.creditBalance(
-        transaction.receiverId,
-        Number(transaction.estimation),
-        transaction.senderCurrency,
-      );
-      // console.log('newBalence: ', newBalence);
 
       // Send notification
       // this.whatsappService.sendNewSubscriberMessage(transaction.planId.toString(), transaction.userId.toString(), transaction._id.toString());
@@ -675,20 +694,11 @@ export class FlutterwaveService {
 
   async handleService(transaction) {
     try {
-      await this.createServicePayment(transaction);
-
-      const creditBalance = await this.balanceService.creditBalance(
-        transaction.receiverId,
-        Number(transaction.estimation),
-        transaction.senderCurrency,
-      );
       void this.operationNotificationService.notifyServicePaymentSuccess(transaction);
 
-      return creditBalance;
     } catch (err) {
-      // console.log('(fw service: handleService) Error: ', err);
       return {
-        message: '(fw service: handleService) Error: ' + err,
+        message: '(fw service: handleService) Error operationNotificationService: ' + err,
         status: 'error',
       };
     }
@@ -696,10 +706,11 @@ export class FlutterwaveService {
 
   handleWithdrawal(transaction) {
     try {
-      this.whatsappService.sendWithdrawalMessage(transaction);
-      // console.log('(fw service: handleWithdrawal) handleWithdrawal');
+      void this.operationNotificationService
+        .notifyAdminPayoutPending(transaction)
+        .catch(() => undefined);
     } catch (err) {
-      // console.log('(fw service: handleWithdrawal) Error: ', err);
+      console.log('(fw service: handleWithdrawal) Error: ', err);
       return {
         message: '(fw service: handleWithdrawal) Error: ' + err,
         status: 'error',
@@ -708,19 +719,19 @@ export class FlutterwaveService {
   }
 
   async handleApiCall(transaction) {
-    try {
-      const newBalence = await this.balanceService.creditBalance(
-        transaction.receiverId,
-        Number(transaction.estimation),
-        transaction.senderCurrency,
-      );
-      return newBalence;
-    } catch (err) {
-      return {
-        message: '(fw service: handleApiCall) Error: ' + err,
-        status: 'error',
-      };
-    }
+    // try {
+    //   const newBalence = await this.balanceService.creditBalance(
+    //     transaction.receiverId,
+    //     Number(transaction.estimation),
+    //     transaction.senderCurrency,
+    //   );
+    //   return newBalence;
+    // } catch (err) {
+    //   return {
+    //     message: '(fw service: handleApiCall) Error: ' + err,
+    //     status: 'error',
+    //   };
+    // }
   }
 
   async handleFundraising(transaction) {
@@ -855,9 +866,12 @@ export class FlutterwaveService {
         );
         return this.transactionService.findById(transactionId);
       } catch (err: any) {
-        const errorPayload = err?.response?.data ?? {
-          message: err?.message ?? 'Paystack payout initiation failed',
-        };
+        const errorPayload =
+          typeof err?.getResponse === 'function'
+            ? err.getResponse()
+            : err?.response?.data ?? {
+                message: err?.message ?? 'M-Pesa payout initiation failed',
+              };
         await this.transactionService
           .updateTransactionStatus(
             transactionId,
@@ -941,6 +955,19 @@ export class FlutterwaveService {
         transactionId,
         newTxRef,
       );
+
+      const normalizedPayoutStatus = this.normalizeStatus(res.data?.data?.status);
+      if (
+        normalizedPayoutStatus === TStatus.PAYOUTPENDING &&
+        (transaction.transactionType === 'transfer' ||
+          transaction.transactionType === 'withdrawal')
+      ) {
+        void this.operationNotificationService
+          .notifyAdminPayoutPending(update || transaction)
+          .catch((error) =>
+            console.error('notifyAdminPayoutPending failed (payout):', error),
+          );
+      }
       
       // console.log('update: ', update)
       return update;

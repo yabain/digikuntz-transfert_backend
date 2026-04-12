@@ -27,7 +27,7 @@ export class PaymentRequestService {
     private readonly balanceService: BalanceService,
     @Inject(forwardRef(() => FlutterwaveService))
     private readonly flutterwaveService: FlutterwaveService,
-  ) {}
+  ) { }
 
   private getPagination(query: any) {
     const page = Number(query?.page) > 0 ? Number(query.page) : 1;
@@ -169,31 +169,27 @@ export class PaymentRequestService {
       throw new BadRequestException('Invalid transaction for payment request');
     }
 
-    const amount = Number(transaction.estimation);
-    const currency = String(
-      transaction.senderCurrency || transaction.receiverCurrency || '',
-    ).toUpperCase();
-
-    const doc = await this.paymentRequestModel
-      .findOneAndUpdate(
-        { transactionId: transaction._id },
-        {
-          userId: transaction.receiverId || transaction.userId,
-          status: PaymentRequestStatus.SUCCESS,
-          amount: Number.isFinite(amount) ? amount : 0,
-          currency,
-        },
-        { new: true, upsert: true, setDefaultsOnInsert: true },
-      )
-      .lean()
-      .exec();
-
     try {
-      await this.balanceService.creditBalance(
-        String(transaction.receiverId || transaction.userId),
-        Number.isFinite(amount) ? amount : 0,
-        currency,
-      );
+      const amount = Number(transaction.estimation);
+      const currency = String(
+        transaction.senderCurrency || transaction.receiverCurrency || '',
+      ).toUpperCase();
+
+      const doc = await this.paymentRequestModel
+        .findOneAndUpdate(
+          { transactionId: transaction._id },
+          {
+            userId: transaction.receiverId || transaction.userId,
+            status: PaymentRequestStatus.SUCCESS,
+            amount: Number.isFinite(amount) ? amount : 0,
+            currency,
+          },
+          { new: true, upsert: true, setDefaultsOnInsert: true },
+        )
+        .lean()
+        .exec();
+
+      return doc;
     } catch (error) {
       await this.updatePaymentRequestStatusByTransaction(
         String(transaction._id),
@@ -201,8 +197,6 @@ export class PaymentRequestService {
       );
       throw error;
     }
-
-    return doc;
   }
 
   async updatePaymentRequestStatusByTransaction(

@@ -266,7 +266,7 @@ export class WhatsappService implements OnModuleInit {
         await this.sendMetaTemplateMessage(
           user.phone,
           countryCode,
-          `dk_welcome_account_creation`,
+          `dk_account_creation`,
           lang,
           [this.showName(user)],
         );
