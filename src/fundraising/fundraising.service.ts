@@ -45,10 +45,6 @@ export class FundraisingService {
   }
 
   private getUploadPath(): string {
-    const configuredPath = process.env.UPLOAD_IMAGES_PATH;
-    if (configuredPath) {
-      return configuredPath;
-    }
     if (process.env.NODE_ENV === 'production') {
       return '/app/assets/images';
     }

@@ -6,16 +6,38 @@ import { extname } from 'path';
 import * as path from 'path';
 import * as fs from 'fs';
 
+const ensureDir = (dirPath: string): boolean => {
+  try {
+    fs.mkdirSync(dirPath, { recursive: true });
+    fs.accessSync(dirPath, fs.constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const getUploadPath = () => {
   const nodeEnv = process.env.NODE_ENV;
-  const configuredPath = process.env.UPLOAD_IMAGES_PATH;
-  const destination =
-    configuredPath ||
-    (nodeEnv === 'production'
-      ? '/app/assets/images'
-      : path.join(process.cwd(), 'public', 'assets', 'images'));
-  fs.mkdirSync(destination, { recursive: true });
-  return destination;
+  const candidates =
+    nodeEnv === 'production'
+      ? [
+          '/app/assets/images',
+          path.join(process.cwd(), 'public', 'assets', 'images'),
+          path.join(process.cwd(), 'assets', 'images'),
+        ]
+      : [
+          path.join(process.cwd(), 'public', 'assets', 'images'),
+          path.join(process.cwd(), 'assets', 'images'),
+          '/app/assets/images',
+        ];
+
+  for (const candidate of candidates) {
+    if (ensureDir(candidate)) return candidate;
+  }
+  // Last-resort fallback
+  const fallback = path.join(process.cwd(), 'public', 'assets', 'images');
+  fs.mkdirSync(fallback, { recursive: true });
+  return fallback;
 };
 
 export const multerConfig = {

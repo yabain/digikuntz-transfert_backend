@@ -7,6 +7,7 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
+import { existsSync } from 'fs';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import * as crypto from 'crypto';
@@ -139,14 +140,16 @@ function enhanceSwaggerDocument(document: any): any {
 async function bootstrap() {
   const nodeEnv = process.env.NODE_ENV;
   const primaryAssetsPath =
-    process.env.ASSETS_PATH ||
-    (nodeEnv === 'production'
-      ? '/app/assets'
-      : join(process.cwd(), 'public', 'assets'));
-  const legacyAssetsPath =
     nodeEnv === 'production'
-      ? join(process.cwd(), 'public', 'assets')
-      : '/app/assets';
+      ? '/app/assets'
+      : join(process.cwd(), 'public', 'assets');
+  const candidateAssetsPaths = [
+    primaryAssetsPath,
+    join(process.cwd(), 'public', 'assets'),
+    join(process.cwd(), 'assets'),
+    '/app/assets',
+  ];
+  const uniqueAssetsPaths = [...new Set(candidateAssetsPaths)];
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
@@ -240,21 +243,14 @@ async function bootstrap() {
     }),
   );
 
-  // Fichiers statiques (primary + legacy compatibility)
-  app.useStaticAssets(primaryAssetsPath, {
-    prefix: '/assets',
-    index: false,
-  });
-  app.useStaticAssets(join(primaryAssetsPath, 'images'), {
-    prefix: '/uploads',
-    index: false,
-  });
-  if (legacyAssetsPath !== primaryAssetsPath) {
-    app.useStaticAssets(legacyAssetsPath, {
+  // Fichiers statiques (multi-path compatibility to avoid prod/dev path drift)
+  for (const assetsPath of uniqueAssetsPaths) {
+    if (!existsSync(assetsPath)) continue;
+    app.useStaticAssets(assetsPath, {
       prefix: '/assets',
       index: false,
     });
-    app.useStaticAssets(join(legacyAssetsPath, 'images'), {
+    app.useStaticAssets(join(assetsPath, 'images'), {
       prefix: '/uploads',
       index: false,
     });
