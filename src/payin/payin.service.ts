@@ -183,6 +183,19 @@ export class PayinService {
     return digits;
   }
 
+  private normalizeProviderFullName(value?: string, fieldName = 'name'): string {
+    const raw = String(value || '')
+      .trim()
+      .replace(/\s+/g, ' ');
+    if (!raw) {
+      throw new HttpException(
+        { message: `Invalid field: ${fieldName} is required` },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return raw.includes(' ') ? raw : `${raw} --`;
+  }
+
   private buildMpesaCallbackUrlWithTxRef(txRef: string): string | undefined {
     if (!this.mpesaCallbackBase) return undefined;
 
@@ -260,7 +273,10 @@ export class PayinService {
       amount: dto.amount,
       currency: dto.currency,
       redirect_url: this.buildRedirectUrl(dto.redirectUrl),
-      customer: { email: dto.customerEmail, name: dto.customerName },
+      customer: {
+        email: dto.customerEmail,
+        name: this.normalizeProviderFullName(dto.customerName, 'customerName'),
+      },
       meta: { app: 'digikuntz-payments', env: this.config.get('NODE_ENV') },
       payment_options: dto.channel ?? undefined,
     };
@@ -341,7 +357,10 @@ export class PayinService {
       currency: String(dto.currency).toUpperCase(),
       email: dto.customerEmail,
       phone_number: phone,
-      fullname: dto.customerName || dto.customerEmail,
+      fullname: this.normalizeProviderFullName(
+        dto.customerName,
+        'customerName',
+      ),
       network: provider.toUpperCase(),
       meta: { app: 'digikuntz-payments', flow: 'payment_request' },
     };

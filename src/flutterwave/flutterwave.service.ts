@@ -128,6 +128,19 @@ export class FlutterwaveService {
     return raw;
   }
 
+  private normalizeProviderFullName(value?: string, fieldName = 'name'): string {
+    const raw = String(value || '')
+      .trim()
+      .replace(/\s+/g, ' ');
+    if (!raw) {
+      throw new HttpException(
+        { message: `Invalid field: ${fieldName} is required` },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return raw.includes(' ') ? raw : `${raw} --`;
+  }
+
   // ---------- Balance ----------
   async getBalance(countryWallet) {
     // console.log('Getting balance for wallet:', countryWallet);
@@ -915,11 +928,17 @@ export class FlutterwaveService {
         reference: payloadPayout.reference,
         narration: payloadPayout.narration,
         debit_currency: payloadPayout.sourceCurrency,
-        beneficiary_name: transaction.receiverName,
+        beneficiary_name: this.normalizeProviderFullName(
+          transaction.receiverName,
+          'receiverName',
+        ),
         meta: [
           {
             beneficiary_country: this.toIso2(transaction.receiverCountryCode),
-            sender: transaction.senderName,
+            sender: this.normalizeProviderFullName(
+              transaction.senderName,
+              'senderName',
+            ),
             sender_address: transaction.senderCountry,
             sender_country: transaction.senderCountry,
             sender_mobile_number: transaction.senderContact,

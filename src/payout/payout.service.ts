@@ -649,11 +649,17 @@ export class PayoutService {
       reference: payloadPayout.reference,
       narration: payloadPayout.narration,
       debit_currency: payloadPayout.sourceCurrency,
-      beneficiary_name: transaction?.receiverName,
+      beneficiary_name: this.normalizeProviderFullName(
+        transaction?.receiverName,
+        'receiverName',
+      ),
       meta: [
         {
           beneficiary_country: transaction?.receiverCountryCode,
-          sender: transaction?.senderName,
+          sender: this.normalizeProviderFullName(
+            transaction?.senderName,
+            'senderName',
+          ),
           sender_address: transaction?.senderCountry,
           sender_country: transaction?.senderCountry,
           sender_mobile_number: transaction?.senderContact,
@@ -716,5 +722,18 @@ export class PayoutService {
       .replace(/[^a-zA-Z0-9]/g, '')
       // 3. Supprimer les espaces (facultatif selon besoin)
       .trim();
+  }
+
+  private normalizeProviderFullName(value?: string, fieldName = 'name'): string {
+    const raw = String(value || '')
+      .trim()
+      .replace(/\s+/g, ' ');
+    if (!raw) {
+      throw new HttpException(
+        { message: `Invalid field: ${fieldName} is required` },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return raw.includes(' ') ? raw : `${raw} --`;
   }
 }
