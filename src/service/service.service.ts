@@ -20,6 +20,7 @@ import { WhatsappService } from 'src/wa/whatsapp.service';
 import { UserService } from 'src/user/user.service';
 import { ServicePaymentService } from './service-payment/service-payment.service';
 import { ConfigService } from '@nestjs/config';
+import { buildAssetImageUrl } from 'src/common/asset-url.util';
 
 @Injectable()
 export class ServiceService {
@@ -221,7 +222,11 @@ export class ServiceService {
 
     // Generate URLs for the uploaded files
     const fileUrls = files.map((file) => {
-      return `${this.configService.get<string>('BACK_URL')}/assets/images/${file.filename}`;
+      return buildAssetImageUrl(
+        process.env.NODE_ENV,
+        file.filename,
+        this.configService.get<string>('BACK_URL'),
+      );
     });
 
     // Update the service's image in the database

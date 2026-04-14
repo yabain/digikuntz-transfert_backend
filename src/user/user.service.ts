@@ -18,6 +18,7 @@ import { CreateUserDto } from './create-user.dto';
 import { UpdateUserDto } from './update-user.dto';
 import * as bcrypt from 'bcryptjs';
 import { ConfigService } from '@nestjs/config';
+import { buildAssetImageUrl } from 'src/common/asset-url.util';
 import { CacheService } from '../cache/cache.service';
 
 @Injectable()
@@ -303,7 +304,11 @@ export class UserService {
 
     // Generate URLs for the uploaded files
     const fileUrls = files.map((file) => {
-      return `${this.configService.get<string>('BACK_URL')}/assets/images/${file.filename}`;
+      return buildAssetImageUrl(
+        process.env.NODE_ENV,
+        file.filename,
+        this.configService.get<string>('BACK_URL'),
+      );
     });
 
     // Update the user's profile picture in the database
@@ -346,7 +351,11 @@ export class UserService {
 
     // Generate URLs for the uploaded files
     const fileUrls = files.map((file) => {
-      return `${this.configService.get<string>('BACK_URL')}/assets/images/${file.filename}`;
+      return buildAssetImageUrl(
+        process.env.NODE_ENV,
+        file.filename,
+        this.configService.get<string>('BACK_URL'),
+      );
     });
 
     // Update the user's profile picture in the database

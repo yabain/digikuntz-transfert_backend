@@ -21,6 +21,7 @@ import {
 import { Donation, DonationDocument } from './donation.schema';
 import { UpdateFundraisingDto } from './update-fundraising.dto';
 import { ConfigService } from '@nestjs/config';
+import { buildAssetImageUrl } from 'src/common/asset-url.util';
 
 @Injectable()
 export class FundraisingService {
@@ -163,7 +164,11 @@ export class FundraisingService {
 
     // Generate URLs for the uploaded files
     const fileUrls = coverFile.map((file) => {
-      return `${this.configService.get<string>('BACK_URL')}/assets/images/${file.filename}`;
+      return buildAssetImageUrl(
+        process.env.NODE_ENV,
+        file.filename,
+        this.configService.get<string>('BACK_URL'),
+      );
     });
 
 

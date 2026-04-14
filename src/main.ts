@@ -137,12 +137,16 @@ function enhanceSwaggerDocument(document: any): any {
 }
 
 async function bootstrap() {
+  const nodeEnv = process.env.NODE_ENV;
   const primaryAssetsPath =
-    process.env.ASSETS_PATH || join(process.cwd(), 'public', 'assets');
-  const legacyAssetsPath =
-    process.env.NODE_ENV === 'production'
+    process.env.ASSETS_PATH ||
+    (nodeEnv === 'production'
       ? '/app/assets'
-      : join(process.cwd(), 'assets');
+      : join(process.cwd(), 'public', 'assets'));
+  const legacyAssetsPath =
+    nodeEnv === 'production'
+      ? join(process.cwd(), 'public', 'assets')
+      : '/app/assets';
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
