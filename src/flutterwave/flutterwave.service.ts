@@ -10,6 +10,7 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
   Inject,
@@ -46,6 +47,7 @@ import { PaymentRequestStatus } from 'src/payment-request/payment-request.schema
 
 @Injectable()
 export class FlutterwaveService {
+  private readonly logger = new Logger(FlutterwaveService.name);
   private fwSecret: any;
   private fwPublic: any;
   private fwSecretNGN: any;
@@ -98,6 +100,46 @@ export class FlutterwaveService {
       message.includes('balance is not enough') ||
       message.includes('insufficient fund')
     );
+  }
+
+  private isHtmlUpstreamPayload(payload: unknown): boolean {
+    if (typeof payload !== 'string') return false;
+    const value = payload.toLowerCase();
+    return value.includes('<!doctype html') || value.includes('<html');
+  }
+
+  private sanitizeFlutterwaveError(error: any, fallbackMessage: string) {
+    const statusCode = Number(error?.response?.status) || HttpStatus.BAD_GATEWAY;
+    const upstreamPayload = error?.response?.data;
+
+    if (this.isHtmlUpstreamPayload(upstreamPayload)) {
+      const message = 'Flutterwave temporary unavailable';
+      this.logger.error(`${message} (upstream HTML ${statusCode})`);
+      return {
+        statusCode: HttpStatus.BAD_GATEWAY,
+        payload: {
+          message,
+          provider: 'flutterwave',
+          code: 'FW_UPSTREAM_5XX',
+        },
+      };
+    }
+
+    if (upstreamPayload && typeof upstreamPayload === 'object') {
+      return {
+        statusCode,
+        payload: upstreamPayload,
+      };
+    }
+
+    const message = error?.message || fallbackMessage;
+    return {
+      statusCode: HttpStatus.BAD_GATEWAY,
+      payload: {
+        message: fallbackMessage,
+        details: message,
+      },
+    };
   }
 
   // ---------- Helpers ----------
@@ -207,20 +249,11 @@ export class FlutterwaveService {
       const res = await firstValueFrom(this.http.get(url, { headers, params }));
       return res.data;
     } catch (err: any) {
-      if (err?.response) {
-        throw new HttpException(
-          err.response.data,
-          err.response?.status || HttpStatus.BAD_GATEWAY,
-        );
-      }
-      throw new HttpException(
-        {
-          message: 'Flutterwave API connection error while listing payin transactions',
-          code: err?.code || 'FW_NETWORK_ERROR',
-          details: err?.message || err,
-        },
-        HttpStatus.BAD_GATEWAY,
+      const parsed = this.sanitizeFlutterwaveError(
+        err,
+        'Flutterwave API connection error while listing payin transactions',
       );
+      throw new HttpException(parsed.payload, parsed.statusCode);
     }
   }
 
@@ -256,20 +289,11 @@ export class FlutterwaveService {
       const res = await firstValueFrom(this.http.get(url, { headers, params }));
       return res.data;
     } catch (err: any) {
-      if (err?.response) {
-        throw new HttpException(
-          err.response.data,
-          err.response?.status || HttpStatus.BAD_GATEWAY,
-        );
-      }
-      throw new HttpException(
-        {
-          message: 'Flutterwave API connection error while listing payout transactions',
-          code: err?.code || 'FW_NETWORK_ERROR',
-          details: err?.message || err,
-        },
-        HttpStatus.BAD_GATEWAY,
+      const parsed = this.sanitizeFlutterwaveError(
+        err,
+        'Flutterwave API connection error while listing payout transactions',
       );
+      throw new HttpException(parsed.payload, parsed.statusCode);
     }
   }
 
@@ -404,14 +428,17 @@ export class FlutterwaveService {
         userId,
       });
     } catch (error) {
-      console.error('Flutterwave createPayin error:', error?.response?.data || error?.message || error);
-      throw new HttpException(
-        {
-          status: HttpStatus.BAD_REQUEST,
-          error: error.message,
-        },
-        HttpStatus.BAD_REQUEST,
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      const parsed = this.sanitizeFlutterwaveError(
+        error,
+        'Flutterwave createPayin failed',
       );
+      this.logger.error(
+        `Flutterwave createPayin failed: ${JSON.stringify(parsed.payload)}`,
+      );
+      throw new HttpException(parsed.payload, parsed.statusCode);
     }
   }
 
