@@ -100,6 +100,7 @@ export class MpesaController {
       }),
     ]);
 
+    console.log('data: ', data);
     return {
       page: safePage,
       limit: safeLimit,

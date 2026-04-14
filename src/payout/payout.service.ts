@@ -501,6 +501,7 @@ export class PayoutService {
   }
 
   async handleMpesaB2CResult(payload: any) {
+    console.log('callback B2C result: ', payload)
     const result = payload?.Result || payload?.Body?.Result || payload || {};
     const conversationId = String(result?.ConversationID || '');
     const originatorConversationId = String(

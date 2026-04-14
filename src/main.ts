@@ -137,10 +137,12 @@ function enhanceSwaggerDocument(document: any): any {
 }
 
 async function bootstrap() {
-  const assetsPath =
+  const primaryAssetsPath =
+    process.env.ASSETS_PATH || join(process.cwd(), 'public', 'assets');
+  const legacyAssetsPath =
     process.env.NODE_ENV === 'production'
       ? '/app/assets'
-      : join(__dirname, '..', '..', 'assets');
+      : join(process.cwd(), 'assets');
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
@@ -234,25 +236,25 @@ async function bootstrap() {
     }),
   );
 
-  // Fichiers statiques
-  app.useStaticAssets(assetsPath, {
-    prefix: '/assets',
-  });
-
-  app.useStaticAssets(assetsPath, {
-    prefix: '/uploads',
-  });
-
-  // Par ceci :
-  app.useStaticAssets(join(assetsPath, 'images'), {
-    prefix: '/uploads',
-    index: false,
-  });
-
-  app.useStaticAssets(assetsPath, {
+  // Fichiers statiques (primary + legacy compatibility)
+  app.useStaticAssets(primaryAssetsPath, {
     prefix: '/assets',
     index: false,
   });
+  app.useStaticAssets(join(primaryAssetsPath, 'images'), {
+    prefix: '/uploads',
+    index: false,
+  });
+  if (legacyAssetsPath !== primaryAssetsPath) {
+    app.useStaticAssets(legacyAssetsPath, {
+      prefix: '/assets',
+      index: false,
+    });
+    app.useStaticAssets(join(legacyAssetsPath, 'images'), {
+      prefix: '/uploads',
+      index: false,
+    });
+  }
 
   app.useGlobalFilters(new AllExceptionsFilter());
 

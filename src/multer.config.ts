@@ -4,12 +4,24 @@
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import * as path from 'path';
+import * as fs from 'fs';
 
 const getUploadPath = () => {
-  if (process.env.NODE_ENV === 'production') {
-    return '/app/assets/images'; // Docker contener path
+  const configuredPath = process.env.UPLOAD_IMAGES_PATH;
+  if (configuredPath) {
+    fs.mkdirSync(configuredPath, { recursive: true });
+    return configuredPath;
   }
-  return path.join(__dirname, '..', '..', 'assets', 'images'); // local relatif path
+
+  if (process.env.NODE_ENV === 'production') {
+    const productionPath = '/app/assets/images';
+    fs.mkdirSync(productionPath, { recursive: true });
+    return productionPath; // Docker container path
+  }
+
+  const localPath = path.join(process.cwd(), 'public', 'assets', 'images');
+  fs.mkdirSync(localPath, { recursive: true });
+  return localPath;
 };
 
 export const multerConfig = {
