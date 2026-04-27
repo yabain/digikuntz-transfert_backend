@@ -489,15 +489,15 @@ export class TransactionService {
 
   private async sendCallback(transaction: any): Promise<void> {
     const statusMap: Record<string, string> = {
-      transaction_payin_pending: 'pending',
-      transaction_payin_success: 'success',
-      transaction_payin_error: 'error',
-      transaction_payin_closed: 'closed',
+      transaction_payin_pending: 'payin_pending',
+      transaction_payin_success: 'payin_success',
+      transaction_payin_error: 'payin_error',
+      transaction_payin_closed: 'payin_closed',
       transaction_payout_pending: 'payout_pending',
       transaction_payout_success: 'payout_success',
       transaction_payout_error: 'payout_error',
       transaction_payout_closed: 'payout_closed',
-      transaction_payout_rejected: 'rejected',
+      transaction_payout_rejected: 'payout_rejected',
     };
     const payload = {
       id: transaction._id,

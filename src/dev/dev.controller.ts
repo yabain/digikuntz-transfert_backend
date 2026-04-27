@@ -172,7 +172,7 @@ export class DevController {
     schema: {
       example: {
         id: '664f1a2b3c4d5e6f7a8b9c0d',
-        status: 'pending',
+        status: 'payin_pending',
         data: {
           estimation: '10000',
           transactionRef: 'IN123#250101120000',
@@ -285,12 +285,19 @@ export class DevController {
     schema: {
       example: {
         id: '664f1a2b3c4d5e6f7a8b9c0d',
-        status: 'transaction_payin_pending',
-        transactionRef: 'IN123#250101120000',
-        amount: 10000,
-        paymentCurrency: 'XAF',
-        paymentWithTaxes: 10500,
-        paymentLink: 'https://checkout.flutterwave.com/v3/hosted/pay/xxxxx',
+        status: 'payin_pending',
+        data: {
+          estimation: '10000',
+          transactionRef: 'IN123#250101120000',
+          invoiceTaxes: '500',
+          paymentWithTaxes: '10500',
+          raisonForTransfer: 'Test payment',
+          receiverCurrency: 'XAF',
+          transactionType: 'apiCall',
+          paymentLink: 'https://checkout.flutterwave.com/v3/hosted/pay/xxxxx',
+          createdAt: '2025-01-01T12:00:00.000Z',
+          updatedAt: '2025-01-01T12:00:00.000Z',
+        },
       },
     },
   })
@@ -369,11 +376,18 @@ export class DevController {
     schema: {
       example: {
         id: '664f1a2b3c4d5e6f7a8b9c0d',
-        status: 'payout_pending',
-        transactionRef: 'IN123#250101120000',
-        amount: 5000,
-        paymentWithTaxes: 5250,
-        currency: 'XAF',
+        status: 'payin_pending',
+        data: {
+          estimation: '5000',
+          transactionRef: 'IN123#250101120000',
+          invoiceTaxes: '250',
+          paymentWithTaxes: '5250',
+          raisonForTransfer: 'Paiement fournisseur',
+          receiverCurrency: 'XAF',
+          transactionType: 'apiCall',
+          createdAt: '2025-01-01T12:00:00.000Z',
+          updatedAt: '2025-01-01T12:00:00.000Z',
+        },
       },
     },
   })

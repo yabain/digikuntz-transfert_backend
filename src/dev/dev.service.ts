@@ -194,10 +194,15 @@ export class DevService {
     if (!this.isUserInTransaction(transaction, userId)) return 'Unauthorized';
 
     let status: string = '';
-    if (transaction.status === 'transaction_payin_pending') status = 'pending'
-    else if (transaction.status === 'transaction_payin_success') status = 'success'
-    else if (transaction.status === 'transaction_payin_error') status = 'error'
-    else if (transaction.status === 'transaction_payin_closed') status = 'closed'
+    if (transaction.status === 'transaction_payin_pending') status = 'payin_pending'
+    else if (transaction.status === 'transaction_payin_success') status = 'payin_success'
+    else if (transaction.status === 'transaction_payin_error') status = 'payin_error'
+    else if (transaction.status === 'transaction_payin_closed') status = 'payin_closed'
+    else if (transaction.status === 'transaction_payout_pending') status = 'payout_pending'
+    else if (transaction.status === 'transaction_payout_success') status = 'payout_success'
+    else if (transaction.status === 'transaction_payout_error') status = 'payout_error'
+    else if (transaction.status === 'transaction_payout_closed') status = 'payout_closed'
+    else if (transaction.status === 'transaction_payout_rejected') status = 'payout_rejected'
     else return 'unknown transaction status';
 
     let payIn: any = '';
@@ -281,42 +286,55 @@ export class DevService {
     return {
       id: savedTransaction._id,
       status: 'payout_pending',
-      transactionRef: savedTransaction.transactionRef,
-      amount: data.amount,
-      paymentWithTaxes: taxesDetails.paymentWithTaxes,
-      currency: data.currency,
+      data: {
+        estimation: savedTransaction.estimation,
+        transactionRef: savedTransaction.transactionRef,
+        invoiceTaxes: savedTransaction.taxesAmount,
+        paymentWithTaxes: savedTransaction.paymentWithTaxes,
+        raisonForTransfer: savedTransaction.raisonForTransfer,
+        receiverCurrency: savedTransaction.receiverCurrency,
+        transactionType: savedTransaction.transactionType,
+        createdAt: savedTransaction.createdAt,
+        updatedAt: savedTransaction.updatedAt,
+      },
     };
   }
 
   async createPayinTransaction(transactionData: any, userId): Promise<any> {
     const createPayin = await this.fwService.createPayin(transactionData, userId);
-    // return createPayin;
-    // const transaction = await this.transactionService.create({
-    //   ...transactionData,
-    //   userId,
-    //   status: 'transaction_payin_pending',
-    //   transactionType: 'apiCall'
-    // });
 
-    // const newTxRef = `txref-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    // const payin = await this.payinService.create({
-    //   amount: transaction.paymentWithTaxes,
-    //   currency: transaction.receiverCurrency,
-    //   txRef: newTxRef,
-    //   transactionId: transaction._id,
-    //   userId,
-    //   status: 'payin_pending',
-    // });
+    const transaction = await this.transactionService.findById(
+      String(createPayin.transactionId),
+    );
+
+    const statusMap: Record<string, string> = {
+      transaction_payin_pending: 'payin_pending',
+      transaction_payin_success: 'payin_success',
+      transaction_payin_error: 'payin_error',
+      transaction_payin_closed: 'payin_closed',
+      transaction_payout_pending: 'payout_pending',
+      transaction_payout_success: 'payout_success',
+      transaction_payout_error: 'payout_error',
+      transaction_payout_closed: 'payout_closed',
+      transaction_payout_rejected: 'payout_rejected',
+    };
 
     return {
-      id: createPayin.transactionId,
-      status: createPayin.status,
-      transactionRef: createPayin.txRef,
-      amount: transactionData.estimation,
-      paymentCurrency: createPayin.currency,
-      paymentWithTaxes: createPayin.amount,
-      paymentLink: createPayin?.redirect_url
-    }
+      id: transaction._id,
+      status: statusMap[transaction.status] ?? transaction.status,
+      data: {
+        estimation: transaction.estimation,
+        transactionRef: transaction.transactionRef,
+        invoiceTaxes: transaction.taxesAmount,
+        paymentWithTaxes: transaction.paymentWithTaxes,
+        raisonForTransfer: transaction.raisonForTransfer,
+        receiverCurrency: transaction.receiverCurrency,
+        transactionType: transaction.transactionType,
+        paymentLink: createPayin?.redirect_url,
+        createdAt: transaction.createdAt,
+        updatedAt: transaction.updatedAt,
+      },
+    };
   }
 
   async getUserBalance(userId): Promise<any> {
