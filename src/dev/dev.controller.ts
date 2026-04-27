@@ -43,7 +43,19 @@ export class DevController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get API keys of a user (admin only)' })
   @ApiParam({ name: 'userId', description: 'User ID' })
-  @ApiResponse({ status: 200, description: 'Developer keys returned.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Developer keys returned.',
+    schema: {
+      example: {
+        id: '664f1a2b3c4d5e6f7a8b9c0d',
+        userId: '664f1a2b3c4d5e6f7a8b9c0e',
+        status: true,
+        secretKey: 'SK-1234567890-abcdef12',
+        publicKey: 'PK-1234567890-abcdef12',
+      },
+    },
+  })
   @ApiResponse({ status: 401, description: 'Authentication required.' })
   @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
@@ -58,7 +70,19 @@ export class DevController {
   @Get('my-key')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user API key pair' })
-  @ApiResponse({ status: 200, description: 'Current user API keys returned.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Current user API keys returned.',
+    schema: {
+      example: {
+        id: '664f1a2b3c4d5e6f7a8b9c0d',
+        userId: '664f1a2b3c4d5e6f7a8b9c0e',
+        status: true,
+        secretKey: 'SK-1234567890-abcdef12',
+        publicKey: 'PK-1234567890-abcdef12',
+      },
+    },
+  })
   @ApiResponse({ status: 401, description: 'Authentication required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
@@ -69,7 +93,19 @@ export class DevController {
   @Post('generate-key')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Generate API key pair for current user' })
-  @ApiResponse({ status: 201, description: 'API keys generated.' })
+  @ApiResponse({
+    status: 201,
+    description: 'API keys generated.',
+    schema: {
+      example: {
+        id: '664f1a2b3c4d5e6f7a8b9c0d',
+        userId: '664f1a2b3c4d5e6f7a8b9c0e',
+        status: true,
+        secretKey: 'SK-1234567890-abcdef12',
+        publicKey: 'PK-1234567890-abcdef12',
+      },
+    },
+  })
   @ApiResponse({ status: 401, description: 'Authentication required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
@@ -81,7 +117,19 @@ export class DevController {
   @Put('reset-key')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Reset API key pair for current user' })
-  @ApiResponse({ status: 200, description: 'API keys reset.' })
+  @ApiResponse({
+    status: 200,
+    description: 'API keys reset.',
+    schema: {
+      example: {
+        id: '664f1a2b3c4d5e6f7a8b9c0d',
+        userId: '664f1a2b3c4d5e6f7a8b9c0e',
+        status: true,
+        secretKey: 'SK-9999999999-newkey12',
+        publicKey: 'PK-9999999999-newkey12',
+      },
+    },
+  })
   @ApiResponse({ status: 401, description: 'Authentication required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
@@ -93,7 +141,19 @@ export class DevController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Enable/disable API access for current user' })
   @ApiBody({ schema: { example: { status: true } } })
-  @ApiResponse({ status: 200, description: 'API status updated.' })
+  @ApiResponse({
+    status: 200,
+    description: 'API status updated.',
+    schema: {
+      example: {
+        id: '664f1a2b3c4d5e6f7a8b9c0d',
+        userId: '664f1a2b3c4d5e6f7a8b9c0e',
+        status: false,
+        secretKey: 'SK-1234567890-abcdef12',
+        publicKey: 'PK-1234567890-abcdef12',
+      },
+    },
+  })
   @ApiResponse({ status: 401, description: 'Authentication required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
@@ -106,7 +166,28 @@ export class DevController {
   @ApiHeader({ name: 'x-user-id', required: true })
   @ApiHeader({ name: 'x-secret-key', required: true })
   @ApiQuery({ name: 'transactionId', required: true, type: String })
-  @ApiResponse({ status: 200, description: 'Transaction API response returned.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Transaction API response returned.',
+    schema: {
+      example: {
+        id: '664f1a2b3c4d5e6f7a8b9c0d',
+        status: 'pending',
+        data: {
+          estimation: '10000',
+          transactionRef: 'IN123#250101120000',
+          invoiceTaxes: '500',
+          paymentWithTaxes: '10500',
+          raisonForTransfer: 'Test payment',
+          receiverCurrency: 'XAF',
+          transactionType: 'apiCall',
+          paymentLink: 'https://checkout.flutterwave.com/v3/hosted/pay/xxxxx',
+          createdAt: '2025-01-01T12:00:00.000Z',
+          updatedAt: '2025-01-01T12:00:00.000Z',
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 404, description: 'Missing/invalid headers or transaction not found.' })
   @UsePipes(ValidationPipe)
   async getTransactionData(
@@ -134,7 +215,34 @@ export class DevController {
   @ApiHeader({ name: 'x-secret-key', required: true })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
-  @ApiResponse({ status: 200, description: 'Paginated transactions list returned.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated transactions list returned.',
+    schema: {
+      example: {
+        data: [
+          {
+            _id: '664f1a2b3c4d5e6f7a8b9c0d',
+            status: 'transaction_payin_pending',
+            transactionType: 'apiCall',
+            estimation: '10000',
+            transactionRef: 'IN123#250101120000',
+            receiverCurrency: 'XAF',
+            createdAt: '2025-01-01T12:00:00.000Z',
+            updatedAt: '2025-01-01T12:00:00.000Z',
+          },
+        ],
+        pagination: {
+          currentPage: 1,
+          limit: 10,
+          totalPages: 3,
+          totalItems: 25,
+          hasNextPage: true,
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Missing/invalid credentials.' })
   @UsePipes(ValidationPipe)
   async getTransactions(
     @Headers('x-user-id') userId: string,
@@ -167,10 +275,25 @@ export class DevController {
         userPhone: '691224472',
         userCountry: 'Cameroon',
         senderName: 'Junior',
+        callbackUrl: 'https://your-server.com/webhook',
       },
     },
   })
-  @ApiResponse({ status: 201, description: 'Payin transaction initialized.' })
+  @ApiResponse({
+    status: 201,
+    description: 'Payin transaction initialized.',
+    schema: {
+      example: {
+        id: '664f1a2b3c4d5e6f7a8b9c0d',
+        status: 'transaction_payin_pending',
+        transactionRef: 'IN123#250101120000',
+        amount: 10000,
+        paymentCurrency: 'XAF',
+        paymentWithTaxes: 10500,
+        paymentLink: 'https://checkout.flutterwave.com/v3/hosted/pay/xxxxx',
+      },
+    },
+  })
   @ApiResponse({ status: 400, description: 'Invalid payload.' })
   @UsePipes(ValidationPipe)
   async createPayinTransaction(
@@ -183,6 +306,7 @@ export class DevController {
       userPhone: string,
       userCountry: string,
       senderName: string,
+      callbackUrl?: string,
     },
   ): Promise<any> {
     if (!secretKey) {
@@ -215,17 +339,82 @@ export class DevController {
       receiverCountry: userData.countryId.name,
       receiverCurrency: userData.countryId.currency,
 
-      status: 'transaction_payin_pending'
+      status: 'transaction_payin_pending',
+      ...(data.callbackUrl && { callbackUrl: data.callbackUrl }),
     }
 
     return this.devService.createPayinTransaction(transactionData, userId);
   }
   
+  @Post('payout')
+  @ApiOperation({ summary: 'Initiate a payout from account balance via API key' })
+  @ApiHeader({ name: 'x-user-id', required: true })
+  @ApiHeader({ name: 'x-secret-key', required: true })
+  @ApiBody({
+    schema: {
+      example: {
+        amount: 5000,
+        accountBankCode: 'MTN',
+        accountNumber: '237691224472',
+        receiverName: 'John Doe',
+        currency: 'XAF',
+        narration: 'Paiement fournisseur',
+        callbackUrl: 'https://your-server.com/webhook',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Payout initiated.',
+    schema: {
+      example: {
+        id: '664f1a2b3c4d5e6f7a8b9c0d',
+        status: 'payout_pending',
+        transactionRef: 'IN123#250101120000',
+        amount: 5000,
+        paymentWithTaxes: 5250,
+        currency: 'XAF',
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Insufficient balance or invalid payload.' })
+  @ApiResponse({ status: 404, description: 'Missing/invalid credentials.' })
+  @UsePipes(ValidationPipe)
+  async createPayoutTransaction(
+    @Headers('x-user-id') userId: string,
+    @Headers('x-secret-key') secretKey: string,
+    @Body() data: {
+      amount: number;
+      accountBankCode: string;
+      accountNumber: string;
+      receiverName: string;
+      currency: string;
+      narration?: string;
+      callbackUrl?: string;
+    },
+  ): Promise<any> {
+    if (!secretKey) throw new NotFoundException('secretKey is required');
+    if (!userId) throw new NotFoundException('userId is required');
+    const valid = await this.devService.authKey(userId, secretKey);
+    if (!valid) return 'invalid credentials';
+    return this.devService.createPayoutTransaction(data, userId);
+  }
+
   @Get('balance')
   @ApiOperation({ summary: 'Get user balance through API key headers' })
   @ApiHeader({ name: 'x-user-id', required: true })
   @ApiHeader({ name: 'x-secret-key', required: true })
-  @ApiResponse({ status: 200, description: 'Balance returned.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Balance returned.',
+    schema: {
+      example: {
+        balance: 25000,
+        currency: 'XAF',
+        lastUpdate: '2025-01-01T12:00:00.000Z',
+      },
+    },
+  })
   @ApiResponse({ status: 404, description: 'Missing/invalid credentials.' })
   async getUserBalance(
     @Headers('x-user-id') userId: string,

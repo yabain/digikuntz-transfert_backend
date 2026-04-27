@@ -20,6 +20,7 @@ import {
   ApiQuery,
   ApiResponse,
   ApiTags,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
 import { Query as ExpressQuery } from 'express-serve-static-core';
 import { AuthGuard } from '@nestjs/passport';
@@ -49,6 +50,15 @@ export class EmailController {
   }
 
   @Get('get-statistics')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get email statistics by month (admin only)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Email statistics by month.',
+    schema: { example: [{ month: '2025-01', count: 42 }] },
+  })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getEmailStatsByMonth(@Req() req): Promise<any[]> {
@@ -78,6 +88,12 @@ export class EmailController {
   }
 
   @Get('output')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get output email logs (admin only)' })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiResponse({ status: 200, description: 'Output email logs returned.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   getOutputMails(@Query() query: ExpressQuery, @Req() req): Promise<any> {

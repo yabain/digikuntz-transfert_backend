@@ -174,6 +174,9 @@ export class Transaction {
   cycle: string; // Deduced from the response code      dayly | weekly |monthly | yearly
 
   @Prop()
+  callbackUrl: string;
+
+  @Prop()
   fundraisingId: string;
 
   @Prop()

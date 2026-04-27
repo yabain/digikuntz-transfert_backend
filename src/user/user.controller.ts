@@ -52,6 +52,11 @@ export class UserController {
    */
   @Get('all-users')
   @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all users (admin only)' })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search filter' })
+  @ApiResponse({ status: 200, description: 'List of users returned.', schema: { example: [] } })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getAllUsers(@Query() query: ExpressQuery, @Req() req): Promise<User[]> {
@@ -62,6 +67,11 @@ export class UserController {
   }
 
   @Get('get-statistics')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get user statistics by month (admin only)' })
+  @ApiResponse({ status: 200, description: 'User statistics by month.', schema: { example: [{ month: '2025-01', count: 12 }] } })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getEmailStatsByMonth(@Req() req): Promise<any[]> {
@@ -73,14 +83,11 @@ export class UserController {
 
   @Get()
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get all users (admin only)' })
-  @ApiQuery({
-    name: 'search',
-    required: false,
-    type: String,
-    description: 'Search filter',
-  })
-  @ApiResponse({ status: 200, description: 'List of users returned.' })
+  @ApiOperation({ summary: 'Search users by email (admin only)' })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search filter' })
+  @ApiResponse({ status: 200, description: 'List of users returned.', schema: { example: [] } })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async searchByEmail(@Query() query: ExpressQuery, @Req() req): Promise<User[]> {
@@ -96,7 +103,9 @@ export class UserController {
   @Get('users-stats')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get statistics about all users (admin only)' })
-  @ApiResponse({ status: 200, description: 'Users Statistic.' })
+  @ApiResponse({ status: 200, description: 'Users statistics.', schema: { example: { total: 500, active: 420, verified: 380 } } })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getUsersStatistic(@Req() req): Promise<any> {
@@ -113,6 +122,7 @@ export class UserController {
   @ApiOperation({ summary: 'Get user data by ID' })
   @ApiParam({ name: 'id', description: 'User ID', type: String })
   @ApiResponse({ status: 200, description: 'User data returned.' })
+  @ApiResponse({ status: 404, description: 'User not found.' })
   async getUser(@Param('id') userId: string): Promise<any> {
     return this.userService.getUserById(userId);
   }
@@ -124,6 +134,7 @@ export class UserController {
   @ApiOperation({ summary: 'Create a new user' })
   @ApiBody({ type: CreateUserDto })
   @ApiResponse({ status: 201, description: 'User created.' })
+  @ApiResponse({ status: 409, description: 'User already exists.' })
   @UsePipes(ValidationPipe)
   async createUser(@Body() user: CreateUserDto): Promise<User> {
     return this.userService.createUser(user);
@@ -134,9 +145,10 @@ export class UserController {
    */
   @Put('update-profile')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update the profile of the authenticated user' })
+  @ApiOperation({ summary: 'Update profile of the authenticated user' })
   @ApiBody({ type: UpdateUserDto })
   @ApiResponse({ status: 200, description: 'User profile updated.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async update(@Body() userData: UpdateUserDto, @Req() req): Promise<any> {
@@ -148,9 +160,10 @@ export class UserController {
    */
   @Put('update-items')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update the profile of the authenticated user' })
+  @ApiOperation({ summary: 'Update specific items of the authenticated user profile' })
   @ApiBody({ type: UpdateUserDto })
-  @ApiResponse({ status: 200, description: 'User profile updated.' })
+  @ApiResponse({ status: 200, description: 'User items updated.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async updateItems(@Body() userData: any, @Req() req): Promise<any> {
@@ -163,22 +176,16 @@ export class UserController {
   @Put('picture')
   @ApiBearerAuth()
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({
-    summary: 'Update the profile picture of the authenticated user',
-  })
+  @ApiOperation({ summary: 'Update profile picture of the authenticated user' })
   @ApiBody({
     schema: {
       type: 'object',
-      properties: {
-        pictureFile: {
-          type: 'string',
-          format: 'binary',
-          description: 'Profile picture file',
-        },
-      },
+      properties: { pictureFile: { type: 'string', format: 'binary', description: 'Profile picture file' } },
     },
   })
-  @ApiResponse({ status: 200, description: 'User profile picture updated.' })
+  @ApiResponse({ status: 200, description: 'Profile picture updated.' })
+  @ApiResponse({ status: 400, description: 'No file uploaded.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
   @UseInterceptors(FilesInterceptor('pictureFile', 1, multerConfigForUser))
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
@@ -199,22 +206,16 @@ export class UserController {
   @Put('cover')
   @ApiBearerAuth()
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({
-    summary: 'Update the profile cover of the authenticated user',
-  })
+  @ApiOperation({ summary: 'Update profile cover of the authenticated user' })
   @ApiBody({
     schema: {
       type: 'object',
-      properties: {
-        pictureFile: {
-          type: 'string',
-          format: 'binary',
-          description: 'Profile cover file',
-        },
-      },
+      properties: { pictureFile: { type: 'string', format: 'binary', description: 'Profile cover file' } },
     },
   })
-  @ApiResponse({ status: 200, description: 'User profile cover updated.' })
+  @ApiResponse({ status: 200, description: 'Profile cover updated.' })
+  @ApiResponse({ status: 400, description: 'No file uploaded.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
   @UseInterceptors(FilesInterceptor('coverFile', 1, multerConfigForCover))
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
@@ -236,6 +237,8 @@ export class UserController {
   @ApiOperation({ summary: 'Delete a user by ID (admin only)' })
   @ApiParam({ name: 'id', description: 'User ID', type: String })
   @ApiResponse({ status: 200, description: 'User deleted.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   async delete(@Param('id') userId: string, @Req() req): Promise<any> {
     if (!req.user.isAdmin) {
@@ -248,26 +251,20 @@ export class UserController {
    * Search for users by name with optional query parameters for filtering and pagination.
    */
   @Get('research')
-  @ApiOperation({ summary: 'Search for users by name' })
-  @ApiQuery({
-    name: 'search',
-    required: false,
-    type: String,
-    description: 'Search filter',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'List of users matching the search criteria.',
-  })
+  @ApiOperation({ summary: 'Search users by name' })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search filter' })
+  @ApiResponse({ status: 200, description: 'Users matching search criteria.', schema: { example: [] } })
   async userResearch(@Query() query: ExpressQuery): Promise<any> {
     return this.userService.searchByName(query);
   }
 
   @Put('update-status/:id')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update user status' })
-  @ApiBody({ type: UpdateUserDto })
-  @ApiResponse({ status: 200, description: 'User profile updated.' })
+  @ApiOperation({ summary: 'Toggle user active status (admin only)' })
+  @ApiParam({ name: 'id', description: 'User ID', type: String })
+  @ApiResponse({ status: 200, description: 'User status updated.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async updateStatus(@Param('id') userId: string, @Req() req): Promise<any> {
@@ -279,9 +276,11 @@ export class UserController {
 
   @Put('update-adminStatus/:id')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update admin profile status' })
-  @ApiBody({ type: UpdateUserDto })
-  @ApiResponse({ status: 200, description: 'User profile updated.' })
+  @ApiOperation({ summary: 'Toggle user admin status (admin only)' })
+  @ApiParam({ name: 'id', description: 'User ID', type: String })
+  @ApiResponse({ status: 200, description: 'User admin status updated.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async updateAdminStatus(@Param('id') userId: string, @Req() req): Promise<any> {
@@ -293,9 +292,11 @@ export class UserController {
 
   @Put('update-verifiedStatus/:id')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update verified profile status' })
-  @ApiBody({ type: UpdateUserDto })
-  @ApiResponse({ status: 200, description: 'User profile updated.' })
+  @ApiOperation({ summary: 'Toggle user verified status (admin only)' })
+  @ApiParam({ name: 'id', description: 'User ID', type: String })
+  @ApiResponse({ status: 200, description: 'User verified status updated.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async updateVerifiedStatus(@Param('id') userId: string, @Req() req): Promise<any> {

@@ -25,28 +25,25 @@ import {
   ApiParam,
   ApiQuery,
   ApiResponse,
+  ApiTags,
 } from '@nestjs/swagger';
 import { PlansService } from './plans.service';
 import { Plans } from './plans.schema';
 import { CreatePlansDto } from './create-plans.dto';
 import { UpdatePlansDto } from './update-plans.dto';
 
+@ApiTags('plans')
 @Controller('plans')
 export class PlansController {
   constructor(private plansService: PlansService) {}
 
-  // Research
-
   @Get()
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get all plans (admin only)' })
-  @ApiQuery({
-    name: 'search',
-    required: false,
-    type: String,
-    description: 'Search filter',
-  })
-  @ApiResponse({ status: 200, description: 'List of plans returned.' })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search filter' })
+  @ApiResponse({ status: 200, description: 'List of plans returned.', schema: { example: [] } })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getAllPlanss(
@@ -59,12 +56,12 @@ export class PlansController {
     return this.plansService.getAllPlans(query);
   }
 
-  // Get Statistics
-
   @Get('get-statistics')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get statistics about all plans (admin only)' })
-  @ApiResponse({ status: 200, description: 'Plans Statistics.' })
+  @ApiResponse({ status: 200, description: 'Plans statistics.', schema: { example: { total: 10, active: 7, inactive: 3 } } })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getPlansStatistics(@Req() req): Promise<any> {
@@ -76,8 +73,9 @@ export class PlansController {
 
   @Get('get-my-statistics')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get statistics about plans of User' })
-  @ApiResponse({ status: 200, description: 'Plans Statistics.' })
+  @ApiOperation({ summary: 'Get statistics about plans of current user' })
+  @ApiResponse({ status: 200, description: 'Plans statistics.', schema: { example: { total: 3, active: 2 } } })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getMyPlansStatistics(@Req() req): Promise<any> {
@@ -86,8 +84,11 @@ export class PlansController {
 
   @Get('get-your-statistics/:id')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get statistics about plans of User' })
-  @ApiResponse({ status: 200, description: 'Plans Statistics.' })
+  @ApiOperation({ summary: 'Get statistics about plans of a user (admin only)' })
+  @ApiParam({ name: 'id', description: 'User ID', type: String })
+  @ApiResponse({ status: 200, description: 'Plans statistics.', schema: { example: { total: 3, active: 2 } } })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getYourPlansStatistics(
@@ -100,12 +101,12 @@ export class PlansController {
     return this.plansService.getMyPlansStatistics(userId);
   }
 
-  /////
-
   @Get('planList/:id')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get statistics about plans of User' })
-  @ApiResponse({ status: 200, description: 'Plans Statistics.' })
+  @ApiOperation({ summary: 'Get plans list of a user' })
+  @ApiParam({ name: 'id', description: 'User ID', type: String })
+  @ApiResponse({ status: 200, description: 'Plans list returned.', schema: { example: [] } })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getPlansList(@Param('id') userId: string, @Req() req): Promise<any> {
@@ -114,9 +115,10 @@ export class PlansController {
 
   @Put('update-status/:id')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update user status' })
-  @ApiBody({ type: UpdatePlansDto })
-  @ApiResponse({ status: 200, description: 'User profile updated.' })
+  @ApiOperation({ summary: 'Toggle plan active status' })
+  @ApiParam({ name: 'id', description: 'Plan ID', type: String })
+  @ApiResponse({ status: 200, description: 'Plan status updated.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async updateStatus(@Param('id') planId: string, @Req() req): Promise<any> {
@@ -124,17 +126,20 @@ export class PlansController {
   }
 
   @Get('get-data/:id')
-  @ApiOperation({ summary: 'Get plans data by ID' })
-  @ApiParam({ name: 'id', description: 'plans ID', type: String })
-  @ApiResponse({ status: 200, description: 'plans data returned.' })
+  @ApiOperation({ summary: 'Get plan data by ID' })
+  @ApiParam({ name: 'id', description: 'Plan ID', type: String })
+  @ApiResponse({ status: 200, description: 'Plan data returned.' })
+  @ApiResponse({ status: 404, description: 'Plan not found.' })
   async getPlans(@Param('id') plansId: string): Promise<any> {
     return this.plansService.getPlansById(plansId);
   }
 
   @Post('new')
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new plan' })
   @ApiBody({ type: CreatePlansDto })
-  @ApiResponse({ status: 201, description: 'plan created.' })
+  @ApiResponse({ status: 201, description: 'Plan created.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async createPlans(@Body() plans: any, @Req() req): Promise<any> {
@@ -142,24 +147,24 @@ export class PlansController {
   }
 
   @Post('add-subscriber')
-  @ApiOperation({ summary: 'Create a new user and add to plan as subscriber' })
-  @ApiBody({ type: CreatePlansDto })
-  @ApiResponse({ status: 201, description: 'plan created.' })
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Add a subscriber to a plan' })
+  @ApiBody({ schema: { example: { planId: '664f...', userId: '664f...' } } })
+  @ApiResponse({ status: 201, description: 'Subscriber added.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async addSubscriber(@Body() data: any): Promise<any> {
-    // console.log('data: ', data)
     return this.plansService.addSubscriber(data);
   }
 
-
-  ///////// ------ //////
-
   @Put('update-plans/:id')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update the plan' })
+  @ApiOperation({ summary: 'Update a plan' })
+  @ApiParam({ name: 'id', description: 'Plan ID', type: String })
   @ApiBody({ type: UpdatePlansDto })
-  @ApiResponse({ status: 200, description: 'Plans updated.' })
+  @ApiResponse({ status: 200, description: 'Plan updated.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async update(
@@ -172,9 +177,10 @@ export class PlansController {
 
   @Delete('delete/:id')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Delete a plans by ID (admin only)' })
-  @ApiParam({ name: 'id', description: 'Planss ID', type: String })
-  @ApiResponse({ status: 200, description: 'Planss deleted.' })
+  @ApiOperation({ summary: 'Delete a plan by ID' })
+  @ApiParam({ name: 'id', description: 'Plan ID', type: String })
+  @ApiResponse({ status: 200, description: 'Plan deleted.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async delete(@Param('id') plansId: string, @Req() req): Promise<any> {
@@ -182,17 +188,9 @@ export class PlansController {
   }
 
   @Get('research')
-  @ApiOperation({ summary: 'Search for plans by name' })
-  @ApiQuery({
-    name: 'search',
-    required: false,
-    type: String,
-    description: 'Search filter',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'List of plans matching the search criteria.',
-  })
+  @ApiOperation({ summary: 'Search plans by name' })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search filter' })
+  @ApiResponse({ status: 200, description: 'Plans matching search criteria.', schema: { example: [] } })
   async plansResearch(@Query() query: ExpressQuery): Promise<any> {
     return this.plansService.searchByTitle(query);
   }

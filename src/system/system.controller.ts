@@ -2,7 +2,7 @@
 import { Body, Controller, Get, Post, Put, Req, UseGuards, UsePipes, ValidationPipe } from '@nestjs/common';
 import { System } from './system.schema';
 import { SystemService } from './system.service';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 
 @ApiTags('system')
@@ -33,6 +33,22 @@ export class SystemController {
 
   @Put('update-data')
   @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update system configuration data (admin only)' })
+  @ApiBody({
+    schema: {
+      example: {
+        invoiceTaxes: 5,
+        maintenanceMode: false,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'System data updated.',
+    schema: { example: { invoiceTaxes: 5, maintenanceMode: false } },
+  })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async updateItems(@Body() systemData: any, @Req() req): Promise<any> {

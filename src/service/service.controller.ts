@@ -30,6 +30,7 @@ import {
   ApiParam,
   ApiQuery,
   ApiResponse,
+  ApiTags,
 } from '@nestjs/swagger';
 import { ServiceService } from './service.service';
 import { Service } from './service.schema';
@@ -38,6 +39,7 @@ import { UpdateServiceDto } from './update-service.dto';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { multerConfigForService } from 'src/multer.config';
 
+@ApiTags('service')
 @Controller('service')
 export class ServiceController {
   constructor(private serviceService: ServiceService) { }
@@ -46,14 +48,11 @@ export class ServiceController {
 
   @Get()
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get all service (admin only)' })
-  @ApiQuery({
-    name: 'search',
-    required: false,
-    type: String,
-    description: 'Search filter',
-  })
-  @ApiResponse({ status: 200, description: 'List of service returned.' })
+  @ApiOperation({ summary: 'Get all services (admin only)' })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search filter' })
+  @ApiResponse({ status: 200, description: 'List of services returned.', schema: { example: [] } })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getAllServices(
@@ -69,8 +68,10 @@ export class ServiceController {
   // Get Statistics
   @Get('get-statistics')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get statistics about all service (admin only)' })
-  @ApiResponse({ status: 200, description: 'Service Statistics.' })
+  @ApiOperation({ summary: 'Get statistics about all services (admin only)' })
+  @ApiResponse({ status: 200, description: 'Service statistics.', schema: { example: { total: 10, active: 7 } } })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getServiceStatistics(@Req() req): Promise<any> {
@@ -82,8 +83,9 @@ export class ServiceController {
 
   @Get('get-my-statistics')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get statistics about service of User' })
-  @ApiResponse({ status: 200, description: 'Service Statistics.' })
+  @ApiOperation({ summary: 'Get statistics about services of current user' })
+  @ApiResponse({ status: 200, description: 'Service statistics.', schema: { example: { total: 3, active: 2 } } })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getMyServiceStatistics(@Req() req): Promise<any> {
@@ -92,8 +94,11 @@ export class ServiceController {
 
   @Get('get-your-statistics/:id')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get statistics about service of User' })
-  @ApiResponse({ status: 200, description: 'Service Statistics.' })
+  @ApiOperation({ summary: 'Get statistics about services of a user (admin only)' })
+  @ApiParam({ name: 'id', description: 'User ID', type: String })
+  @ApiResponse({ status: 200, description: 'Service statistics.', schema: { example: { total: 3, active: 2 } } })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async getYourServiceStatistics(
@@ -109,18 +114,19 @@ export class ServiceController {
   /////
 
   @Get('serviceList/:id')
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get statistics about service of User' })
-  @ApiResponse({ status: 200, description: 'Service Statistics.' })
+  @ApiOperation({ summary: 'Get services list of a user' })
+  @ApiParam({ name: 'id', description: 'User ID', type: String })
+  @ApiResponse({ status: 200, description: 'Services list returned.', schema: { example: [] } })
   async getServiceList(@Param('id') userId: string): Promise<any> {
     return this.serviceService.getServiceList(userId);
   }
 
   @Put('update-status/:id')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update user status' })
-  @ApiBody({ type: UpdateServiceDto })
-  @ApiResponse({ status: 200, description: 'User profile updated.' })
+  @ApiOperation({ summary: 'Toggle service active status' })
+  @ApiParam({ name: 'id', description: 'Service ID', type: String })
+  @ApiResponse({ status: 200, description: 'Service status updated.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async updateStatus(@Param('id') planId: string, @Req() req): Promise<any> {
@@ -129,16 +135,19 @@ export class ServiceController {
 
   @Get('get-data/:id')
   @ApiOperation({ summary: 'Get service data by ID' })
-  @ApiParam({ name: 'id', description: 'service ID', type: String })
-  @ApiResponse({ status: 200, description: 'service data returned.' })
+  @ApiParam({ name: 'id', description: 'Service ID', type: String })
+  @ApiResponse({ status: 200, description: 'Service data returned.' })
+  @ApiResponse({ status: 404, description: 'Service not found.' })
   async getService(@Param('id') serviceId: string): Promise<any> {
     return this.serviceService.getServiceById(serviceId);
   }
 
   @Post('new')
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new service' })
   @ApiBody({ type: CreateServiceDto })
-  @ApiResponse({ status: 201, description: 'service created.' })
+  @ApiResponse({ status: 201, description: 'Service created.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async createService(@Body() service: any, @Req() req): Promise<any> {
@@ -182,9 +191,11 @@ export class ServiceController {
 
   @Put('update-service/:id')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update the plan' })
+  @ApiOperation({ summary: 'Update a service' })
+  @ApiParam({ name: 'id', description: 'Service ID', type: String })
   @ApiBody({ type: UpdateServiceDto })
   @ApiResponse({ status: 200, description: 'Service updated.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async update(
@@ -197,9 +208,10 @@ export class ServiceController {
 
   @Delete('delete/:id')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Delete a service by ID (admin only)' })
-  @ApiParam({ name: 'id', description: 'Services ID', type: String })
-  @ApiResponse({ status: 200, description: 'Services deleted.' })
+  @ApiOperation({ summary: 'Delete a service by ID' })
+  @ApiParam({ name: 'id', description: 'Service ID', type: String })
+  @ApiResponse({ status: 200, description: 'Service deleted.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async delete(@Param('id') serviceId: string, @Req() req): Promise<any> {
@@ -207,17 +219,9 @@ export class ServiceController {
   }
 
   @Get('research')
-  @ApiOperation({ summary: 'Search for service by name' })
-  @ApiQuery({
-    name: 'search',
-    required: false,
-    type: String,
-    description: 'Search filter',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'List of service matching the search criteria.',
-  })
+  @ApiOperation({ summary: 'Search services by name' })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search filter' })
+  @ApiResponse({ status: 200, description: 'Services matching search criteria.', schema: { example: [] } })
   async serviceResearch(@Query() query: ExpressQuery): Promise<any> {
     return this.serviceService.searchByTitle(query);
   }

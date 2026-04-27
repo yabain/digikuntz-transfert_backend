@@ -10,6 +10,8 @@ import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
 import { UserService } from 'src/user/user.service';
 import { CryptService } from './crypt.service';
 import { BalanceService } from 'src/balance/balance.service';
+import { PayoutService } from 'src/payout/payout.service';
+import { TStatus } from 'src/transaction/transaction.schema';
 
 @Injectable()
 export class DevService {
@@ -22,7 +24,8 @@ export class DevService {
     private fwService: FlutterwaveService,
     private userService: UserService,
     private cryptService: CryptService,
-    private balanceService: BalanceService
+    private balanceService: BalanceService,
+    private payoutService: PayoutService,
   ) { }
 
   async getDevDataById(devId): Promise<any> {
@@ -226,6 +229,63 @@ export class DevService {
         updatedAt: transaction.updatedAt,
       }
     }
+  }
+
+  async createPayoutTransaction(data: {
+    amount: number;
+    accountBankCode: string;
+    accountNumber: string;
+    receiverName: string;
+    currency: string;
+    narration?: string;
+    callbackUrl?: string;
+  }, userId: string): Promise<any> {
+    const user = await this.userService.getUserById(userId);
+    if (!user) throw new ConflictException('user not found');
+
+    const taxesDetails = await this.transactionService.calculateTaxesAmount(data.amount);
+
+    const balance = await this.balanceService.getBalanceByUserId(userId);
+    if (balance.balance < taxesDetails.paymentWithTaxes) {
+      throw new ConflictException('Insufficient balance');
+    }
+
+    const txRef = this.payoutService.generateTxRef('txApiPayout');
+    const transactionData: any = {
+      transactionRef: this.transactionService.generateInRef(),
+      txRef,
+      estimation: data.amount,
+      transactionType: 'apiCall',
+      userId,
+      senderId: userId,
+      receiverId: userId,
+      senderName: this.userService.showName(user),
+      senderEmail: user.email,
+      senderContact: user.phone,
+      senderCountry: user.countryId.name,
+      senderCurrency: user.countryId.currency,
+      receiverName: data.receiverName,
+      receiverCurrency: data.currency,
+      bankCode: data.accountBankCode,
+      bankAccountNumber: data.accountNumber,
+      raisonForTransfer: data.narration || 'API Payout',
+      status: TStatus.PAYINSUCCESS,
+      ...(data.callbackUrl && { callbackUrl: data.callbackUrl }),
+    };
+
+    await this.balanceService.debitBalance(userId, taxesDetails.paymentWithTaxes, user.countryId.currency);
+
+    const savedTransaction = await this.transactionService.createTransaction(transactionData);
+    if (!savedTransaction) throw new ConflictException('Error saving transaction');
+
+    return {
+      id: savedTransaction._id,
+      status: 'payout_pending',
+      transactionRef: savedTransaction.transactionRef,
+      amount: data.amount,
+      paymentWithTaxes: taxesDetails.paymentWithTaxes,
+      currency: data.currency,
+    };
   }
 
   async createPayinTransaction(transactionData: any, userId): Promise<any> {

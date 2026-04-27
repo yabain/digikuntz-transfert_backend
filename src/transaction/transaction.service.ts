@@ -479,7 +479,42 @@ export class TransactionService {
           console.error('notifyRejectedTransaction failed:', error),
         );
     }
+    if (transaction.transactionType === 'apiCall' && transaction.callbackUrl) {
+      void this.sendCallback(transaction).catch((error) =>
+        console.error('sendCallback failed:', error),
+      );
+    }
     return transaction;
+  }
+
+  private async sendCallback(transaction: any): Promise<void> {
+    const statusMap: Record<string, string> = {
+      transaction_payin_pending: 'pending',
+      transaction_payin_success: 'success',
+      transaction_payin_error: 'error',
+      transaction_payin_closed: 'closed',
+      transaction_payout_pending: 'payout_pending',
+      transaction_payout_success: 'payout_success',
+      transaction_payout_error: 'payout_error',
+      transaction_payout_closed: 'payout_closed',
+      transaction_payout_rejected: 'rejected',
+    };
+    const payload = {
+      id: transaction._id,
+      status: statusMap[transaction.status] ?? transaction.status,
+      data: {
+        estimation: transaction.estimation,
+        transactionRef: transaction.transactionRef,
+        invoiceTaxes: transaction.taxesAmount,
+        paymentWithTaxes: transaction.paymentWithTaxes,
+        raisonForTransfer: transaction.raisonForTransfer,
+        receiverCurrency: transaction.receiverCurrency,
+        transactionType: transaction.transactionType,
+        createdAt: transaction.createdAt,
+        updatedAt: transaction.updatedAt,
+      },
+    };
+    await this.httpService.axiosRef.post(transaction.callbackUrl, payload);
   }
 
   async claimTransactionForPayout(transactionId: string): Promise<any | null> {
@@ -487,13 +522,21 @@ export class TransactionService {
       throw new NotFoundException('Invalid transaction ID');
     }
 
-    return this.transactionModel
+    const transaction = await this.transactionModel
       .findOneAndUpdate(
         { _id: transactionId, status: TStatus.PAYINSUCCESS },
         { status: TStatus.PAYOUTPENDING },
         { new: true },
       )
       .exec();
+
+    if (transaction?.transactionType === 'apiCall' && transaction?.callbackUrl) {
+      void this.sendCallback(transaction).catch((error) =>
+        console.error('sendCallback failed (claimTransactionForPayout):', error),
+      );
+    }
+
+    return transaction;
   }
   
   async updateTransactionTxRef(
