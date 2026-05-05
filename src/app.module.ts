@@ -46,40 +46,30 @@ import { PaymentMethodModule } from './payment-method/payment-method.module';
     MongooseModule.forRootAsync({
       inject: [ConfigService],
       useFactory: async (configService: ConfigService) => {
-        const dbUser = configService.get<string>('DB_USER');
-        const dbPassword = configService.get<string>('DB_PASSWORD');
-        const dbHost = configService.get<string>('DB_HOST');
-        const dbName = configService.get<string>('DB_NAME');
-        const dbOptions = configService.get<string>('DB_OPTIONS');
-    
-        if (!dbUser) {
-          throw new Error('DB_USER not found in environment variables');
+        const dbUrl = configService.get<string>('DB_URL');
+        if (!dbUrl) {
+          throw new Error('DB_URL not found in environment variables');
         }
-    
-        if (!dbPassword) {
-          throw new Error('DB_PASSWORD not found in environment variables');
+
+        const credentialsRegex = /^(mongodb\+srv:\/\/)([^:]+):([^@]+)@(.*)$/;
+        const match = dbUrl.match(credentialsRegex);
+
+        if (match) {
+          const prefix = match[1];
+          const username = match[2];
+          const password = match[3];
+          const suffix = match[4];
+          const encodedPassword = encodeURIComponent(password);
+          const newUrl = `${prefix}${encodeURIComponent(
+            username,
+          )}:${encodedPassword}@${suffix}`;
+          return {
+            uri: newUrl,
+          };
         }
-    
-        if (!dbHost) {
-          throw new Error('DB_HOST not found in environment variables');
-        }
-    
-        if (!dbName) {
-          throw new Error('DB_NAME not found in environment variables');
-        }
-    
-        const encodedUser = encodeURIComponent(dbUser);
-        const encodedPassword = encodeURIComponent(dbPassword);
-    
-        const uri = `mongodb+srv://${encodedUser}:${encodedPassword}@${dbHost}/${dbName}${
-          dbOptions ? `?${dbOptions}` : ''
-        }`;
-    
+
         return {
-          uri,
-          serverSelectionTimeoutMS: 10000,
-          connectTimeoutMS: 10000,
-          socketTimeoutMS: 10000,
+          uri: dbUrl,
         };
       },
     }),
