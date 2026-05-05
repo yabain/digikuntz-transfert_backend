@@ -9,7 +9,7 @@ RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 # Autoriser le CORS pour ton frontend
 # ============================================================
 <IfModule mod_headers.c>
-    Header always set Access-Control-Allow-Origin "https://payments.digikuntz.com"
+    Header always set Access-Control-Allow-Origin "https://payments.digikuntz.com,https://vote.me-udm.org"
     Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, PATCH, OPTIONS"
     Header always set Access-Control-Allow-Headers "Authorization,Content-Type,Accept,Origin,X-Requested-With"
     Header always set Access-Control-Allow-Credentials "true"
