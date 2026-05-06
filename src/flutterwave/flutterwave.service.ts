@@ -486,45 +486,16 @@ export class FlutterwaveService {
       return { message: 'Payin pending', status: 'pending' };
     } else if (payin.status === 'successful') {
       try {
-        if (transaction.transactionType !== 'withdrawal' && transaction.transactionType !== 'transfer') {
-          const newBalence = await this.balanceService.creditBalance(
-            transaction.receiverId,
-            Number(transaction.estimation),
-            transaction.senderCurrency,
-          );
-        }
-
-        console.log('(fw service: verifyPayin) in handle successful transaction: ', transaction);
-        if (transaction.transactionType === 'subscription') {
-          await this.handleSubscription(transaction);
-        }
-        if (transaction.transactionType === 'service') {
-          await this.handleService(transaction);
-        }
-        if (transaction.transactionType === 'withdrawal') {
-          await this.handleWithdrawal(transaction);
-        }
-        if (transaction.transactionType === 'apiCall') {
-          await this.handleApiCall(transaction);
-        }
-        if (transaction.transactionType === 'fundraising') {
-          await this.handleFundraising(transaction);
-        }
-        if (transaction.transactionType === 'paymentRequest') {
-          await this.handlePaymentRequest(transaction);
-        }
-        if (transaction.transactionType === 'transfer') {
-          await this.handleTransfer(transaction);
-        }
-
-        // console.log('updating transaction data')
-        await this.transactionService.updateTransactionStatus(
+        const alreadySuccessful = await this.transactionService.findById(
           String(payin.transactionId),
-          this.tStatus.PAYINSUCCESS,
         );
+        if (alreadySuccessful?.status === this.tStatus.PAYINSUCCESS) {
+          return { message: 'Payin already successful', status: 'successful' };
+        }
+
+        await this.processSuccessfulPayin(transaction, String(payin.transactionId));
         return { message: 'Payin already successful', status: 'successful' };
       } catch (err) {
-        // console.log('(fw service: verifyAndClosePayin) Error: ', err);
         return {
           message: '(fw service: verifyAndClosePayin) Error: ' + err,
           status: 'error',
@@ -615,33 +586,16 @@ export class FlutterwaveService {
 
     if (payin.status === 'successful') {
       try {
-        // console.log('(fw service: verifyPayin) in handle successful ');
-        if (transaction.transactionType === 'subscription') {
-          await this.handleSubscription(transaction);
-        }
-        if (transaction.transactionType === 'service') {
-          await this.handleService(transaction);
-        }
-        if (transaction.transactionType === 'withdrawal') {
-          await this.handleWithdrawal(transaction);
-        }
-        if (transaction.transactionType === 'fundraising') {
-          await this.handleFundraising(transaction);
-        }
-        if (transaction.transactionType === 'paymentRequest') {
-          await this.handlePaymentRequest(transaction);
-        }
-        if (transaction.transactionType === 'transfer') {
-          await this.handleTransfer(transaction);
-        }
-        // console.log('updating transaction data')
-        await this.transactionService.updateTransactionStatus(
+        const alreadySuccessful = await this.transactionService.findById(
           String(payin.transactionId),
-          this.tStatus.PAYINSUCCESS,
         );
+        if (alreadySuccessful?.status === this.tStatus.PAYINSUCCESS) {
+          return { message: 'Payin already successful', status: 'successful' };
+        }
+
+        await this.processSuccessfulPayin(transaction, String(payin.transactionId));
         return { message: 'Payin already successful', status: 'successful' };
       } catch (err) {
-        // console.log('(fw service: verifyAndClosePayin) Error: ', err);
         return {
           message: '(fw service: verifyAndClosePayin) Error: ' + err,
           status: 'error',
@@ -675,6 +629,46 @@ export class FlutterwaveService {
     } catch (err) {
       console.log('(fw service: handleTransfer) Error: ', err);
     }
+  }
+
+  private async processSuccessfulPayin(transaction: any, transactionId: string) {
+    if (
+      transaction.transactionType !== 'withdrawal' &&
+      transaction.transactionType !== 'transfer'
+    ) {
+      await this.balanceService.creditBalance(
+        transaction.receiverId,
+        Number(transaction.estimation),
+        transaction.senderCurrency,
+      );
+    }
+
+    if (transaction.transactionType === 'subscription') {
+      await this.handleSubscription(transaction);
+    }
+    if (transaction.transactionType === 'service') {
+      await this.handleService(transaction);
+    }
+    if (transaction.transactionType === 'withdrawal') {
+      await this.handleWithdrawal(transaction);
+    }
+    if (transaction.transactionType === 'apiCall') {
+      await this.handleApiCall(transaction);
+    }
+    if (transaction.transactionType === 'fundraising') {
+      await this.handleFundraising(transaction);
+    }
+    if (transaction.transactionType === 'paymentRequest') {
+      await this.handlePaymentRequest(transaction);
+    }
+    if (transaction.transactionType === 'transfer') {
+      await this.handleTransfer(transaction);
+    }
+
+    await this.transactionService.updateTransactionStatus(
+      transactionId,
+      this.tStatus.PAYINSUCCESS,
+    );
   }
 
   async handleSubscription(transaction) {
