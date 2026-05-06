@@ -734,6 +734,15 @@ export class FlutterwaveService {
 
   async handleService(transaction) {
     try {
+      // const existingServicePayment =
+      //   await this.servicePaymentService.findByTransactionId(
+      //     transaction?._id?.toString?.() || String(transaction?._id || ''),
+      //   );
+
+      // if (!existingServicePayment) {
+        await this.createServicePayment(transaction);
+      // }
+
       void this.operationNotificationService.notifyServicePaymentSuccess(transaction);
 
     } catch (err) {

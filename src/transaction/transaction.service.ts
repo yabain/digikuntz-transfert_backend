@@ -31,6 +31,7 @@ import { SystemService } from 'src/system/system.service';
 import { OperationNotificationService } from 'src/notification/operation-notification.service';
 import { PaymentRequestService } from 'src/payment-request/payment-request.service';
 import { PaymentRequestStatus } from 'src/payment-request/payment-request.schema';
+import { ServicePaymentService } from 'src/service/service-payment/service-payment.service';
 // import { CreateTransactionDto } from './create-transaction.dto';
 
 @Injectable()
@@ -51,6 +52,7 @@ export class TransactionService {
     private operationNotificationService: OperationNotificationService,
     @Inject(forwardRef(() => PaymentRequestService))
     private paymentRequestService: PaymentRequestService,
+    private servicePaymentService: ServicePaymentService,
   ) { }
 
   async findAll(query: Query): Promise<Transaction[]> {
@@ -326,6 +328,26 @@ export class TransactionService {
       }
     }
     if (payin.status === 'successful') {
+      if (transactionData?.transactionType === 'service') {
+        try {
+          const txId = String(transactionData?._id || '');
+          const existing =
+            await this.servicePaymentService.findByTransactionId(txId);
+          if (!existing) {
+            const payload =
+              this.servicePaymentService.parseTransactionToServicePayment(
+                transactionData,
+              );
+            await this.servicePaymentService.createServicePayment(payload);
+          }
+        } catch (error) {
+          this.logger.error(
+            `verifyTransactionPayinStatus: failed to create servicePayment for tx=${String(
+              transactionData?._id || '',
+            )} | ${(error as any)?.message || error}`,
+          );
+        }
+      }
       if (transactionData?.transactionType === 'paymentRequest') {
         await this.paymentRequestService.handlePaymentRequest(transactionData);
       }

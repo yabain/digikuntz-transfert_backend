@@ -83,6 +83,12 @@ export class ServicePaymentService {
   async createServicePayment(
     serviceData: CreateServicePaymentDto,
   ): Promise<ServicePayment> {
+    // const existing = await this.serviceModel.findOne({
+    //   transactionId: serviceData.transactionId as any,
+    // });
+    // if (existing) {
+    //   return existing;
+    // }
 
 
     const res = await this.serviceModel.create(serviceData);
@@ -107,24 +113,55 @@ export class ServicePaymentService {
     return res;
   }
 
+  async findByTransactionId(transactionId: string): Promise<ServicePayment | null> {
+    if (!transactionId) {
+      return null;
+    }
+    return this.serviceModel.findOne({ transactionId: transactionId as any });
+  }
+
   async getItemStatistics(userId): Promise<any> {
+    const receiverId = String(userId || '').trim();
+    if (!receiverId) return [];
+
     const res = await this.serviceModel.aggregate([
-      { $match: { receiverId: new mongoose.Types.ObjectId(userId) } },
+      {
+        $addFields: {
+          receiverIdStr: { $toString: '$receiverId' },
+          serviceIdStr: { $toString: '$serviceId' },
+          quantityNum: {
+            $convert: {
+              input: '$quantity',
+              to: 'double',
+              onError: 0,
+              onNull: 0,
+            },
+          },
+        },
+      },
+      {
+        $match: {
+          receiverIdStr: receiverId,
+          serviceIdStr: { $ne: '' },
+        },
+      },
       {
         $group: {
-          _id: '$serviceId',
-          quantity: { $sum: '$quantity' }
-        }
+          _id: '$serviceIdStr',
+          quantity: { $sum: '$quantityNum' },
+        },
       },
       {
         $project: {
+          _id: 0,
           serviceId: '$_id',
-          quantity: 1,
-          _id: 0
-        }
-      }
+          quantity: { $toInt: '$quantity' },
+        },
+      },
+      { $sort: { serviceId: 1 } },
     ]);
-    
+    console.log('resp: ', res)
+
     return res;
   }
 
