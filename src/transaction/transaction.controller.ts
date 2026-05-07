@@ -194,6 +194,26 @@ export class TransactionController {
     return this.transactionService.getTransactionsStatistics();
   }
 
+  @Get('investigation-balance/:userId')
+  @ApiOperation({
+    summary:
+      'Public investigation endpoint: recompute user balance from transactions',
+  })
+  @ApiParam({ name: 'userId', description: 'Receiver user ID', type: String })
+  @ApiResponse({
+    status: 200,
+    description: 'Computed balance from successful payin/payout transactions.',
+    schema: {
+      example: {
+        userId: '687e9808955330d84e75f272',
+        balance: 12345,
+      },
+    },
+  })
+  async investigateBalance(@Param('userId') userId: string): Promise<any> {
+    return this.transactionService.investigateBalanceByReceiver(userId);
+  }
+
   @Get(':id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get transaction data by ID' })

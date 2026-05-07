@@ -248,6 +248,93 @@ export class TransactionService {
     return res;
   }
 
+  async investigateBalanceByReceiver(userId: string): Promise<{
+    userId: string;
+    balance: number;
+  }> {
+    const normalizedUserId = String(userId || '').trim();
+    if (!normalizedUserId) {
+      throw new NotFoundException('Invalid user ID');
+    }
+
+    const creditTypes = [
+      'fundraising',
+      'service',
+      'payment',
+      'subscription',
+      'apiCall',
+      'deposit',
+      'transfer',
+      'paymentRequest',
+    ];
+
+    const aggregated = await this.transactionModel.aggregate([
+      {
+        $addFields: {
+          receiverIdStr: { $toString: '$receiverId' },
+          estimationNum: {
+            $convert: {
+              input: '$estimation',
+              to: 'double',
+              onError: 0,
+              onNull: 0,
+            },
+          },
+        },
+      },
+      {
+        $match: {
+          receiverIdStr: normalizedUserId,
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          creditTotal: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $in: ['$transactionType', creditTypes] },
+                    { $eq: ['$status', TStatus.PAYINSUCCESS] },
+                  ],
+                },
+                '$estimationNum',
+                0,
+              ],
+            },
+          },
+          debitTotal: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ['$transactionType', 'withdrawal'] },
+                    { $eq: ['$status', TStatus.PAYOUTSUCCESS] },
+                  ],
+                },
+                '$estimationNum',
+                0,
+              ],
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          balance: { $subtract: ['$creditTotal', '$debitTotal'] },
+        },
+      },
+    ]);
+
+    const balance = Number(aggregated?.[0]?.balance || 0);
+    return {
+      userId: normalizedUserId,
+      balance,
+    };
+  }
+
   async getPayoutPendingListByStatus(query?): Promise<any> {
     const resPerPage = Number(query?.resPerPage) || 10;
     const currentPage = Number(query?.page) || 1;
@@ -559,6 +646,32 @@ export class TransactionService {
     }
 
     return transaction;
+  }
+
+  async claimTransactionForSuccessfulPayin(
+    transactionId: string,
+  ): Promise<any | null> {
+    if (!mongoose.Types.ObjectId.isValid(transactionId)) {
+      throw new NotFoundException('Invalid transaction ID');
+    }
+
+    return this.transactionModel
+      .findOneAndUpdate(
+        {
+          _id: transactionId,
+          status: {
+            $in: [
+              TStatus.PAYINPENDING,
+              TStatus.INITIALIZED,
+              TStatus.PAYINERROR,
+              TStatus.PAYINCLOSED,
+            ],
+          },
+        },
+        { status: TStatus.PAYINSUCCESS },
+        { new: true },
+      )
+      .exec();
   }
   
   async updateTransactionTxRef(

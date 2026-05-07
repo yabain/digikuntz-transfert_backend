@@ -632,6 +632,14 @@ export class FlutterwaveService {
   }
 
   private async processSuccessfulPayin(transaction: any, transactionId: string) {
+    const claimed =
+      await this.transactionService.claimTransactionForSuccessfulPayin(
+        transactionId,
+      );
+    if (!claimed) {
+      return;
+    }
+
     if (
       transaction.transactionType !== 'withdrawal' &&
       transaction.transactionType !== 'transfer'
@@ -665,10 +673,7 @@ export class FlutterwaveService {
       await this.handleTransfer(transaction);
     }
 
-    await this.transactionService.updateTransactionStatus(
-      transactionId,
-      this.tStatus.PAYINSUCCESS,
-    );
+    return;
   }
 
   async handleSubscription(transaction) {
@@ -728,14 +733,14 @@ export class FlutterwaveService {
 
   async handleService(transaction) {
     try {
-      // const existingServicePayment =
-      //   await this.servicePaymentService.findByTransactionId(
-      //     transaction?._id?.toString?.() || String(transaction?._id || ''),
-      //   );
+      const existingServicePayment =
+        await this.servicePaymentService.findByTransactionId(
+          transaction?._id?.toString?.() || String(transaction?._id || ''),
+        );
 
-      // if (!existingServicePayment) {
+      if (!existingServicePayment) {
         await this.createServicePayment(transaction);
-      // }
+      }
 
       void this.operationNotificationService.notifyServicePaymentSuccess(transaction);
 
