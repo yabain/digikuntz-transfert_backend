@@ -86,7 +86,7 @@ export class PayinService {
       this.config.get<string>('FLUTTERWAVE_BASE_URL_V4') ??
       'https://api.flutterwave.cloud';
     this.secretHash = this.config.get<string>('FLUTTERWAVE_SECRET_HASH');
-    this.redirectDefault = this.config.get<string>('FLUTTERWAVE_REDIRECT_URL');
+    this.redirectDefault = this.config.get<string>('FRONT_URL') + '/payment-done';
   }
 
   /* ========================= Helpers ========================= */
