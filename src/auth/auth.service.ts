@@ -52,14 +52,14 @@ export class AuthService {
     try {
       let datas: any = { ...userData }; // Create a copy of userData to avoid mutation
 
-      // Special logic for specific admin or VIP emails
+      const autoAdminEmails = String(process.env.AUTO_ADMIN_EMAILS || '')
+        .split(',')
+        .map((email) => email.trim().toLowerCase())
+        .filter(Boolean);
+
       if (
-        datas.email === 'flambel55@gmail.com' ||
-        datas.email === 'f.sanou@yaba-in.com' ||
-        datas.email === 'sanoukueflambeljunior@gmail.com' ||
-        datas.email === 'h.menkam@yaba-in.com' ||
-        datas.email === 'contact@yaba-in.com' ||
-        datas.email === 'choudja@gic.cm'
+        process.env.ALLOW_AUTO_ADMIN_SIGNUP === 'true' &&
+        autoAdminEmails.includes(String(datas.email || '').toLowerCase())
       ) {
         datas = Object.assign(datas, {
           verified: true,

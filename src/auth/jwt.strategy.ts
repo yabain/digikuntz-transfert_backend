@@ -8,11 +8,14 @@ import { Model } from 'mongoose';
 import { Strategy, ExtractJwt } from 'passport-jwt';
 import { User } from '../user/user.schema';
 import { ConfigService } from '@nestjs/config';
+import { RevokedToken } from 'src/revoked-token/revoked-token.schema';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     @InjectModel(User.name) private userModel: Model<User>,
+    @InjectModel(RevokedToken.name)
+    private revokedTokenModel: Model<RevokedToken>,
     config: ConfigService,
   ) {
     super({
@@ -23,7 +26,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(req: Request, payload: any) {
+  async validate(req: any, payload: any) {
+    const authHeader = String(req?.headers?.authorization || '');
+    const token = authHeader.startsWith('Bearer ')
+      ? authHeader.slice('Bearer '.length).trim()
+      : '';
+
+    if (token) {
+      const revoked = await this.revokedTokenModel.exists({ token });
+      if (revoked) {
+        throw new UnauthorizedException();
+      }
+    }
+
     const user = await this.userModel.findById(payload.id);
     if (!user) {
       console.error('User not found for ID:', payload.id);

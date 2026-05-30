@@ -2,11 +2,13 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   Post,
   Put,
   Query,
+  Req,
   UseGuards,
   UsePipes,
   ValidationPipe,
@@ -39,7 +41,8 @@ export class PaymentMethodController {
   @ApiResponse({ status: 201, description: 'Payment method created.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async create(@Body() dto: CreatePaymentMethodDto): Promise<PaymentMethod> {
+  async create(@Body() dto: CreatePaymentMethodDto, @Req() req): Promise<PaymentMethod> {
+    this.assertAdmin(req);
     return this.paymentMethodService.create(dto);
   }
 
@@ -85,7 +88,9 @@ export class PaymentMethodController {
   async update(
     @Param('id') id: string,
     @Body() dto: UpdatePaymentMethodDto,
+    @Req() req,
   ): Promise<PaymentMethod> {
+    this.assertAdmin(req);
     return this.paymentMethodService.update(id, dto);
   }
 
@@ -96,8 +101,14 @@ export class PaymentMethodController {
   @ApiResponse({ status: 200, description: 'Payment method deleted.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async remove(@Param('id') id: string): Promise<any> {
+  async remove(@Param('id') id: string, @Req() req): Promise<any> {
+    this.assertAdmin(req);
     return this.paymentMethodService.remove(id);
   }
-}
 
+  private assertAdmin(req: any): void {
+    if (!req.user?.isAdmin) {
+      throw new ForbiddenException('Unauthorised');
+    }
+  }
+}

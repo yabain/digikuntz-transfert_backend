@@ -5,6 +5,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   NotFoundException,
   Param,
@@ -136,6 +137,9 @@ export class TransactionController {
     @Query() query: ExpressQuery,
     @Req() req,
   ): Promise<Transaction[]> {
+    if (!this.isSameId(req.user?._id, userId) && !req.user?.isAdmin) {
+      throw new ForbiddenException('Unauthorised');
+    }
     return this.transactionService.getAllTransactionsOfUser(userId, query);
   }
 
@@ -195,9 +199,10 @@ export class TransactionController {
   }
 
   @Get('investigation-balance/:userId')
+  @ApiBearerAuth()
   @ApiOperation({
     summary:
-      'Public investigation endpoint: recompute user balance from transactions',
+      'Admin investigation endpoint: recompute user balance from transactions',
   })
   @ApiParam({ name: 'userId', description: 'Receiver user ID', type: String })
   @ApiResponse({
@@ -210,7 +215,13 @@ export class TransactionController {
       },
     },
   })
-  async investigateBalance(@Param('userId') userId: string): Promise<any> {
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
+  @UseGuards(AuthGuard('jwt'))
+  async investigateBalance(@Param('userId') userId: string, @Req() req): Promise<any> {
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unauthorised');
+    }
     return this.transactionService.investigateBalanceByReceiver(userId);
   }
 
@@ -220,8 +231,16 @@ export class TransactionController {
   @ApiParam({ name: 'id', description: 'Transaction ID', type: String })
   @ApiResponse({ status: 200, description: 'Transaction data returned.' })
   @ApiResponse({ status: 404, description: 'Transaction not found.' })
-  async getTransactionData(@Param('id') transactionId: string): Promise<any> {
-    return this.transactionService.findById(transactionId);
+  @UseGuards(AuthGuard('jwt'))
+  async getTransactionData(
+    @Param('id') transactionId: string,
+    @Req() req,
+  ): Promise<any> {
+    const transaction = await this.transactionService.findById(transactionId);
+    if (!req.user?.isAdmin && !this.isUserRelatedToTransaction(req.user?._id, transaction)) {
+      throw new ForbiddenException('Unauthorised');
+    }
+    return transaction;
   }
 
   @Delete(':id')
@@ -265,5 +284,19 @@ export class TransactionController {
   @Delete('*path')
   deleteRedirect(@Res() res: Response) {
     return res.redirect('https://payments.digikuntz.com');
+  }
+
+  private isUserRelatedToTransaction(userId: any, transaction: any): boolean {
+    return [
+      transaction?.senderId,
+      transaction?.receiverId,
+      transaction?.userId?._id,
+      transaction?.userId,
+    ].some((candidate) => this.isSameId(userId, candidate));
+  }
+
+  private isSameId(left: any, right: any): boolean {
+    if (!left || !right) return false;
+    return String(left) === String(right);
   }
 }

@@ -101,11 +101,16 @@ export class FlutterwaveController {
   }
 
   @Get('transactions')
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'List generic Flutterwave transactions' })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'status', required: false, type: String, example: 'successful' })
   @ApiResponse({ status: 200, description: 'Transactions list returned.' })
-  listTx(@Query('page') page?: number, @Query('status') status?: string) {
+  @UseGuards(AuthGuard('jwt'))
+  listTx(@Query('page') page: number | undefined, @Query('status') status: string | undefined, @Req() req: any) {
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unauthorised');
+    }
     return this.fw.listTransactions({ page, status });
   }
 
@@ -174,6 +179,18 @@ export class FlutterwaveController {
   @UsePipes(ValidationPipe)
   verify(@Param('txRef') txRef: string) {
     return this.fw.verifyPayin(txRef);
+  }
+
+  @Get('verify-close-payin/:txRef')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Verify and close a payin by txRef when terminal' })
+  @ApiParam({ name: 'txRef', example: 'txPayin-1741130000000-abcd1234' })
+  @ApiResponse({ status: 200, description: 'Payin verification/close result.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  verifyAndClose(@Param('txRef') txRef: string) {
+    return this.fw.verifyAndClosePayin(txRef);
   }
 
   @Get('get-bank/:code')
@@ -307,6 +324,18 @@ export class FlutterwaveController {
     return this.fw.openPayin(txRef, req.user._id);
   }
 
+  @Get('verify-open/:id')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Compatibility route: verify/re-open a payin if eligible' })
+  @ApiParam({ name: 'id', description: 'Payin txRef' })
+  @ApiResponse({ status: 200, description: 'Payin reopened or status returned.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  verifyOpenPayin(@Param('id') txRef: string, @Req() req) {
+    return this.fw.openPayin(txRef, req.user._id);
+  }
+
   @Post('create-virtual-card/:countryWallet')
   @ApiOperation({ summary: 'Create virtual card for a wallet country' })
   @ApiParam({ name: 'countryWallet', example: 'NG' })
@@ -346,6 +375,7 @@ export class FlutterwaveController {
 
   /// Test handling
   @Post('test-withdrawal')
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Test withdrawal handling flow (internal)' })
   @ApiBody({
     schema: {
@@ -356,7 +386,11 @@ export class FlutterwaveController {
     },
   })
   @ApiResponse({ status: 200, description: 'Test flow executed.' })
-  handleWithdrawal(@Body() transactionData: any) {
+  @UseGuards(AuthGuard('jwt'))
+  handleWithdrawal(@Body() transactionData: any, @Req() req) {
+    if (!req.user.isAdmin) {
+      throw new NotFoundException('Unauthorised');
+    }
     console.log('(fw controller) withdrawal: ', transactionData);
     return this.fw.handleTestWithdrawal(transactionData);
   }

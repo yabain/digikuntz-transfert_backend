@@ -2,11 +2,13 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   Post,
   Put,
   Query,
+  Req,
   UseGuards,
   UsePipes,
   ValidationPipe,
@@ -51,7 +53,8 @@ export class CityController {
   @ApiResponse({ status: 201, description: 'City created.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async createCity(@Body() city: CreateCityDto): Promise<City> {
+  async createCity(@Body() city: CreateCityDto, @Req() req): Promise<City> {
+    this.assertAdmin(req);
     return this.cityService.creatCity(city);
   }
 
@@ -62,7 +65,8 @@ export class CityController {
   @ApiResponse({ status: 200, description: 'City deleted.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async deleteCity(@Param('id') cityId: string): Promise<any> {
+  async deleteCity(@Param('id') cityId: string, @Req() req): Promise<any> {
+    this.assertAdmin(req);
     return this.cityService.deleteCity(cityId);
   }
 
@@ -77,7 +81,9 @@ export class CityController {
   async updateCity(
     @Param('id') cityId: string,
     @Body() cityData: CreateCityDto,
+    @Req() req,
   ): Promise<any> {
+    this.assertAdmin(req);
     return this.cityService.updateCity(cityId, cityData);
   }
 
@@ -90,11 +96,20 @@ export class CityController {
   }
 
   @Post('import')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Import cities from a file or external source',
   })
   @ApiResponse({ status: 201, description: 'Cities imported.' })
-  async importCities(): Promise<any> {
+  @UseGuards(AuthGuard('jwt'))
+  async importCities(@Req() req): Promise<any> {
+    this.assertAdmin(req);
     return this.cityService.importCities();
+  }
+
+  private assertAdmin(req: any): void {
+    if (!req.user?.isAdmin) {
+      throw new ForbiddenException('Unauthorised');
+    }
   }
 }

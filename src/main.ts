@@ -137,6 +137,33 @@ function enhanceSwaggerDocument(document: any): any {
   return document;
 }
 
+function getAllowedCorsOrigins(): string[] {
+  const productionDefaults = ['https://payments.digikuntz.com'];
+  const developmentDefaults = [
+    ...productionDefaults,
+    'http://localhost',
+    'https://localhost',
+    'http://localhost:8100',
+    'https://localhost:8100',
+    'http://localhost:4200',
+    'https://localhost:4200',
+    'capacitor://localhost',
+    'ionic://localhost',
+  ];
+
+  const configured = String(process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  const defaults =
+    process.env.NODE_ENV === 'production'
+      ? productionDefaults
+      : developmentDefaults;
+
+  return [...new Set([...defaults, ...configured])];
+}
+
 async function bootstrap() {
   const nodeEnv = process.env.NODE_ENV;
   const primaryAssetsPath =
@@ -168,40 +195,24 @@ async function bootstrap() {
     next();
   });
 
-  // Configuration CORS renforcée
-  // app.enableCors({
-  //   origin: [
-  //     'http://localhost',
-  //     'https://localhost',
-  //     'http://localhost:8100',
-  //     'https://localhost:8100',
-  //     'http://localhost:4200',
-  //     'https://localhost:4200',
-  //     'https://payments.digikuntz.com',
-  //     'http://payments.digikuntz.com',
-  //     'https://app.digikuntz-payment.cm',
-  //     'http://app.digikuntz-payment.cm',
-  //     'https://web.digikuntz-payment.cm',
-  //     'http://web.digikuntz-payment.cm',
-  //     'capacitor://localhost',
-  //     'ionic://localhost',
-  //     '*',
-  //   ],
-  //   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-  //   allowedHeaders: [
-  //     'Content-Type',
-  //     'Authorization',
-  //     'Accept',
-  //     'X-Requested-With',
-  //     'Origin',
-  //   ],
-  //   exposedHeaders: ['Authorization', 'Content-Length'],
-  //   // credentials: true,
-  //   preflightContinue: false,
-  //   optionsSuccessStatus: 204,
-  // });
+  const allowedCorsOrigins = getAllowedCorsOrigins();
   app.enableCors({
-    origin: true, // Autoriser toutes les origines
+    origin: (origin, callback) => {
+      // Non-browser integrations do not send Origin and are not controlled by CORS.
+      if (!origin) {
+        return callback(null, true);
+      }
+      if (
+        process.env.NODE_ENV !== 'production' &&
+        allowedCorsOrigins.includes('*')
+      ) {
+        return callback(null, true);
+      }
+      if (allowedCorsOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(null, false);
+    },
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     allowedHeaders: [
       'Content-Type',
@@ -209,6 +220,8 @@ async function bootstrap() {
       'Accept',
       'X-Requested-With',
       'Origin',
+      'X-User-Id',
+      'X-Secret-Key',
     ],
     exposedHeaders: ['Authorization', 'Content-Length'],
     credentials: true, // Si vous avez besoin des cookies/sessions
@@ -227,7 +240,7 @@ async function bootstrap() {
       res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
       res.header(
         'Access-Control-Allow-Headers',
-        'Content-Type, Authorization, Accept',
+        'Content-Type, Authorization, Accept, Origin, X-Requested-With, X-User-Id, X-Secret-Key',
       );
       return res.status(204).send();
     }

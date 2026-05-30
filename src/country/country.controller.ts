@@ -3,11 +3,13 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   Post,
   Put,
   Query,
+  Req,
   UseGuards,
   UsePipes,
   ValidationPipe,
@@ -62,7 +64,8 @@ export class CountryController {
   @ApiResponse({ status: 201, description: 'Country created.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async createCountry(@Body() country: CreateCountryDto): Promise<Country> {
+  async createCountry(@Body() country: CreateCountryDto, @Req() req): Promise<Country> {
+    this.assertAdmin(req);
     return this.countryService.creatCountry(country);
   }
 
@@ -73,7 +76,8 @@ export class CountryController {
   @ApiResponse({ status: 200, description: 'Country deleted.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async deleteCountry(@Param('id') countryId: string): Promise<any> {
+  async deleteCountry(@Param('id') countryId: string, @Req() req): Promise<any> {
+    this.assertAdmin(req);
     return this.countryService.deleteCountry(countryId);
   }
 
@@ -88,7 +92,9 @@ export class CountryController {
   async updateCountry(
     @Param('id') countryId: string,
     @Body() countryData: CreateCountryDto,
+    @Req() req,
   ): Promise<any> {
+    this.assertAdmin(req);
     return this.countryService.updateCountry(countryId, countryData);
   }
 
@@ -101,9 +107,12 @@ export class CountryController {
   }
 
   @Post('import')
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Import a list of countries (dev only)' })
   @ApiResponse({ status: 201, description: 'Countries imported.' })
-  async import(): Promise<any> {
+  @UseGuards(AuthGuard('jwt'))
+  async import(@Req() req): Promise<any> {
+    this.assertAdmin(req);
     const countries = [
       { name: 'Cameroon', code: '237' },
       { name: 'Gabon', code: '241' },
@@ -114,5 +123,11 @@ export class CountryController {
       { name: 'Ivory_Coast', code: '225', flagUrl: 'assets/ressorces/ci.png' },
     ];
     return this.countryService.import(countries);
+  }
+
+  private assertAdmin(req: any): void {
+    if (!req.user?.isAdmin) {
+      throw new ForbiddenException('Unauthorised');
+    }
   }
 }
