@@ -154,6 +154,13 @@ export class OperationNotificationService {
   }
 
   async notifyAdminPayoutPending(transaction: any): Promise<void> {
+    if (!transaction) return;
+    // "Pending validation" notifications must only be sent right after payin success,
+    // before admin starts payout processing.
+    if (String(transaction?.status || '') !== 'transaction_payin_success') {
+      return;
+    }
+
     await this.safe(
       this.whatsappService.sendNeedValidationMessage(transaction, 'fr'),
       'WA admin pending payout',

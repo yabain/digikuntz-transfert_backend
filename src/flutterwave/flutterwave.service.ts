@@ -1010,19 +1010,6 @@ export class FlutterwaveService {
         newTxRef,
       );
 
-      const normalizedPayoutStatus = this.normalizeStatus(res.data?.data?.status);
-      if (
-        normalizedPayoutStatus === TStatus.PAYOUTPENDING &&
-        (transaction.transactionType === 'transfer' ||
-          transaction.transactionType === 'withdrawal')
-      ) {
-        void this.operationNotificationService
-          .notifyAdminPayoutPending(update || transaction)
-          .catch((error) =>
-            console.error('notifyAdminPayoutPending failed (payout):', error),
-          );
-      }
-      
       // console.log('update: ', update)
       return update;
     } catch (err) {
