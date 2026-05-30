@@ -1,7 +1,7 @@
 import {
   Body,
   Controller,
-  Get,
+  Get,ForbiddenException,
   NotFoundException,
   Post,
   Query,
@@ -44,7 +44,7 @@ export class PaymentRequestController {
   @UsePipes(ValidationPipe)
   async getAllPaymentRequests(@Req() req, @Query() query: any) {
     if (!req.user?.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.paymentRequestService.getAllSystemPaymentRequests(query);
   }

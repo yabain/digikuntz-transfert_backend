@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import { ConflictException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { randomBytes } from 'crypto';
 import { Dev } from './dev.schema';
@@ -245,13 +245,16 @@ export class DevService {
     narration?: string;
     callbackUrl?: string;
   }, userId: string): Promise<any> {
+    const callbackUrl = this.normalizeCallbackUrl(data.callbackUrl);
     const user = await this.userService.getUserById(userId);
     if (!user) throw new ConflictException('user not found');
-
-    const taxesDetails = await this.transactionService.calculateTaxesAmount(data.amount);
+    const payoutAmount = Number(data.amount);
+    if (!Number.isFinite(payoutAmount) || payoutAmount <= 0) {
+      throw new ConflictException('Invalid payout amount');
+    }
 
     const balance = await this.balanceService.getBalanceByUserId(userId);
-    if (balance.balance < taxesDetails.paymentWithTaxes) {
+    if (balance.balance < payoutAmount) {
       throw new ConflictException('Insufficient balance');
     }
 
@@ -259,7 +262,7 @@ export class DevService {
     const transactionData: any = {
       transactionRef: this.transactionService.generateInRef(),
       txRef,
-      estimation: data.amount,
+      estimation: payoutAmount,
       transactionType: 'apiCall',
       userId,
       senderId: userId,
@@ -271,17 +274,22 @@ export class DevService {
       senderCurrency: user.countryId.currency,
       receiverName: data.receiverName,
       receiverCurrency: data.currency,
+      receiverCountryCode: user.countryId?.code,
       bankCode: data.accountBankCode,
       bankAccountNumber: data.accountNumber,
       raisonForTransfer: data.narration || 'API Payout',
       status: TStatus.PAYINSUCCESS,
-      ...(data.callbackUrl && { callbackUrl: data.callbackUrl }),
+      noFees: true,
+      ...(callbackUrl && { callbackUrl }),
     };
 
-    await this.balanceService.debitBalance(userId, taxesDetails.paymentWithTaxes, user.countryId.currency);
+    await this.balanceService.debitBalance(userId, payoutAmount, user.countryId.currency);
 
     const savedTransaction = await this.transactionService.createTransaction(transactionData);
     if (!savedTransaction) throw new ConflictException('Error saving transaction');
+    void this.fwService.notifyAdminPayoutPending(savedTransaction).catch((error) => {
+      console.error('API payout admin notification failed:', error?.message || error);
+    });
 
     return {
       id: savedTransaction._id,
@@ -301,6 +309,13 @@ export class DevService {
   }
 
   async createPayinTransaction(transactionData: any, userId): Promise<any> {
+    const callbackUrl = this.normalizeCallbackUrl(transactionData?.callbackUrl);
+    if (callbackUrl) {
+      transactionData.callbackUrl = callbackUrl;
+    } else {
+      delete transactionData.callbackUrl;
+    }
+
     const createPayin = await this.fwService.createPayin(transactionData, userId);
 
     const transaction = await this.transactionService.findById(
@@ -390,5 +405,58 @@ export class DevService {
       senderId === normalizedUserId ||
       receiverId === normalizedUserId
     );
+  }
+
+  private normalizeCallbackUrl(callbackUrl?: string): string | undefined {
+    if (!callbackUrl) return undefined;
+
+    let parsed: URL;
+    try {
+      parsed = new URL(callbackUrl);
+    } catch {
+      throw new BadRequestException('Invalid callbackUrl');
+    }
+
+    const isProduction = process.env.NODE_ENV === 'production';
+    const protocol = parsed.protocol.toLowerCase();
+    const hostname = parsed.hostname.toLowerCase();
+
+    if (isProduction && protocol !== 'https:') {
+      throw new BadRequestException('callbackUrl must use HTTPS in production');
+    }
+
+    if (!isProduction && !['http:', 'https:'].includes(protocol)) {
+      throw new BadRequestException('callbackUrl must use HTTP or HTTPS');
+    }
+
+    if (isProduction && this.isPrivateCallbackHost(hostname)) {
+      throw new BadRequestException('callbackUrl host is not allowed');
+    }
+
+    parsed.hash = '';
+    return parsed.toString();
+  }
+
+  private isPrivateCallbackHost(hostname: string): boolean {
+    if (
+      hostname === 'localhost' ||
+      hostname.endsWith('.localhost') ||
+      hostname === '0.0.0.0'
+    ) {
+      return true;
+    }
+
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)) {
+      const [a, b] = hostname.split('.').map(Number);
+      return (
+        a === 10 ||
+        a === 127 ||
+        (a === 172 && b >= 16 && b <= 31) ||
+        (a === 192 && b === 168) ||
+        (a === 169 && b === 254)
+      );
+    }
+
+    return false;
   }
 }

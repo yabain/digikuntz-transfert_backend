@@ -9,6 +9,8 @@ import { ConfigModule } from '@nestjs/config';
 import { SmtpService } from './smtp/smtp.service';
 import { Smtp, SmtpSchema } from './smtp/smtp.schema';
 import { Email, EmailSchema } from './email.schema';
+import { System, SystemSchema } from 'src/system/system.schema';
+import { SystemService } from 'src/system/system.service';
 
 @Module({
   imports: [
@@ -17,9 +19,10 @@ import { Email, EmailSchema } from './email.schema';
       { name: User.name, schema: UserSchema },
       { name: Email.name, schema: EmailSchema },
       { name: Smtp.name, schema: SmtpSchema },
+      { name: System.name, schema: SystemSchema },
     ]),
   ],
-  providers: [EmailService, DateService, SmtpService],
+  providers: [EmailService, DateService, SmtpService, SystemService],
   controllers: [EmailController],
   exports: [EmailService, DateService, SmtpService],
 })

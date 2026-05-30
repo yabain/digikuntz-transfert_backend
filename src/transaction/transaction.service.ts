@@ -32,6 +32,7 @@ import { OperationNotificationService } from 'src/notification/operation-notific
 import { PaymentRequestService } from 'src/payment-request/payment-request.service';
 import { PaymentRequestStatus } from 'src/payment-request/payment-request.schema';
 import { ServicePaymentService } from 'src/service/service-payment/service-payment.service';
+import { BalanceService } from 'src/balance/balance.service';
 // import { CreateTransactionDto } from './create-transaction.dto';
 
 @Injectable()
@@ -53,6 +54,7 @@ export class TransactionService {
     @Inject(forwardRef(() => PaymentRequestService))
     private paymentRequestService: PaymentRequestService,
     private servicePaymentService: ServicePaymentService,
+    private balanceService: BalanceService,
   ) { }
 
   async findAll(query: Query): Promise<Transaction[]> {
@@ -578,6 +580,10 @@ export class TransactionService {
       );
     }
     if (!transaction) throw new NotFoundException('Transaction not found');
+    if (status === TStatus.PAYOUTERROR) {
+      await this.refundFailedOutgoingPayoutIfNeeded(transaction);
+      transaction = await this.transactionModel.findById(transactionId);
+    }
     if (
       status === TStatus.PAYOUTREJECTED ||
       status === ('transaction_payin_rejected' as any)
@@ -596,12 +602,143 @@ export class TransactionService {
     return transaction;
   }
 
+  private async refundFailedOutgoingPayoutIfNeeded(transaction: any): Promise<void> {
+    const transactionType = String(transaction?.transactionType || '');
+    const refundableTypes = ['withdrawal', 'apiCall', 'transfer'];
+    if (!refundableTypes.includes(transactionType)) return;
+
+    const refund = this.getPayoutFailureRefundDetails(transaction);
+    if (!refund) {
+      this.logger.warn(
+        `Payout failure refund skipped: invalid refund details for transaction ${String(transaction?._id)}`,
+      );
+      return;
+    }
+
+    const marked = await this.transactionModel.findOneAndUpdate(
+      {
+        _id: transaction._id,
+        payoutFailureRefundedAt: { $exists: false },
+      },
+      {
+        $set: {
+          payoutFailureRefundedAt: new Date(),
+          payoutFailureRefundAmount: String(refund.amount),
+          payoutFailureRefundCurrency: refund.currency,
+          payoutFailureRefundUserId: refund.userId,
+        },
+      },
+      { new: true },
+    );
+
+    if (!marked) return;
+
+    try {
+      await this.balanceService.creditBalance(
+        refund.userId,
+        refund.amount,
+        refund.currency,
+      );
+    } catch (error) {
+      await this.transactionModel.updateOne(
+        { _id: transaction._id },
+        {
+          $unset: {
+            payoutFailureRefundedAt: '',
+            payoutFailureRefundAmount: '',
+            payoutFailureRefundCurrency: '',
+            payoutFailureRefundUserId: '',
+          },
+        },
+      );
+      throw error;
+    }
+  }
+
+  private getPayoutFailureRefundDetails(transaction: any): {
+    userId: string;
+    amount: number;
+    currency: string;
+  } | null {
+    const transactionType = String(transaction?.transactionType || '');
+    const senderId = this.toIdString(transaction?.senderId || transaction?.userId);
+    const receiverId = this.toIdString(transaction?.receiverId || transaction?.userId);
+
+    if (transactionType === 'transfer') {
+      return this.buildRefundDetails(
+        senderId,
+        transaction?.paymentWithTaxes,
+        transaction?.senderCurrency,
+      );
+    }
+
+    return this.buildRefundDetails(
+      senderId || receiverId,
+      transaction?.estimation,
+      transaction?.senderCurrency || transaction?.receiverCurrency,
+    );
+  }
+
+  private buildRefundDetails(
+    userId: string | undefined,
+    amountValue: any,
+    currencyValue: any,
+  ): { userId: string; amount: number; currency: string } | null {
+    const amount = Number(amountValue);
+    const currency = String(currencyValue || '').trim();
+    if (!userId || !Number.isFinite(amount) || amount <= 0 || !currency) {
+      return null;
+    }
+    return { userId, amount, currency };
+  }
+
+  private toIdString(value: any): string | undefined {
+    if (!value) return undefined;
+    if (typeof value === 'string') return value;
+    if (value?._id) return value._id?.toString?.() || String(value._id);
+    return value?.toString?.();
+  }
+
+  async reclaimPayoutFailureRefundForRetry(transactionId: string): Promise<boolean> {
+    if (!mongoose.Types.ObjectId.isValid(transactionId)) {
+      throw new NotFoundException('Invalid transaction ID');
+    }
+
+    const transaction: any = await this.transactionModel.findById(transactionId);
+    if (!transaction) throw new NotFoundException('Transaction not found');
+    if (!transaction.payoutFailureRefundedAt) return false;
+
+    const refundUserId = String(transaction.payoutFailureRefundUserId || '');
+    const refundAmount = Number(transaction.payoutFailureRefundAmount);
+    const refundCurrency = String(transaction.payoutFailureRefundCurrency || '');
+
+    if (!refundUserId || !Number.isFinite(refundAmount) || refundAmount <= 0 || !refundCurrency) {
+      throw new NotFoundException('Invalid payout failure refund data');
+    }
+
+    await this.balanceService.debitBalance(refundUserId, refundAmount, refundCurrency);
+    await this.transactionModel.updateOne(
+      { _id: transactionId },
+      {
+        $unset: {
+          payoutFailureRefundedAt: '',
+          payoutFailureRefundAmount: '',
+          payoutFailureRefundCurrency: '',
+          payoutFailureRefundUserId: '',
+        },
+      },
+    );
+
+    return true;
+  }
+
   private async sendCallback(transaction: any): Promise<void> {
     const statusMap: Record<string, string> = {
       transaction_payin_pending: 'payin_pending',
       transaction_payin_success: 'payin_success',
       transaction_payin_error: 'payin_error',
       transaction_payin_closed: 'payin_closed',
+      transaction_payin_rejected: 'payin_rejected',
       transaction_payout_pending: 'payout_pending',
       transaction_payout_success: 'payout_success',
       transaction_payout_error: 'payout_error',
@@ -623,7 +760,13 @@ export class TransactionService {
         updatedAt: transaction.updatedAt,
       },
     };
-    await this.httpService.axiosRef.post(transaction.callbackUrl, payload);
+    await this.httpService.axiosRef.post(transaction.callbackUrl, payload, {
+      timeout: 10000,
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'digiKUNTZ-Payments-Webhook/1.0',
+      },
+    });
   }
 
   async claimTransactionForPayout(transactionId: string): Promise<any | null> {
@@ -646,6 +789,114 @@ export class TransactionService {
     }
 
     return transaction;
+  }
+
+  async rejectPayoutTransaction(transactionId: string): Promise<any> {
+    if (!mongoose.Types.ObjectId.isValid(transactionId)) {
+      throw new NotFoundException('Invalid transaction ID');
+    }
+
+    const transaction: any = await this.transactionModel
+      .findOneAndUpdate(
+        {
+          _id: transactionId,
+          status: TStatus.PAYINSUCCESS,
+          transactionType: { $in: ['transfer', 'withdrawal', 'apiCall'] },
+        },
+        { status: 'transaction_payin_rejected' },
+        { new: true },
+      )
+      .exec();
+
+    if (!transaction) {
+      throw new NotFoundException(
+        'Transaction not found or not eligible for rejection',
+      );
+    }
+
+    await this.refundRejectedOutgoingPayoutIfNeeded(transaction);
+
+    void this.operationNotificationService
+      .notifyRejectedTransaction(transaction)
+      .catch((error) =>
+        console.error('notifyRejectedTransaction failed:', error),
+      );
+
+    if (transaction.transactionType === 'apiCall' && transaction.callbackUrl) {
+      void this.sendCallback(transaction).catch((error) =>
+        console.error('sendCallback failed:', error),
+      );
+    }
+
+    return this.transactionModel.findById(transactionId).lean().exec();
+  }
+
+  private async refundRejectedOutgoingPayoutIfNeeded(transaction: any): Promise<void> {
+    const refund = this.getRejectedPayoutRefundDetails(transaction);
+    if (!refund) return;
+
+    const marked = await this.transactionModel.findOneAndUpdate(
+      {
+        _id: transaction._id,
+        payoutFailureRefundedAt: { $exists: false },
+      },
+      {
+        $set: {
+          payoutFailureRefundedAt: new Date(),
+          payoutFailureRefundAmount: String(refund.amount),
+          payoutFailureRefundCurrency: refund.currency,
+          payoutFailureRefundUserId: refund.userId,
+        },
+      },
+      { new: true },
+    );
+
+    if (!marked) return;
+
+    try {
+      await this.balanceService.creditBalance(
+        refund.userId,
+        refund.amount,
+        refund.currency,
+      );
+    } catch (error) {
+      await this.transactionModel.updateOne(
+        { _id: transaction._id },
+        {
+          $unset: {
+            payoutFailureRefundedAt: '',
+            payoutFailureRefundAmount: '',
+            payoutFailureRefundCurrency: '',
+            payoutFailureRefundUserId: '',
+          },
+        },
+      );
+      throw error;
+    }
+  }
+
+  private getRejectedPayoutRefundDetails(transaction: any): {
+    userId: string;
+    amount: number;
+    currency: string;
+  } | null {
+    const senderId = this.toIdString(transaction?.senderId || transaction?.userId);
+    const receiverId = this.toIdString(transaction?.receiverId || transaction?.userId);
+    const transactionType = String(transaction?.transactionType || '');
+
+    if (transactionType === 'transfer') {
+      return this.buildRefundDetails(
+        senderId,
+        transaction?.paymentWithTaxes,
+        transaction?.senderCurrency,
+      );
+    }
+
+    return this.buildRefundDetails(
+      senderId || receiverId,
+      transaction?.estimation,
+      transaction?.senderCurrency || transaction?.receiverCurrency,
+    );
   }
 
   async claimTransactionForSuccessfulPayin(
@@ -762,9 +1013,23 @@ export class TransactionService {
   // }
 
   async createTransaction(transactionData: any): Promise<any> {
-    const taxesDetails = await this.calculateTaxesAmount(transactionData.estimation);
+    const noFees =
+      transactionData?.noFees === true ||
+      transactionData?.transactionType === 'withdrawal' ||
+      (
+        transactionData?.transactionType === 'apiCall' &&
+        transactionData?.status === TStatus.PAYINSUCCESS
+      );
+    const taxesDetails = noFees
+      ? {
+          invoiceTaxes: 0,
+          taxesAmount: 0,
+          paymentWithTaxes: this.arrondOnExeed(Number(transactionData.estimation)),
+        }
+      : await this.calculateTaxesAmount(transactionData.estimation);
+    const { noFees: _noFees, ...persistedTransactionData } = transactionData;
     const payload = {
-      ...transactionData,
+      ...persistedTransactionData,
       estimation: String(transactionData.estimation),
       receiverAmount: transactionData.transactionType === 'transfer' ? String(transactionData.receiverAmount) : String(transactionData.estimation),
       invoiceTaxes: String(taxesDetails.invoiceTaxes),

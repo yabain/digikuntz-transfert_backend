@@ -22,6 +22,7 @@ import { OperationNotificationService } from 'src/notification/operation-notific
 import { PaystackModule } from 'src/paystack/paystack.module';
 import { PaymentRequestModule } from 'src/payment-request/payment-request.module';
 import { MpesaModule } from 'src/mpesa/mpesa.module';
+import { BalanceModule } from 'src/balance/balance.module';
 import { ServicePaymentModule } from 'src/service/service-payment/service-payment.module';
 
 @Module({
@@ -36,6 +37,7 @@ import { ServicePaymentModule } from 'src/service/service-payment/service-paymen
     forwardRef(() => PlansModule),
     forwardRef(() => UserModule),
     forwardRef(() => PaymentRequestModule),
+    forwardRef(() => BalanceModule),
     forwardRef(() => ServicePaymentModule),
     MongooseModule.forFeature([
       { name: Payin.name, schema: PayinSchema },

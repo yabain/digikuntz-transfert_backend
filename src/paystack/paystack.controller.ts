@@ -1,6 +1,6 @@
 import {
   Controller,
-  Get,
+  Get,ForbiddenException,
   NotFoundException,
   Param,
   Post,
@@ -35,7 +35,7 @@ export class PaystackController {
   @UsePipes(ValidationPipe)
   getBalance(@Req() req) {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.paystackService.getBalance();
   }
@@ -60,7 +60,7 @@ export class PaystackController {
   @UsePipes(ValidationPipe)
   listPayinTransactions(@Req() req, @Query() query: any) {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.paystackService.listPayinTransactions(query);
   }
@@ -83,7 +83,7 @@ export class PaystackController {
   @UsePipes(ValidationPipe)
   listPayoutTransactions(@Req() req, @Query() query: any) {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.paystackService.listPayoutTransactions(query);
   }
@@ -105,7 +105,7 @@ export class PaystackController {
   // @UsePipes(ValidationPipe)
   disableTransferOtp(@Req() req, @Param('otp') otp: string) {
     // if (!req.user.isAdmin) {
-    //   throw new NotFoundException('Unauthorised');
+    //   throw new ForbiddenException('Unauthorised');
     // }
     return this.paystackService.disableTransferOtpWithPin(otp);
   }

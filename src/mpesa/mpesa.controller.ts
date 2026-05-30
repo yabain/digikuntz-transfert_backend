@@ -2,7 +2,7 @@ import {
   Body,
   Controller,
   Get,
-  HttpStatus,
+  HttpStatus,ForbiddenException,
   NotFoundException,
   Post,
   Query,
@@ -121,7 +121,7 @@ export class MpesaController {
   @UsePipes(ValidationPipe)
   async queryBalance(@Req() req, @Query('remarks') remarks?: string) {
     if (!req.user?.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.mpesaService.queryAccountBalance({ remarks });
   }
@@ -146,7 +146,7 @@ export class MpesaController {
     @Query('to') to?: string,
   ) {
     if (!req.user?.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.listIncoming(page, limit, from, to);
   }
@@ -171,7 +171,7 @@ export class MpesaController {
     @Query('to') to?: string,
   ) {
     if (!req.user?.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.listIncoming(page, limit, from, to);
   }
@@ -196,7 +196,7 @@ export class MpesaController {
     @Query('to') to?: string,
   ) {
     if (!req.user?.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.listOutgoing(page, limit, from, to);
   }
@@ -221,7 +221,7 @@ export class MpesaController {
     @Query('to') to?: string,
   ) {
     if (!req.user?.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.listOutgoing(page, limit, from, to);
   }

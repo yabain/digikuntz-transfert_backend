@@ -12,7 +12,7 @@ import {
   HttpCode,
   UseGuards,
   UsePipes,
-  ValidationPipe,
+  ValidationPipe,ForbiddenException,
   NotFoundException,
   Param,
 } from '@nestjs/common';
@@ -45,7 +45,7 @@ export class FlutterwaveController {
   @UsePipes(ValidationPipe)
   getBalance(@Param('countryWallet') countryWallet, @Req() req) {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.fw.getBalance(countryWallet);
   }
@@ -70,7 +70,7 @@ export class FlutterwaveController {
     @Req() req,
   ) {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.fw.listPayinTransactions(countryWallet, query);
   }
@@ -95,7 +95,7 @@ export class FlutterwaveController {
     @Req() req,
   ) {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.fw.listPayoutTransactions(countryWallet, query);
   }
@@ -109,7 +109,7 @@ export class FlutterwaveController {
   @UseGuards(AuthGuard('jwt'))
   listTx(@Query('page') page: number | undefined, @Query('status') status: string | undefined, @Req() req: any) {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.fw.listTransactions({ page, status });
   }
@@ -139,6 +139,18 @@ export class FlutterwaveController {
   createPayin(@Body() transactionData: any, @Req() req) {
     console.log('(fw controller) transactionData: ', transactionData);
     return this.fw.createPayin(transactionData, req.user._id);
+  }
+
+  @Post('transfer-from-balance')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create a transfer from user account balance' })
+  @ApiResponse({ status: 201, description: 'Transfer created and awaiting admin payout validation.' })
+  @ApiResponse({ status: 400, description: 'Invalid payload or insufficient balance.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  createTransferFromBalance(@Body() transactionData: any, @Req() req) {
+    return this.fw.createTransferFromBalance(transactionData, req.user._id);
   }
 
   @Post('withdrawal')
@@ -218,7 +230,7 @@ export class FlutterwaveController {
   @UsePipes(ValidationPipe)
   createPayout(@Req() req, @Param('transactionId') transactionId) {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.fw.payout(transactionId, req.user._id);
   }
@@ -236,7 +248,7 @@ export class FlutterwaveController {
   @UsePipes(ValidationPipe)
   retryPayout(@Req() req, @Param('transactionId') transactionId) {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.fw.retryPayout(transactionId, req.user._id);
   }
@@ -276,7 +288,7 @@ export class FlutterwaveController {
   @UsePipes(ValidationPipe)
   listPaymentPlans(@Query() query: ExpressQuery, @Req() req) {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     // Supports optional pagination params: page, perPage
     return this.fw.getPaymentPlans({
@@ -306,7 +318,7 @@ export class FlutterwaveController {
   createPaymentPlan(@Body() planPayload: any, @Req() req) {
     console.log('Payload', planPayload);
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.fw.createPaymentPlan(planPayload);
   }
@@ -354,7 +366,7 @@ export class FlutterwaveController {
   @UsePipes(ValidationPipe)
   createVirtualCard(@Body() cardPayload: Record<string, any>, @Req() req, @Param('countryWallet') countryWallet) {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.fw.createVirtualCard(countryWallet, cardPayload);
   }
@@ -367,7 +379,7 @@ export class FlutterwaveController {
   @UsePipes(ValidationPipe)
   getVirtualCardsList(@Req() req, @Param('countryWallet') countryWallet) {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.fw.getVirtualCards(countryWallet);
   }
@@ -389,7 +401,7 @@ export class FlutterwaveController {
   @UseGuards(AuthGuard('jwt'))
   handleWithdrawal(@Body() transactionData: any, @Req() req) {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     console.log('(fw controller) withdrawal: ', transactionData);
     return this.fw.handleTestWithdrawal(transactionData);

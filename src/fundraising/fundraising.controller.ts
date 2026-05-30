@@ -10,7 +10,7 @@ import {
   Req,
   UseGuards,
   UsePipes,
-  ValidationPipe,
+  ValidationPipe,ForbiddenException,
   NotFoundException,
   UploadedFiles,
   UseInterceptors,
@@ -109,7 +109,7 @@ export class FundraisingController {
   @UsePipes(ValidationPipe)
   async getAllSystem(@Req() req, @Query() query: any) {
     if (!req.user?.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.fundraisingService.getAllSystem(query);
   }
@@ -157,7 +157,7 @@ export class FundraisingController {
     @Query() query: any,
   ) {
     if (!req.user?.isAdmin && String(req.user?._id) !== String(userId)) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.fundraisingService.getUserFundraisings(userId, query);
   }
@@ -179,7 +179,7 @@ export class FundraisingController {
     @Query() query: any,
   ) {
     if (!req.user?.isAdmin && String(req.user?._id) !== String(userId)) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.fundraisingService.getUserActiveFundraisings(userId, query);
   }
@@ -216,7 +216,7 @@ export class FundraisingController {
   @UsePipes(ValidationPipe)
   async getTotalDonations(@Req() req) {
     if (!req.user?.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.fundraisingService.getTotalDonationsCount();
   }
@@ -275,7 +275,7 @@ export class FundraisingController {
   @UsePipes(ValidationPipe)
   async getUserDonationStats(@Req() req, @Param('userId') userId: string) {
     if (!req.user?.isAdmin && String(req.user?._id) !== String(userId)) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.fundraisingService.getUserDonationStats(userId);
   }

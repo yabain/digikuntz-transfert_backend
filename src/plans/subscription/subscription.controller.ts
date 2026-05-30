@@ -6,7 +6,7 @@ import {
   Body,
   Controller,
   Delete,
-  Get,
+  Get,ForbiddenException,
   NotFoundException,
   Param,
   Post,
@@ -90,7 +90,7 @@ export class SubscriptionController {
     @Req() req,
   ): Promise<Subscription[]> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorized');
+      throw new ForbiddenException('Unauthorized');
     }
     return this.subscriptionService.getAllSubscriptions(query);
   }
@@ -126,7 +126,7 @@ export class SubscriptionController {
   @UsePipes(ValidationPipe)
   async getSubscriptionsStatistic(@Req() req): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorized');
+      throw new ForbiddenException('Unauthorized');
     }
     return this.subscriptionService.getSubscriptionsStatistic();
   }
@@ -182,7 +182,7 @@ export class SubscriptionController {
     @Req() req
   ): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorized');
+      throw new ForbiddenException('Unauthorized');
     }
     return this.subscriptionService.upgradeSubscription(data.subscriptionId, data.transactionId);
   }
@@ -260,7 +260,7 @@ export class SubscriptionController {
   @UsePipes(ValidationPipe)
   async getMySubscriptions(@Param('subscriberId') subscriberId: string, @Req() req): Promise<any> {
     if (req.user._id.toString() !== subscriberId && req.user.isAdmin !== true) {
-      throw new NotFoundException('Unauthorized');
+      throw new ForbiddenException('Unauthorized');
     }
     return this.subscriptionService.getSubscriptionListBySubscriberId(subscriberId);
   }
@@ -903,7 +903,7 @@ export class SubscriptionController {
   @UsePipes(ValidationPipe)
   async getActiveSubscriptions(@Query() query: ExpressQuery, @Req() req): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorized');
+      throw new ForbiddenException('Unauthorized');
     }
     return this.subscriptionService.getAllActiveSubscriptions(query);
   }
@@ -933,7 +933,7 @@ export class SubscriptionController {
   @UsePipes(ValidationPipe)
   async getExpiredSubscriptions(@Req() req): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorized');
+      throw new ForbiddenException('Unauthorized');
     }
     return this.subscriptionService.getExpiredSubscriptions();
   }

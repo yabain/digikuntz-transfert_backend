@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Echec payout provider</title>
+  </head>
+  <body style="margin:0;background:#f5f7fb;color:#1f2937;font-family:Arial,'Helvetica Neue',Helvetica,sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f5f7fb;padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="640" cellspacing="0" cellpadding="0" style="max-width:640px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
+            <tr>
+              <td align="center" style="padding:28px 24px 14px;">
+                <img src="https://ci3.googleusercontent.com/meips/ADKq_NbZCFuDYFBI1EdJai3R0ITZ8lWcHxhFdfdFMIdENNfv1FL0uRnGk5SMm-o76wsQ6qUF4kiBjfnGOKAXrgZYifGhVYv1J-j0392uUQPSZI65ZT0fv8PrmcVBHld6vNDjs15g=s0-d-e1-ft#https://269de5aac0.imgdist.com/pub/bfra/zm9l7fml/3f1/tzj/5wt/dk_payments.png" alt="digiKUNTZ Payments" width="190" style="display:block;border:0;">
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 32px 28px;">
+                <div style="background:#fee2e2;border:1px solid #fecaca;border-radius:10px;padding:18px 20px;margin-bottom:20px;">
+                  <h1 style="margin:0 0 8px;color:#991b1b;font-size:22px;line-height:1.3;">Echec provider après validation admin</h1>
+                  <p style="margin:0;color:#7f1d1d;font-size:14px;line-height:1.6;">
+                    Une transaction de sortie validée par un administrateur a été refusée ou échouée chez le provider.
+                    Vérifiez les détails ci-dessous avant toute nouvelle tentative.
+                  </p>
+                </div>
+
+                <p style="margin:0 0 18px;font-size:15px;line-height:1.6;">Hello <b>{{userName}}</b>,</p>
+
+                <h2 style="font-size:17px;margin:0 0 10px;color:#111827;">Détails de la transaction</h2>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;margin-bottom:18px;">
+                  <tr><td style="padding:14px 18px;">
+                    <p style="margin:6px 0;"><strong>Ref transaction :</strong> {{transactionRef}}</p>
+                    <p style="margin:6px 0;"><strong>ID :</strong> {{transactionId}}</p>
+                    <p style="margin:6px 0;"><strong>Type :</strong> {{transactionType}}</p>
+                    <p style="margin:6px 0;"><strong>Ref provider :</strong> {{providerReference}}</p>
+                    <p style="margin:6px 0;"><strong>Méthode :</strong> {{paymentMethod}}</p>
+                    <p style="margin:6px 0;"><strong>Montant bénéficiaire :</strong> {{receiverAmount}} {{receiverCurrency}}</p>
+                    <p style="margin:6px 0;"><strong>Frais :</strong> {{taxesAmount}} {{senderCurrency}}</p>
+                    <p style="margin:6px 0;"><strong>Total payé :</strong> {{paymentWithTaxes}} {{senderCurrency}}</p>
+                    <p style="margin:6px 0;"><strong>Date :</strong> {{transactionDate}}</p>
+                    <p style="margin:6px 0;"><strong>Motif :</strong> {{raisonForTransfer}}</p>
+                  </td></tr>
+                </table>
+
+                <h2 style="font-size:17px;margin:0 0 10px;color:#111827;">Erreur provider</h2>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;margin-bottom:18px;">
+                  <tr><td style="padding:14px 18px;">
+                    <p style="margin:6px 0;"><strong>Message :</strong> {{providerMessage}}</p>
+                    <p style="margin:6px 0;"><strong>Données brutes :</strong></p>
+                    <pre style="white-space:pre-wrap;word-break:break-word;background:#ffffff;border:1px solid #fee2e2;border-radius:8px;padding:10px;font-size:12px;line-height:1.5;color:#374151;">{{providerRaw}}</pre>
+                  </td></tr>
+                </table>
+
+                <h2 style="font-size:17px;margin:0 0 10px;color:#111827;">Remboursement</h2>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#ecfdf5;border:1px solid #bbf7d0;border-radius:10px;margin-bottom:18px;">
+                  <tr><td style="padding:14px 18px;">
+                    <p style="margin:6px 0;"><strong>Montant à recréditer / recrédité :</strong> {{refundAmount}} {{refundCurrency}}</p>
+                    <p style="margin:6px 0;"><strong>Statut :</strong> {{refundStatus}}</p>
+                  </td></tr>
+                </table>
+
+                <h2 style="font-size:17px;margin:0 0 10px;color:#111827;">Expéditeur</h2>
+                <div style="border:1px solid #e5e7eb;border-radius:10px;padding:14px 18px;margin-bottom:18px;">
+                  <p style="margin:6px 0;"><strong>Nom :</strong> {{senderName}}</p>
+                  <p style="margin:6px 0;"><strong>Email :</strong> {{senderEmail}}</p>
+                  <p style="margin:6px 0;"><strong>Téléphone :</strong> {{senderContact}}</p>
+                  <p style="margin:6px 0;"><strong>Pays :</strong> {{senderCountry}}</p>
+                </div>
+
+                <h2 style="font-size:17px;margin:0 0 10px;color:#111827;">Bénéficiaire</h2>
+                <div style="border:1px solid #e5e7eb;border-radius:10px;padding:14px 18px;margin-bottom:22px;">
+                  <p style="margin:6px 0;"><strong>Nom :</strong> {{receiverName}}</p>
+                  <p style="margin:6px 0;"><strong>Email :</strong> {{receiverEmail}}</p>
+                  <p style="margin:6px 0;"><strong>Téléphone :</strong> {{receiverContact}}</p>
+                  <p style="margin:6px 0;"><strong>Pays :</strong> {{receiverCountry}}</p>
+                </div>
+
+                <p style="text-align:center;margin:26px 0;">
+                  <a href="{{invoice_url}}" target="_blank" style="background:#0a36b4;color:#ffffff;text-decoration:none;border-radius:6px;padding:12px 24px;display:inline-block;font-size:16px;">
+                    Ouvrir les payouts
+                  </a>
+                </p>
+
+                <p style="margin:0 0 8px;font-size:14px;line-height:1.6;">
+                  Cette alerte est automatique. Merci de vérifier le remboursement et de ne relancer le payout que si les informations du bénéficiaire sont corrigées.
+                </p>
+                <p style="margin:18px 0 0;font-size:14px;line-height:1.6;">
+                  Cordialement,<br>
+                  L'équipe digiKUNTZ<br>
+                  contact@digikuntz.com<br>
+                  (+237) 679 958 462
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

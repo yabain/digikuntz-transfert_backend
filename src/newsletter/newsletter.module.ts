@@ -9,10 +9,12 @@ import { DateService } from 'src/email/date.service';
 import { EmailSchema, Email } from 'src/email/email.schema';
 import { SmtpService } from 'src/email/smtp/smtp.service';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
+import { SystemModule } from 'src/system/system.module';
 
 @Module({
   imports: [
     AuthModule,
+    SystemModule,
     MongooseModule.forFeature([
       { name: 'Newsletter', schema: NewsletterSchema },
       { name: Email.name, schema: EmailSchema },

@@ -326,10 +326,21 @@ export class FlutterwaveService {
       receiverId: userId,
       transactionType: 'withdrawal',
       status: 'transaction_payin_success',
+      noFees: true,
     };
     // console.log('withdrawal raw: ', raw);
     const balance = await this.balanceService.getBalanceByUserId(String(userId));
-    if (balance.balance < transactionData.paymentWithTaxes) {
+    const withdrawalAmount = Number(transactionData.estimation);
+    if (!Number.isFinite(withdrawalAmount) || withdrawalAmount <= 0) {
+      throw new HttpException(
+        {
+          status: HttpStatus.BAD_REQUEST,
+          error: 'Invalid withdrawal amount',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (balance.balance < withdrawalAmount) {
       throw new HttpException(
         {
           status: HttpStatus.BAD_REQUEST,
@@ -342,7 +353,7 @@ export class FlutterwaveService {
     try {
       const newBalance = await this.balanceService.debitBalance(
         String(userId),
-        transactionData.paymentWithTaxes,
+        withdrawalAmount,
         transactionData.senderCurrency,
       );
 
@@ -358,7 +369,7 @@ export class FlutterwaveService {
       transactionData?.transactionType === 'withdrawal'
     ) {
       void this.operationNotificationService
-        .notifyAdminPayoutPending(transactionData)
+        .notifyAdminPayoutPending(savedTransaction)
         .catch(() => undefined);
     }
 
@@ -439,6 +450,70 @@ export class FlutterwaveService {
         `Flutterwave createPayin failed: ${JSON.stringify(parsed.payload)}`,
       );
       throw new HttpException(parsed.payload, parsed.statusCode);
+    }
+  }
+
+  async createTransferFromBalance(transactionData: any, userId: any) {
+    const amount = Number(transactionData?.estimation);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new HttpException(
+        { status: HttpStatus.BAD_REQUEST, error: 'Invalid transfer amount' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const taxesDetails = await this.transactionService.calculateTaxesAmount(amount);
+    const totalToDebit = Number(taxesDetails.paymentWithTaxes);
+    const senderCurrency = String(transactionData?.senderCurrency || '');
+    if (!senderCurrency) {
+      throw new HttpException(
+        { status: HttpStatus.BAD_REQUEST, error: 'Missing sender currency' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const raw = {
+      ...transactionData,
+      userId,
+      senderId: userId,
+      status: TStatus.PAYINSUCCESS,
+      paymentSource: 'account_balance',
+      txRef: this.payoutService.generateTxRef('txBalanceTransfer'),
+      invoiceTaxes: taxesDetails.invoiceTaxes,
+      taxesAmount: taxesDetails.taxesAmount,
+      paymentWithTaxes: totalToDebit,
+    };
+
+    await this.balanceService.debitBalance(
+      String(userId),
+      totalToDebit,
+      senderCurrency,
+    );
+
+    try {
+      const savedTransaction = await this.transactionService.createTransaction(raw);
+      if (!savedTransaction) {
+        throw new NotFoundException('Error to save transaction details');
+      }
+
+      void this.operationNotificationService
+        .notifyAdminPayoutPending(savedTransaction)
+        .catch(() => undefined);
+
+      return {
+        status: 'pending',
+        transactionId: savedTransaction._id,
+        transaction: savedTransaction,
+      };
+    } catch (error) {
+      await this.balanceService
+        .creditBalance(String(userId), totalToDebit, senderCurrency)
+        .catch((rollbackError) => {
+          this.logger.error(
+            `Balance transfer rollback failed: ${rollbackError?.message || rollbackError}`,
+          );
+        });
+      throw error;
     }
   }
 
@@ -629,6 +704,10 @@ export class FlutterwaveService {
     } catch (err) {
       console.log('(fw service: handleTransfer) Error: ', err);
     }
+  }
+
+  async notifyAdminPayoutPending(transaction: any): Promise<void> {
+    await this.operationNotificationService.notifyAdminPayoutPending(transaction);
   }
 
   private async processSuccessfulPayin(transaction: any, transactionId: string) {
@@ -1047,6 +1126,9 @@ export class FlutterwaveService {
     }
 
     try {
+      await this.transactionService.reclaimPayoutFailureRefundForRetry(
+        transactionId,
+      );
       let update = await this.transactionService.updateTransactionStatus(
         transactionId,
         TStatus.PAYINSUCCESS,

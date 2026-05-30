@@ -5,7 +5,7 @@
 import {
   Body,
   Controller,
-  Get,
+  Get,ForbiddenException,
   NotFoundException,
   Param,
   Post,
@@ -60,7 +60,7 @@ export class BalanceController {
   @UsePipes(ValidationPipe)
   async getUserBalance(@Param('id') userId: string, @Req() req): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.balanceService.getBalanceByUserId(userId);
   }
@@ -80,7 +80,7 @@ export class BalanceController {
   @UsePipes(ValidationPipe)
   async getBalanceOfUser(@Param('id') userId: string, @Req() req): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.balanceService.getBalanceByUserId(userId);
   }
@@ -103,7 +103,7 @@ export class BalanceController {
     @Req() req,
     @Body() body: any,): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.balanceService.creditBalance(body.userId, body.amount, body.currency);
   }
@@ -126,7 +126,7 @@ export class BalanceController {
     @Req() req,
     @Body() body: any,): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.balanceService.debitBalance(body.userId, body.amount, body.currency);
   }

@@ -301,7 +301,7 @@ export class PayoutService {
         if (payout.status === 'FAILED') {
           const transaction =
             await this.transactionService.updateTransactionStatus(
-              reference,
+              updatedPayout.transactionId.toString(),
               TStatus.PAYOUTERROR,
               payout
             );

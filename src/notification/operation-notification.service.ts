@@ -177,11 +177,7 @@ export class OperationNotificationService {
       'WA admin payout failed',
     );
     await this.safe(
-      this.emailService.sendAlertEmail(
-        '🚨 Echec payout',
-        `Echec payout pour transaction ${transaction.transactionRef || transaction._id}.`,
-        'admin/payout/failed',
-      ) as any,
+      this.emailService.sendAdminPayoutFailedEmail(transaction),
       'Email admin payout failed',
     );
   }

@@ -47,6 +47,12 @@ export class System extends Document {
   @Prop()
   companyWhatsapp: string; // whatsapp number list with ";" for separation eg: "237 677889900; 237 699887766"
 
+  @Prop({ default: true })
+  whatsappNotificationsEnabled: boolean;
+
+  @Prop({ default: true })
+  emailNotificationsEnabled: boolean;
+
   @Prop()
   addressLine1: string;
 

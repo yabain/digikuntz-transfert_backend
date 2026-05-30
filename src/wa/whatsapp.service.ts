@@ -22,6 +22,7 @@ import { UserService } from 'src/user/user.service';
 import { PlansService } from 'src/plans/plans.service';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
+import { SystemService } from 'src/system/system.service';
 
 type ConnState = 'CONNECTED' | 'DISABLED' | 'MISCONFIGURED' | 'UNKNOWN';
 
@@ -55,6 +56,7 @@ export class WhatsappService implements OnModuleInit {
     private email: EmailService,
     private readonly http: HttpService,
     private userService: UserService,
+    private systemService: SystemService,
     @Inject(forwardRef(() => PlansService))
     private planService: PlansService,
   ) {
@@ -359,6 +361,10 @@ export class WhatsappService implements OnModuleInit {
   }
 
   private async sendMetaPayload(payload: Record<string, any>) {
+    if (!(await this.isWhatsappNotificationsEnabled())) {
+      return { skipped: true, reason: 'WhatsApp notifications disabled' };
+    }
+
     this.assertMetaReady();
     try {
       const res = await firstValueFrom(
@@ -381,6 +387,11 @@ export class WhatsappService implements OnModuleInit {
         HttpStatus.BAD_GATEWAY,
       );
     }
+  }
+
+  private async isWhatsappNotificationsEnabled(): Promise<boolean> {
+    const systemData = await this.systemService.getSystemData();
+    return systemData?.whatsappNotificationsEnabled !== false;
   }
 
   private resolveTemplateLang(language?: string): string {

@@ -57,7 +57,7 @@ export class TransactionController {
     @Req() req,
   ): Promise<Transaction[]> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.transactionService.findAll(query);
   }
@@ -81,7 +81,7 @@ export class TransactionController {
     @Req() req,
   ): Promise<Transaction[]> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.transactionService.getAllPayoutTransactoins(query);
   }
@@ -101,7 +101,7 @@ export class TransactionController {
     @Req() req,
   ): Promise<Transaction[]> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.transactionService.getAllPayinTransactions(query);
   }
@@ -164,7 +164,7 @@ export class TransactionController {
     @Req() req,
   ): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.transactionService.getPayoutListByStatus(status, query);
   }
@@ -193,9 +193,29 @@ export class TransactionController {
   @UsePipes(ValidationPipe)
   async getTransactionsStatistics(@Req() req): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.transactionService.getTransactionsStatistics();
+  }
+
+  @Put('reject-payout/:transactionId')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Reject a payout awaiting admin validation (admin only)' })
+  @ApiParam({ name: 'transactionId', description: 'Internal transaction ID' })
+  @ApiResponse({ status: 200, description: 'Payout transaction rejected.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
+  @ApiResponse({ status: 404, description: 'Transaction not found or not eligible for rejection.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async rejectPayoutTransaction(
+    @Param('transactionId') transactionId: string,
+    @Req() req,
+  ): Promise<any> {
+    if (!req.user.isAdmin) {
+      throw new ForbiddenException('Unauthorised');
+    }
+    return this.transactionService.rejectPayoutTransaction(transactionId);
   }
 
   @Get('investigation-balance/:userId')
@@ -220,7 +240,7 @@ export class TransactionController {
   @UseGuards(AuthGuard('jwt'))
   async investigateBalance(@Param('userId') userId: string, @Req() req): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.transactionService.investigateBalanceByReceiver(userId);
   }

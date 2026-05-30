@@ -73,6 +73,9 @@ export class Transaction {
   paymentMethod: string;
 
   @Prop()
+  paymentSource: string;
+
+  @Prop()
   paymentStatus: string;
 
   @Prop()
@@ -175,6 +178,18 @@ export class Transaction {
 
   @Prop()
   callbackUrl: string;
+
+  @Prop()
+  payoutFailureRefundedAt?: Date;
+
+  @Prop()
+  payoutFailureRefundAmount?: string;
+
+  @Prop()
+  payoutFailureRefundCurrency?: string;
+
+  @Prop()
+  payoutFailureRefundUserId?: string;
 
   @Prop()
   fundraisingId: string;

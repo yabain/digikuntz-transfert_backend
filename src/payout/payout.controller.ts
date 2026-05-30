@@ -2,7 +2,7 @@
 import {
   Body,
   Controller,
-  Get,
+  Get,ForbiddenException,
   NotFoundException,
   Param,
   Post,
@@ -44,7 +44,7 @@ export class PayoutController {
   @UsePipes(ValidationPipe)
   createPayout(@Req() req, @Param('transactionId') transactionId) {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.payoutService.createPayout(transactionId, req.user._id);
   }

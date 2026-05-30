@@ -6,7 +6,7 @@ import {
   Req,
   ValidationPipe,
   UseGuards,
-  UsePipes,
+  UsePipes,ForbiddenException,
   NotFoundException,
   Param,
   Body,
@@ -62,7 +62,7 @@ export class DevController {
   @UsePipes(ValidationPipe)
   async getDevDataByUserId(@Req() req, @Param('userId') userId): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.devService.getDevDataByUserId(userId);
   }

@@ -4,7 +4,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import * as path from 'path';
@@ -16,6 +16,7 @@ import { Email } from './email.schema';
 import mongoose from 'mongoose';
 import { SmtpService } from './smtp/smtp.service';
 import { Query } from 'express-serve-static-core';
+import { SystemService } from 'src/system/system.service';
 
 @Injectable()
 export class EmailService {
@@ -37,6 +38,7 @@ export class EmailService {
     private readonly configService: ConfigService,
     private dateService: DateService,
     private smtpService: SmtpService,
+    @Optional() private systemService?: SystemService,
   ) {
     this.transporterInitPromise = this.initializeTransporter();
   }
@@ -267,6 +269,10 @@ export class EmailService {
   }
 
   async proceedToSendEmail(to, subject, html, url?: string): Promise<boolean> {
+    if (!(await this.isEmailNotificationsEnabled())) {
+      return false;
+    }
+
     if (Array.isArray(to)) {
       const invalid = to.some(email => !this.isEmailValide(email));
       if (invalid) return false;
@@ -300,6 +306,12 @@ export class EmailService {
       });
       throw error;
     }
+  }
+
+  private async isEmailNotificationsEnabled(): Promise<boolean> {
+    if (!this.systemService) return true;
+    const systemData = await this.systemService.getSystemData();
+    return systemData?.emailNotificationsEnabled !== false;
   }
 
   async sendResetPwd(
@@ -712,6 +724,117 @@ export class EmailService {
       return true;
     } catch (error) {
       console.error('❌ Error sending admin pending payout email', error);
+      return false;
+    }
+  }
+
+  async sendAdminPayoutFailedEmail(transactionData: any): Promise<boolean> {
+    const to = this.getAlertDestination();
+    const language = 'fr';
+    const templateName = 'admin_payout_failed';
+
+    let templatePath = path.join(
+      this.templateFolder,
+      `${templateName}_${language}.hbs`,
+    );
+
+    let templateSource: string;
+    try {
+      templateSource = fs.readFileSync(templatePath, 'utf8');
+    } catch (err) {
+      templatePath = path.join(this.templateFolder, `${templateName}_fr.hbs`);
+      templateSource = fs.readFileSync(templatePath, 'utf8');
+    }
+
+    const template = handlebars.compile(templateSource);
+    const front = this.configService.get<string>('FRONT_URL') || this.frontUrl;
+    const raw = transactionData?.raw || {};
+    const providerMessage =
+      raw?.message ||
+      raw?.data?.message ||
+      raw?.error ||
+      raw?.details?.message ||
+      transactionData?.message ||
+      'Provider payout failed';
+    const refundAmount =
+      transactionData?.payoutFailureRefundAmount ||
+      (
+        transactionData?.transactionType === 'transfer'
+          ? transactionData?.paymentWithTaxes
+          : transactionData?.estimation
+      ) ||
+      '--';
+    const refundCurrency =
+      transactionData?.payoutFailureRefundCurrency ||
+      transactionData?.senderCurrency ||
+      transactionData?.receiverCurrency ||
+      '--';
+
+    const context = {
+      userName: 'digiKUNTZ Administrator',
+      invoice_url: `${front}/admin-payments/payout`,
+      transactionRef: transactionData?.transactionRef || transactionData?._id || '--',
+      transactionId: transactionData?._id || '--',
+      transactionType: transactionData?.transactionType || '--',
+      providerReference: transactionData?.txRef || transactionData?.reference || raw?.reference || '--',
+      providerMessage,
+      providerRaw: this.cleanString(JSON.stringify(raw || {}, null, 2)).slice(0, 1200),
+
+      senderCountry: transactionData?.senderCountry || '--',
+      senderName: transactionData?.senderName || '--',
+      senderCurrency: transactionData?.senderCurrency || '--',
+      senderEmail: transactionData?.senderEmail || '--',
+      senderContact: transactionData?.senderCountryCode && transactionData?.senderContact
+        ? '+' + transactionData.senderCountryCode + transactionData.senderContact
+        : '--',
+
+      receiverCountry: transactionData?.receiverCountry || '--',
+      receiverName: transactionData?.receiverName || '--',
+      receiverCurrency: transactionData?.receiverCurrency || '--',
+      receiverContact: transactionData?.receiverCountryCode && transactionData?.receiverContact
+        ? '+' + transactionData.receiverCountryCode + transactionData.receiverContact
+        : '--',
+      receiverEmail: transactionData?.receiverEmail || '--',
+
+      receiverAmount: transactionData?.receiverAmount || transactionData?.estimation || '--',
+      taxesAmount: transactionData?.taxesAmount || '--',
+      paymentWithTaxes: transactionData?.paymentWithTaxes || '--',
+      paymentMethod: transactionData?.paymentMethod || transactionData?.bankCode || '--',
+      refundAmount,
+      refundCurrency,
+      refundStatus: transactionData?.payoutFailureRefundedAt
+        ? 'Remboursement déjà enregistré'
+        : 'Remboursement non confirmé dans la transaction',
+      raisonForTransfer: transactionData?.raisonForTransfer || '--',
+      transactionDate: this.dateService.formatDate(
+        transactionData?.updatedAt || transactionData?.createdAt || new Date(),
+        'short',
+        'fr',
+      ),
+    };
+
+    const html = template(context);
+
+    try {
+      for (let i = 0; i < to.length; i++) {
+        const recipients = to[i];
+        setTimeout(async () => {
+          try {
+            await this.proceedToSendEmail(
+              recipients,
+              '🚨 Echec payout provider après validation admin',
+              html,
+              'admin/payout/failed',
+            );
+            console.log(`✅ Admin payout failed email sent to: ${recipients}`);
+          } catch (error) {
+            console.error(`❌ Error sending admin payout failed email to: ${recipients}`, error);
+          }
+        }, 1000 * i);
+      }
+      return true;
+    } catch (error) {
+      console.error('❌ Error sending admin payout failed email', error);
       return false;
     }
   }

@@ -24,6 +24,8 @@ export class SystemService {
       defaultLang: 'en',
       appVersion: '1.2.0',
       invoiceTaxes: 5,
+      whatsappNotificationsEnabled: true,
+      emailNotificationsEnabled: true,
       paymentGatwayAPIKey: '',
       racineLink: 'https://payments.digikuntz.com',
     };
@@ -57,6 +59,8 @@ export class SystemService {
       'defaultCurrency',
       'companyEmail',
       'companyWhatsapp',
+      'whatsappNotificationsEnabled',
+      'emailNotificationsEnabled',
       'addressLine1',
       'addressLine2',
       'paymentGatwayAPIKey',

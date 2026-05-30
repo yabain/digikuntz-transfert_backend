@@ -6,7 +6,7 @@ import {
   Body,
   Controller,
   Delete,
-  Get,
+  Get,ForbiddenException,
   NotFoundException,
   Param,
   Post,
@@ -90,7 +90,7 @@ export class ServicePaymentController {
     @Req() req,
   ): Promise<ServicePayment[]> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorized');
+      throw new ForbiddenException('Unauthorized');
     }
     return this.servicePaymentService.getAllServicePayments(query);
   }
@@ -126,7 +126,7 @@ export class ServicePaymentController {
   @UsePipes(ValidationPipe)
   async getServicePaymentsStatistic(@Req() req): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorized');
+      throw new ForbiddenException('Unauthorized');
     }
     return this.servicePaymentService.getServicePaymentsStatistic();
   }
@@ -158,7 +158,7 @@ export class ServicePaymentController {
   @UsePipes(ValidationPipe)
   async getExpiredServicePayments(@Req() req): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorized');
+      throw new ForbiddenException('Unauthorized');
     }
     return this.servicePaymentService.getExpiredServicePayments();
   }
@@ -505,7 +505,7 @@ export class ServicePaymentController {
   @UsePipes(ValidationPipe)
   async getActiveServicePayments(@Query() query: ExpressQuery, @Req() req): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorized');
+      throw new ForbiddenException('Unauthorized');
     }
     return this.servicePaymentService.getAllActiveServicePayments(query);
   }

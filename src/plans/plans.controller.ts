@@ -5,7 +5,7 @@ import {
   Body,
   Controller,
   Delete,
-  Get,
+  Get,ForbiddenException,
   NotFoundException,
   Param,
   Post,
@@ -51,7 +51,7 @@ export class PlansController {
     @Req() req,
   ): Promise<Plans[]> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.plansService.getAllPlans(query);
   }
@@ -66,7 +66,7 @@ export class PlansController {
   @UsePipes(ValidationPipe)
   async getPlansStatistics(@Req() req): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.plansService.getPlansStatistics();
   }
@@ -96,7 +96,7 @@ export class PlansController {
     @Req() req,
   ): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.plansService.getMyPlansStatistics(userId);
   }

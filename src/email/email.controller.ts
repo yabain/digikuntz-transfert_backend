@@ -4,7 +4,7 @@
 import {
   Body,
   Controller,
-  Get,
+  Get,ForbiddenException,
   NotFoundException,
   Post,
   Query,
@@ -44,7 +44,7 @@ export class EmailController {
   @UsePipes(ValidationPipe)
   async findAllEmail(@Query() query: ExpressQuery, @Req() req): Promise<any[]> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.emailService.getOutputMails(query);
   }
@@ -63,7 +63,7 @@ export class EmailController {
   @UsePipes(ValidationPipe)
   async getEmailStatsByMonth(@Req() req): Promise<any[]> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.emailService.getEmailStatsByMonth(req.user);
   }
@@ -98,7 +98,7 @@ export class EmailController {
   @UsePipes(ValidationPipe)
   getOutputMails(@Query() query: ExpressQuery, @Req() req): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.emailService.getOutputMails(query);
   }

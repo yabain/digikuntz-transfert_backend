@@ -5,7 +5,7 @@ import {
   Controller,
   Get,
   HttpException,
-  HttpStatus,
+  HttpStatus,ForbiddenException,
   NotFoundException,
   Post,
   Query,
@@ -126,7 +126,7 @@ export class WhatsappController {
 
   private assertAdmin(req: any): void {
     if (!req.user?.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
   }
 }

@@ -6,7 +6,7 @@
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, ForbiddenException, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { Query } from 'express-serve-static-core';
 import { InjectModel } from '@nestjs/mongoose';
 import { Subscription } from './subscription.schema';
@@ -576,7 +576,7 @@ export class SubscriptionService {
       userData._id.toString() !== subscriptionData.userId.toString() &&
       !userData.isAdmin
     ) {
-      throw new NotFoundException('Unauthorized');
+      throw new ForbiddenException('Unauthorized');
     }
 
     const subscription = await this.subscriptionModel.findByIdAndUpdate(
@@ -607,7 +607,7 @@ export class SubscriptionService {
       userData._id.toString() !== subscriptionData.receiverId.toString() &&
       !userData.isAdmin
     ) {
-      throw new NotFoundException('Unauthorized');
+      throw new ForbiddenException('Unauthorized');
     }
 
     const subscription = await this.subscriptionModel.findByIdAndUpdate(
@@ -635,7 +635,7 @@ export class SubscriptionService {
     if (userData._id === subscription.author || userData.isAdmin === true) {
       return await this.subscriptionModel.findByIdAndDelete(subscriptionId);
     } else {
-      throw new NotFoundException('Unauthorized');
+      throw new ForbiddenException('Unauthorized');
     }
   }
 

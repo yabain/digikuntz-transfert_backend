@@ -6,7 +6,7 @@
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, ForbiddenException, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { Query } from 'express-serve-static-core';
 import { InjectModel } from '@nestjs/mongoose';
 import * as mongoose from 'mongoose';
@@ -318,7 +318,7 @@ export class PlansService {
 
 
     if (String(plan.author) != String(userData._id) && !userData.isAdmin) {
-      throw new NotFoundException('Unauthorized');
+      throw new ForbiddenException('Unauthorized');
     }
 
     const status = plan.isActive === false ? false : true;
@@ -346,7 +346,7 @@ export class PlansService {
       plan.author.toString() != userData._id.toString() &&
       !userData.isAdmin
     ) {
-      throw new NotFoundException('Unauthorized');
+      throw new ForbiddenException('Unauthorized');
     }
     await this.optionsService.deleteOptionsOfPlan(plan._id);
     return await this.plansModel.findByIdAndDelete(planId);
@@ -363,7 +363,7 @@ export class PlansService {
     }
 
     if (plan.author != user._id && !user.isAdmin) {
-      throw new NotFoundException('Unauthorized');
+      throw new ForbiddenException('Unauthorized');
     }
     const resp = await this.plansModel.findByIdAndUpdate(planId, planData, {
       new: true,
@@ -412,7 +412,7 @@ export class PlansService {
 
       return subscriberList;
     } else {
-      throw new NotFoundException('Unauthorized');
+      throw new ForbiddenException('Unauthorized');
     }
   }
 

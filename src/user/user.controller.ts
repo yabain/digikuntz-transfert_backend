@@ -7,7 +7,7 @@ import {
   Body,
   Controller,
   Delete,
-  Get,
+  Get,ForbiddenException,
   NotFoundException,
   Param,
   Post,
@@ -61,7 +61,7 @@ export class UserController {
   @UsePipes(ValidationPipe)
   async getAllUsers(@Query() query: ExpressQuery, @Req() req): Promise<User[]> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.userService.getAllUsers(query);
   }
@@ -76,7 +76,7 @@ export class UserController {
   @UsePipes(ValidationPipe)
   async getEmailStatsByMonth(@Req() req): Promise<any[]> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.userService.getUserStatsByMonth(req.user);
   }
@@ -92,7 +92,7 @@ export class UserController {
   @UsePipes(ValidationPipe)
   async searchByEmail(@Query() query: ExpressQuery, @Req() req): Promise<User[]> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.userService.searchByEmail(query);
   }
@@ -110,7 +110,7 @@ export class UserController {
   @UsePipes(ValidationPipe)
   async getUsersStatistic(@Req() req): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.userService.getUsersStatistic();
   }
@@ -242,7 +242,7 @@ export class UserController {
   @UseGuards(AuthGuard('jwt'))
   async delete(@Param('id') userId: string, @Req() req): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.userService.deleteUser(userId);
   }
@@ -269,7 +269,7 @@ export class UserController {
   @UsePipes(ValidationPipe)
   async updateStatus(@Param('id') userId: string, @Req() req): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.userService.updateStatus(userId);
   }
@@ -285,7 +285,7 @@ export class UserController {
   @UsePipes(ValidationPipe)
   async updateAdminStatus(@Param('id') userId: string, @Req() req): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.userService.updateAdminStatus(userId);
   }
@@ -301,7 +301,7 @@ export class UserController {
   @UsePipes(ValidationPipe)
   async updateVerifiedStatus(@Param('id') userId: string, @Req() req): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.userService.updateVerifiedStatus(userId);
   }

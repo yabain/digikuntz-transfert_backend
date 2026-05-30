@@ -6,7 +6,7 @@ import {
   Body,
   Controller,
   Delete,
-  Get,
+  Get,ForbiddenException,
   NotFoundException,
   Param,
   Post,
@@ -60,7 +60,7 @@ export class ServiceController {
     @Req() req,
   ): Promise<Service[]> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.serviceService.getAllService(query);
   }
@@ -76,7 +76,7 @@ export class ServiceController {
   @UsePipes(ValidationPipe)
   async getServiceStatistics(@Req() req): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.serviceService.getServiceStatistics();
   }
@@ -106,7 +106,7 @@ export class ServiceController {
     @Req() req,
   ): Promise<any> {
     if (!req.user.isAdmin) {
-      throw new NotFoundException('Unauthorised');
+      throw new ForbiddenException('Unauthorised');
     }
     return this.serviceService.getMyServiceStatistics(userId);
   }
