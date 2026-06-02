@@ -161,6 +161,35 @@ export class DevController {
     return this.devService.updateStatus(String(req.user._id), data.status);
   }
 
+  @Put('webhook-url')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update current user webhook URL for API transactions' })
+  @ApiBody({ schema: { example: { webhookUrl: 'https://your-server.com/webhook' } } })
+  @ApiResponse({
+    status: 200,
+    description: 'Webhook URL updated.',
+    schema: {
+      example: {
+        id: '664f1a2b3c4d5e6f7a8b9c0d',
+        userId: '664f1a2b3c4d5e6f7a8b9c0e',
+        status: true,
+        webhookUrl: 'https://your-server.com/webhook',
+        secretKey: 'SK-1234567890-abcdef12',
+        publicKey: 'PK-1234567890-abcdef12',
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Invalid webhook URL.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async updateWebhookUrl(@Req() req, @Body() data): Promise<any> {
+    return this.devService.updateWebhookUrl(
+      String(req.user._id),
+      data?.webhookUrl,
+    );
+  }
+
   @Get('transaction')
   @ApiOperation({ summary: 'Get API transaction data with key headers' })
   @ApiHeader({ name: 'x-user-id', required: true })

@@ -19,6 +19,9 @@ export class Dev extends Document {
   apiPassword: string;
 
   @Prop()
+  webhookUrl: string;
+
+  @Prop()
   status: boolean;
 
 }

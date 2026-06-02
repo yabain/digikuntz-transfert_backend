@@ -435,6 +435,7 @@ export class FlutterwaveService {
                 String(savedTransaction.senderCountryCode || ''),
               )
             : savedTransaction.senderContact,
+        redirectUrl: transactionData?.redirectUrl,
         status: 'pending',
         userId,
       });

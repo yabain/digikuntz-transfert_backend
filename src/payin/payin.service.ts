@@ -86,7 +86,8 @@ export class PayinService {
       this.config.get<string>('FLUTTERWAVE_BASE_URL_V4') ??
       'https://api.flutterwave.cloud';
     this.secretHash = this.config.get<string>('FLUTTERWAVE_SECRET_HASH');
-    this.redirectDefault = this.config.get<string>('FRONT_URL') + '/payment-done';
+    const frontUrl = this.config.get<string>('FRONT_URL')?.replace(/\/+$/, '');
+    this.redirectDefault = frontUrl ? `${frontUrl}/dashboard` : undefined;
   }
 
   /* ========================= Helpers ========================= */
@@ -144,12 +145,7 @@ export class PayinService {
   }
 
   private buildRedirectUrl(dtoRedirect?: string): string | undefined {
-    return (
-      dtoRedirect ??
-      (this.redirectDefault
-        ? `${this.redirectDefault}/subscription/packages`
-        : undefined)
-    );
+    return dtoRedirect ?? this.redirectDefault;
   }
 
   private normalizeKesMsisdnStrict(raw: string): string {

@@ -38,6 +38,7 @@ export class DevService {
       id: res.id,
       userId: res.userId.toString(),
       status: res.status,
+      webhookUrl: res.webhookUrl || '',
       secretKey: this.cryptService.decryptWithPassphrase(res.secretKey),
       publicKey: this.cryptService.decryptWithPassphrase(res.publicKey)
     };
@@ -55,6 +56,7 @@ export class DevService {
       id: res.id,
       userId: userId,
       status: res.status,
+      webhookUrl: res.webhookUrl || '',
       secretKey: this.cryptService.decryptWithPassphrase(res.secretKey),
       publicKey: this.cryptService.decryptWithPassphrase(res.publicKey)
     };
@@ -70,6 +72,7 @@ export class DevService {
         id: res.id,
         userId: res.userId.toString(),
         status: res.status,
+        webhookUrl: res.webhookUrl || '',
         secretKey: this.cryptService.decryptWithPassphrase(res.secretKey),
         publicKey: this.cryptService.decryptWithPassphrase(res.publicKey)
       };
@@ -88,6 +91,7 @@ export class DevService {
         id: dev._id,
         status: dev.status,
         userId: dev.userId,
+        webhookUrl: dev.webhookUrl || '',
         secretKey: this.cryptService.decryptWithPassphrase(dev.secretKey),
         publicKey: this.cryptService.decryptWithPassphrase(dev.publicKey)
       };
@@ -107,6 +111,7 @@ export class DevService {
         id: res._id,
         status: res.status,
         userId: res.userId,
+        webhookUrl: res.webhookUrl || '',
         secretKey: sKey,
         publicKey: pKey
       }
@@ -130,6 +135,7 @@ export class DevService {
           id: res._id,
           status: res.status,
           userId: res.userId,
+          webhookUrl: res.webhookUrl || '',
           secretKey: sKey,
           publicKey: pKey
         }
@@ -173,6 +179,7 @@ export class DevService {
         id: res.id,
         userId: res.userId.toString(),
         status: res.status,
+        webhookUrl: res.webhookUrl || '',
         secretKey: this.cryptService.decryptWithPassphrase(res.secretKey),
         publicKey: this.cryptService.decryptWithPassphrase(res.publicKey)
       };
@@ -184,6 +191,36 @@ export class DevService {
 
   generateKey(prefix = 'key'): string {
     return `${prefix}-${Date.now()}-${randomBytes(4).toString('hex')}`;
+  }
+
+  async updateWebhookUrl(userId: string, webhookUrl?: string): Promise<any> {
+    const devData = await this.getDevDataByUserId(userId);
+    if (!devData) return 'no developer found with this id';
+    if (devData.userId.toString() !== userId.toString()) return 'unauthorized';
+
+    const normalizedWebhookUrl = webhookUrl
+      ? this.normalizeCallbackUrl(webhookUrl, 'webhookUrl')
+      : '';
+
+    try {
+      const res = await this.devModel.findByIdAndUpdate(
+        devData.id,
+        { webhookUrl: normalizedWebhookUrl },
+        { new: true },
+      );
+      if (!res) return 'error updating data';
+      return {
+        id: res.id,
+        userId: res.userId.toString(),
+        status: res.status,
+        webhookUrl: res.webhookUrl || '',
+        secretKey: this.cryptService.decryptWithPassphrase(res.secretKey),
+        publicKey: this.cryptService.decryptWithPassphrase(res.publicKey),
+      };
+    }
+    catch (error: any) {
+      throw new ConflictException(error);
+    }
   }
 
   //// - Transaction requests
@@ -245,7 +282,10 @@ export class DevService {
     narration?: string;
     callbackUrl?: string;
   }, userId: string): Promise<any> {
-    const callbackUrl = this.normalizeCallbackUrl(data.callbackUrl);
+    const devData = await this.getDevDataByUserId(userId);
+    const webhookUrl = devData?.webhookUrl
+      ? this.normalizeCallbackUrl(devData.webhookUrl, 'webhookUrl')
+      : undefined;
     const user = await this.userService.getUserById(userId);
     if (!user) throw new ConflictException('user not found');
     const payoutAmount = Number(data.amount);
@@ -280,7 +320,7 @@ export class DevService {
       raisonForTransfer: data.narration || 'API Payout',
       status: TStatus.PAYINSUCCESS,
       noFees: true,
-      ...(callbackUrl && { callbackUrl }),
+      ...(webhookUrl && { callbackUrl: webhookUrl }),
     };
 
     await this.balanceService.debitBalance(userId, payoutAmount, user.countryId.currency);
@@ -309,9 +349,23 @@ export class DevService {
   }
 
   async createPayinTransaction(transactionData: any, userId): Promise<any> {
-    const callbackUrl = this.normalizeCallbackUrl(transactionData?.callbackUrl);
-    if (callbackUrl) {
-      transactionData.callbackUrl = callbackUrl;
+    const flutterwaveCallbackUrl = this.normalizeCallbackUrl(
+      transactionData?.callbackUrl,
+      'callbackUrl',
+    );
+    if (flutterwaveCallbackUrl) {
+      transactionData.redirectUrl = flutterwaveCallbackUrl;
+    } else {
+      delete transactionData.redirectUrl;
+    }
+
+    const devData = await this.getDevDataByUserId(userId);
+    const webhookUrl = devData?.webhookUrl
+      ? this.normalizeCallbackUrl(devData.webhookUrl, 'webhookUrl')
+      : undefined;
+
+    if (webhookUrl) {
+      transactionData.callbackUrl = webhookUrl;
     } else {
       delete transactionData.callbackUrl;
     }
@@ -407,14 +461,14 @@ export class DevService {
     );
   }
 
-  private normalizeCallbackUrl(callbackUrl?: string): string | undefined {
+  private normalizeCallbackUrl(callbackUrl?: string, fieldName = 'callbackUrl'): string | undefined {
     if (!callbackUrl) return undefined;
 
     let parsed: URL;
     try {
       parsed = new URL(callbackUrl);
     } catch {
-      throw new BadRequestException('Invalid callbackUrl');
+      throw new BadRequestException(`Invalid ${fieldName}`);
     }
 
     const isProduction = process.env.NODE_ENV === 'production';
@@ -422,15 +476,15 @@ export class DevService {
     const hostname = parsed.hostname.toLowerCase();
 
     if (isProduction && protocol !== 'https:') {
-      throw new BadRequestException('callbackUrl must use HTTPS in production');
+      throw new BadRequestException(`${fieldName} must use HTTPS in production`);
     }
 
     if (!isProduction && !['http:', 'https:'].includes(protocol)) {
-      throw new BadRequestException('callbackUrl must use HTTP or HTTPS');
+      throw new BadRequestException(`${fieldName} must use HTTP or HTTPS`);
     }
 
     if (isProduction && this.isPrivateCallbackHost(hostname)) {
-      throw new BadRequestException('callbackUrl host is not allowed');
+      throw new BadRequestException(`${fieldName} host is not allowed`);
     }
 
     parsed.hash = '';
