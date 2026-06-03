@@ -41,19 +41,13 @@ export class SubscriptionService {
   ) { }
 
   async subscribe(subscriptionData: CreateSubscriptionDto, transactionId = undefined) {
-    console.log('subscribr-subscriptionData: ', subscriptionData);
-
-    console.log('subscribr-transactionId param: ', transactionId ? transactionId : 'No transactionId');
-
     const subscriptionStatus = await this.verifySubscription(
       subscriptionData.userId,
       subscriptionData.planId,
     );
 
-    console.log('subscribr-verifySubscription: ', subscriptionStatus);
     if (subscriptionStatus.existingSubscription === true) {
       if (transactionId !== undefined) {
-        console.log('starting upgrade');
         return await this.upgradeSubscription(
           subscriptionStatus.id,
           transactionId
@@ -63,10 +57,8 @@ export class SubscriptionService {
       }
     } else {
       if (transactionId !== undefined) {
-        console.log('starting createSubscriptionWithTransaction');
         return await this.createSubscriptionWithTransaction(subscriptionData, transactionId);
       } else {
-        console.log('starting createSubscriptionWithoutTransaction');
         return await this.createSubscriptionWithoutTransaction(subscriptionData)
       };
     }
@@ -136,15 +128,19 @@ export class SubscriptionService {
 
     switch (cycle) {
       case 'dayly':
-        newStartDate.setHours(newStartDate.getHours() + 1);
-        break;
-
-      case 'monthly':
         newStartDate.setDate(newStartDate.getDate() + 1);
         break;
 
-      case 'yearly':
+      case 'weekly':
+        newStartDate.setDate(newStartDate.getDate() + 7);
+        break;
+
+      case 'monthly':
         newStartDate.setMonth(newStartDate.getMonth() + 1);
+        break;
+
+      case 'yearly':
+        newStartDate.setFullYear(newStartDate.getFullYear() + 1);
         break;
 
       default:
@@ -176,21 +172,19 @@ export class SubscriptionService {
     };
 
     const res = await this.subscriptionModel.create(subscriptionWithDates);
-    console.log('(subscriptionService - createSubscriptionWhitoutTransaction) res: ', res);
     if (!res) {
       throw new NotFoundException('Subscription not created');
     }
     
     const subscription = await this.subscriptionModel
       .findById(res._id)
-      .populate('userId')
-      .populate('receiverId')
+      .populate('userId', 'firstName lastName name email phone whatsapp accountType pictureUrl countryId cityId')
+      .populate('receiverId', 'firstName lastName name email phone whatsapp accountType pictureUrl')
       .populate('planId');
     if (!subscription) {
       throw new NotFoundException('Subscription not found');
     }
 
-    console.log('createSubscriptionWithoutTransaction - subscription populated: ', subscription);
     // const incrementSubscriberOnPlan = await this.plansService.incrementSubscriberNumber(subscriptionWithDates.planId.toString());
 
     // console.log('incrementSubscriberOnPlan: ', incrementSubscriberOnPlan);
@@ -234,8 +228,8 @@ export class SubscriptionService {
     }
     const subscription = await this.subscriptionModel
       .findById(res._id)
-      .populate('userId')
-      .populate('receiverId')
+      .populate('userId', 'firstName lastName name email phone whatsapp accountType pictureUrl countryId cityId')
+      .populate('receiverId', 'firstName lastName name email phone whatsapp accountType pictureUrl')
       .populate('planId');
     if (!subscription) {
       throw new NotFoundException('Subscription not found');
@@ -339,8 +333,8 @@ export class SubscriptionService {
     // Find the subscription by ID
     const subscription = await this.subscriptionModel
       .findById(subscriptionId)
-      .populate('userId')
-      .populate('receiverId')
+      .populate('userId', 'firstName lastName name email phone whatsapp accountType pictureUrl countryId cityId')
+      .populate('receiverId', 'firstName lastName name email phone whatsapp accountType pictureUrl')
       .populate('planId');
     if (!subscription) {
       throw new NotFoundException('User not found');
@@ -367,8 +361,8 @@ export class SubscriptionService {
     // Find the subscription by ID
     const subscription = await this.subscriptionModel
       .findOne({ userId: userId, planId: planId })
-      .populate('userId')
-      .populate('receiverId')
+      .populate('userId', 'firstName lastName name email phone whatsapp accountType pictureUrl countryId cityId')
+      .populate('receiverId', 'firstName lastName name email phone whatsapp accountType pictureUrl')
       .populate('planId');
     if (!subscription) {
       throw new NotFoundException('User not found');
@@ -401,10 +395,9 @@ export class SubscriptionService {
     const currentDate = new Date();
     if (currentDate > subscription.endDate && subscription.status === true) {
       // Update subscription status to inactive
-      const statusUpdated = await this.subscriptionModel.findByIdAndUpdate(subscription._id, {
+      await this.subscriptionModel.findByIdAndUpdate(subscription._id, {
         status: activateSubscription,
       });
-      console.log('statusUpdated: ', statusUpdated);
       return {
         existingSubscription: true,
         status: activateSubscription,
@@ -436,15 +429,37 @@ export class SubscriptionService {
   async updateSubscription(
     subscriptionId,
     subscriptionData,
+    userData?: any,
   ): Promise<any> {
     try {
+      if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {
+        throw new NotFoundException('Invalid subscription ID');
+      }
+      const subscription: any = await this.subscriptionModel.findById(subscriptionId);
+      if (!subscription) {
+        throw new NotFoundException('Subscription not found');
+      }
+      const receiverId = subscription.receiverId?.toString?.() || String(subscription.receiverId || '');
+      const subscriberId = subscription.userId?.toString?.() || String(subscription.userId || '');
+      const currentUserId = userData?._id?.toString?.() || String(userData?._id || '');
+      if (
+        userData &&
+        currentUserId !== receiverId &&
+        currentUserId !== subscriberId &&
+        userData.isAdmin !== true
+      ) {
+        throw new ForbiddenException('Unauthorized');
+      }
       return await this.subscriptionModel.findByIdAndUpdate(
         subscriptionId,
-        { subscriptionData },
+        { ...subscriptionData },
         { new: true, runValidators: true },
       );
     }
     catch (error) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException) {
+        throw error;
+      }
       throw new NotFoundException('Error updating subscription');
     }
   }
@@ -465,8 +480,6 @@ export class SubscriptionService {
     if (!subscriptionData) {
       throw new NotFoundException('Subscription not found');
     }
-    console.log('upgradeSubscription-subscriptionData: ', subscriptionData);
-
     let newStartDate = new Date();
     if (subscriptionData.status === true) {
       newStartDate = subscriptionData.endDate;
@@ -475,8 +488,6 @@ export class SubscriptionService {
         newStartDate = subscriptionData.startDate
       }
     }
-
-    console.log('newStartDate: ', newStartDate);
 
     const newQuantityTotal =
       (subscriptionData.quantity || 0) + additionalQuantity;
@@ -501,7 +512,6 @@ export class SubscriptionService {
       status: true,
     }
     const itemCreate = await this.itemService.createItem(item, subscriptionData.userId);
-    console.log('upgradeSubscription-itemCreate: ', itemCreate);
 
     if (!itemCreate) {
       throw new NotFoundException('Error creating item');
@@ -516,8 +526,6 @@ export class SubscriptionService {
       },
       { new: true, runValidators: true },
     );
-
-    console.log('upgradeSubscription-updatedSubscription: ', updated);
 
     if (!updated) {
       throw new NotFoundException('Error upgrading subscription');
@@ -780,23 +788,57 @@ export class SubscriptionService {
     };
   }
 
-  async getSubscriptionsOfPlan(planId: string): Promise<Subscription[]> {
-    return await this.subscriptionModel.find({ planId }).populate('userId');
+  async getSubscriptionsOfPlan(planId: string, userData: any): Promise<Subscription[]> {
+    const plan = await this.plansService.getPlansById(planId);
+    const authorId = plan?.author?._id?.toString?.() || plan?.author?.toString?.();
+    const currentUserId = userData?._id?.toString?.() || String(userData?._id || '');
+    if (authorId !== currentUserId && userData?.isAdmin !== true) {
+      throw new ForbiddenException('Unauthorized');
+    }
+    return await this.subscriptionModel
+      .find({ planId })
+      .populate('userId', 'firstName lastName name email phone whatsapp accountType pictureUrl countryId cityId');
   }
 
-  async getItemSubscriptionByTransactionId(transactionId): Promise<Subscription[]> {
-    return await this.itemService.getItemSubscriptionByTransactionId(transactionId);
+  async getItemSubscriptionByTransactionId(transactionId, userData?: any): Promise<any> {
+    const item: any = await this.itemService.getItemSubscriptionByTransactionId(transactionId);
+    this.assertItemAccess(item, userData);
+    return item;
   }
 
   async getSubscriptionsOfUser(userId: string): Promise<Subscription[]> {
     return await this.subscriptionModel.find({ userId }).populate('planId');
   }
 
-  async getSubscriptionsItemsOfUser(subscriptionId, subscriberId): Promise<Item[]> {
+  async getSubscriptionsItemsOfUser(subscriptionId, subscriberId, userData?: any): Promise<Item[]> {
+    const currentUserId = userData?._id?.toString?.() || String(userData?._id || '');
+    const subscription: any = await this.subscriptionModel.findById(subscriptionId);
+    if (!subscription) {
+      throw new NotFoundException('Subscription not found');
+    }
+    const receiverId = subscription.receiverId?.toString?.() || String(subscription.receiverId || '');
+    if (
+      userData &&
+      currentUserId !== String(subscriberId) &&
+      currentUserId !== receiverId &&
+      userData.isAdmin !== true
+    ) {
+      throw new ForbiddenException('Unauthorized');
+    }
     const allItems = await this.itemService.getItemBySubscriptionId(subscriptionId);
     // console.log('allItems: ', allItems);
     const items = allItems.filter(item => item.userId.toString() === subscriberId.toString());
     return items;
+  }
+
+  private assertItemAccess(item: any, userData?: any): void {
+    if (!userData) return;
+    const currentUserId = userData?._id?.toString?.() || String(userData?._id || '');
+    const userId = item?.userId?.toString?.() || String(item?.userId || '');
+    const receiverId = item?.receiverId?.toString?.() || String(item?.receiverId || '');
+    if (currentUserId !== userId && currentUserId !== receiverId && userData.isAdmin !== true) {
+      throw new ForbiddenException('Unauthorized');
+    }
   }
 
   async getSubscriptionStatistics(userId, long?: number): Promise<any> {
@@ -812,7 +854,7 @@ export class SubscriptionService {
     });
 
     const inactiveSubscription = await this.subscriptionModel.countDocuments({
-      isActive: false,
+      status: false,
       userId: userId,
     });
 

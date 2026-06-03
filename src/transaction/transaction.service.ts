@@ -404,11 +404,8 @@ export class TransactionService {
 
   async verifyTransactionPayinStatus(transactionData: any) {
     let payin: any = await this.payinService.getPayinByTxRef(transactionData.txRef);
-    console.log('transaction payin 00: ', payin)
     if (!payin) {
-      console.log('no Payin found using txRef');
       payin = await this.payinService.getPayinByTransactionId(transactionData._id);
-      console.log('transaction payin: ', payin)
       if (!payin) {
         return this.updateTransactionStatus(
           transactionData._id,
@@ -519,15 +516,10 @@ export class TransactionService {
   }
 
   async verifyTransactionPayoutStatus(transactionData: any) {
-    console.log('verifyTransactionPayoutStatus transactionData', transactionData);
     let payout: any = await this.getPayoutByTxRef(transactionData.txRef);
-    console.log('verifyTransactionPayoutStatus payout', payout);
     if (!payout) {
-      console.log('no Payout found using txRef');
       payout = await this.getPayout(transactionData.txRef);
-      console.log('verifyTransactionPayoutStatus payout 000', payout);
       if (!payout) {
-        console.log('no Payout found using txRef (Closing transaction):', payout);
         return this.updateTransactionStatus(
           transactionData._id,
           TStatus.PAYOUTCLOSED,
@@ -1036,7 +1028,6 @@ export class TransactionService {
       taxesAmount: String(taxesDetails.taxesAmount),
       paymentWithTaxes: String(taxesDetails.paymentWithTaxes),
     };
-    console.log('in createTransaction payload:', payload)
     return await this.transactionModel.create(payload);
   }
 

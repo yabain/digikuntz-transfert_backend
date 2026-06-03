@@ -43,8 +43,6 @@ export class OptionsService {
       list = options;
     }
 
-    console.log('option list:', list);
-
     let res: any[] = [];
     for (const option of list) {
       const optionData: any = { ...option, plansId };

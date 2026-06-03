@@ -96,6 +96,21 @@ export class UserController {
     }
     return this.userService.searchByEmail(query);
   }
+
+  @Get('subscriber-candidates')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Search existing users by email or WhatsApp for subscriber assignment' })
+  @ApiQuery({ name: 'keyword', required: true, type: String, description: 'Email or WhatsApp/phone keyword' })
+  @ApiResponse({ status: 200, description: 'Matching users returned.', schema: { example: [] } })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async searchSubscriberCandidates(
+    @Query() query: ExpressQuery,
+  ): Promise<any[]> {
+    return this.userService.searchSubscriberCandidates(query);
+  }
+
   /**
    * Get all users with optional query parameters for filtering and pagination.
    * Only accessible by admin users.

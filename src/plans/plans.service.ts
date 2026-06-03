@@ -20,6 +20,7 @@ import { AuthService } from 'src/auth/auth.service';
 import { SubscriptionService } from './subscription/subscription.service';
 import { WhatsappService } from 'src/wa/whatsapp.service';
 import { UserService } from 'src/user/user.service';
+import { randomBytes } from 'crypto';
 
 @Injectable()
 export class PlansService {
@@ -87,7 +88,7 @@ export class PlansService {
     idUser = reqUser.isAdmin ? userId : reqUser._id;
     const plansList = await this.plansModel
       .find({ author: idUser })
-      .populate('author');
+      .populate('author', 'firstName lastName name email phone whatsapp accountType pictureUrl countryId cityId');
     if (!plansList) {
       return [];
     }
@@ -173,7 +174,9 @@ export class PlansService {
       throw new NotFoundException('Invalid plan ID');
     }
 
-    const plan = await this.plansModel.findById(planId).populate('author');
+    const plan = await this.plansModel
+      .findById(planId)
+      .populate('author', 'firstName lastName name email phone whatsapp accountType pictureUrl countryId cityId');
     if (!plan) {
       throw new NotFoundException('Plan with this id not found');
     }
@@ -210,28 +213,39 @@ export class PlansService {
     }
   }
 
-  async addSubscriber(data: any, userCreation: boolean = true, ): Promise<any> {
+  async addSubscriber(data: any, currentUser: any, userCreation: boolean = true, ): Promise<any> {
     const dataBackup = structuredClone(data);
+    const selectedUserId = dataBackup.userId || dataBackup.existingUserId;
     let user: any = this.parseUserToObject(data);
     let newUser: any;
     try {
-      if (userCreation) {
-        user.password = "12345678";
+      const plan = await this.getPlansById(dataBackup.planId);
+      if (!plan) {
+        throw new NotFoundException('Plan not found');
+      }
+
+      const planAuthorId = plan.author?._id?.toString?.() || plan.author?.toString?.();
+      if (planAuthorId !== currentUser?._id?.toString?.() && currentUser?.isAdmin !== true) {
+        throw new ForbiddenException('Unauthorized');
+      }
+
+      if (selectedUserId) {
+        newUser = { userData: await this.userService.getUserById(selectedUserId) };
+        if (!newUser.userData) {
+          throw new NotFoundException('User not found');
+        }
+        userCreation = false;
+      } else if (userCreation) {
+        user.password = randomBytes(12).toString('base64url');
+        user.mustChangePassword = true;
         newUser = await this.authService.signUp(user, false);
         if (!newUser) {
           throw new NotFoundException('Unable to add this user');
         }
       }
 
-      const plan = await this.getPlansById(dataBackup.planId);
-      if (!plan) {
-        throw new NotFoundException('Plan not found');
-      }
-      console.log('addSubscriber - getPlansById : ', plan);
-
-
       const subscription = await this.subscriptionService.subscribe({
-        userId: userCreation ? newUser.userData._id : data.userId,
+        userId: selectedUserId || newUser.userData._id,
         receiverId: plan.author._id,
         planId: plan._id,
         quantity: 0,
@@ -242,14 +256,12 @@ export class PlansService {
         status: false,
       });
 
-      console.log('addSubscriber - subscribe : ', subscription);
       if (!subscription) {
         throw new NotFoundException('Unable to add this subscription');
       }
 
       return subscription;
     } catch (err) {
-      console.log(err);
       throw new NotFoundException('Error: ' + err);
     }
   }
@@ -302,6 +314,8 @@ export class PlansService {
   private parseUserToObject(data: any): any {
     const obj = data.toObject ? data.toObject() : data; // convert mongoose doc to object if needed
     delete obj.planId;
+    delete obj.userId;
+    delete obj.existingUserId;
     delete obj.subscriptionStartDate;
     return obj;
   }

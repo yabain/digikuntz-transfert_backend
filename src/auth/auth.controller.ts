@@ -3,10 +3,11 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiTags, ApiResponse } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { CreateUserDto } from 'src/user/create-user.dto';
+import { AuthGuard } from '@nestjs/passport';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -191,5 +192,21 @@ export class AuthController {
   @ApiResponse({ status: 404, description: 'User not found for this token.' })
   async resetPassword(@Body() data: any) {
     return this.authService.resetPassword(data.token, data.password);
+  }
+
+  @Post('change-password')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiOperation({
+    summary: 'Change authenticated user password',
+    description: 'Changes the authenticated user password after checking the current password.',
+  })
+  @ApiBody({
+    schema: { example: { currentPassword: 'temporaryPassword', newPassword: 'newPassword' } },
+  })
+  @ApiResponse({ status: 200, description: 'Password changed.' })
+  @ApiResponse({ status: 400, description: 'Invalid password policy.' })
+  @ApiResponse({ status: 401, description: 'Current password invalid.' })
+  async changePassword(@Req() req: any, @Body() data: any) {
+    return this.authService.changePassword(req.user._id, data.currentPassword, data.newPassword);
   }
 }

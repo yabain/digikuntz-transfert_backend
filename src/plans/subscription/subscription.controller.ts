@@ -165,6 +165,9 @@ export class SubscriptionController {
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async updateStatus(@Param('id') subscriptionId: string, @Req() req): Promise<any> {
+    if (!req.user.isAdmin) {
+      throw new ForbiddenException('Unauthorized');
+    }
     return this.subscriptionService.updateStatus(subscriptionId);
   }
 
@@ -196,15 +199,18 @@ export class SubscriptionController {
   @UsePipes(ValidationPipe)
   async getSubscriptionsOfPlan(
     @Param('planId') planId: any,
+    @Req() req,
   ): Promise<any> {
-    return this.subscriptionService.getSubscriptionsOfPlan(planId);
+    return this.subscriptionService.getSubscriptionsOfPlan(planId, req.user);
   }
 
   @Get('get-item-by-transactionId/:transactionId')
+  @UseGuards(AuthGuard('jwt'))
   async getItemSubscriptionByTransactionId(
     @Param('transactionId') transactionId: any,
+    @Req() req,
   ): Promise<any> {
-    return this.subscriptionService.getItemSubscriptionByTransactionId(transactionId);
+    return this.subscriptionService.getItemSubscriptionByTransactionId(transactionId, req.user);
   }
 
   @Get('get-user-subscription/:planId')
@@ -221,15 +227,21 @@ export class SubscriptionController {
   @UsePipes(ValidationPipe)
   async getSubscriptionsItemsOfUser(
     @Param('ids') ids: any,
+    @Req() req,
   ): Promise<any> {
     const [subscriptionId, subscriberId] = ids.split('AAA');
-    return this.subscriptionService.getSubscriptionsItemsOfUser(subscriptionId, subscriberId);
+    return this.subscriptionService.getSubscriptionsItemsOfUser(subscriptionId, subscriberId, req.user);
   }
 
   @Post('verify')
+  @UseGuards(AuthGuard('jwt'))
   async verifyExistingSubscription(
     @Body() subscription: any,
+    @Req() req,
   ): Promise<any> {
+    if (req.user._id.toString() !== String(subscription.userId) && req.user.isAdmin !== true) {
+      throw new ForbiddenException('Unauthorized');
+    }
     return this.subscriptionService.verifySubscription(subscription.userId, subscription.planId);
   }
 
@@ -369,9 +381,13 @@ export class SubscriptionController {
     status: 401, 
     description: 'Unauthorized - Authentication required.' 
   })
+  @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async verifySubscriptionWithUserId(@Param('planId') allId: string): Promise<any> {
+  async verifySubscriptionWithUserId(@Param('planId') allId: string, @Req() req): Promise<any> {
     const [planId, userId] = allId.split('AAA');
+    if (req.user._id.toString() !== userId && req.user.isAdmin !== true) {
+      throw new ForbiddenException('Unauthorized');
+    }
     return this.subscriptionService.verifySubscription(userId, planId);
   }
 
@@ -462,6 +478,7 @@ export class SubscriptionController {
    * @returns Subscription data
    */
   @Get(':id')
+  @ApiBearerAuth()
   @ApiOperation({ 
     summary: 'Get subscription by ID',
     description: 'Retrieve a specific subscription by its ID.',
@@ -482,8 +499,18 @@ export class SubscriptionController {
     status: 404, 
     description: 'Subscription not found.' 
   })
-  async getSubscription(@Param('id') subscriptionId: string): Promise<any> {
-    return this.subscriptionService.getSubscriptionById(subscriptionId);
+  @UseGuards(AuthGuard('jwt'))
+  async getSubscription(@Param('id') subscriptionId: string, @Req() req): Promise<any> {
+    const subscription = await this.subscriptionService.getSubscriptionById(subscriptionId);
+    const currentUserId = req.user._id.toString();
+    const subscriberId =
+      subscription?.userId?._id?.toString?.() || subscription?.userId?.toString?.();
+    const receiverId =
+      subscription?.receiverId?._id?.toString?.() || subscription?.receiverId?.toString?.();
+    if (currentUserId !== subscriberId && currentUserId !== receiverId && req.user.isAdmin !== true) {
+      throw new ForbiddenException('Unauthorized');
+    }
+    return subscription;
   }
 
   /**
@@ -599,10 +626,12 @@ export class SubscriptionController {
   async updateSubscription(
     @Param('id') subscriptionId: string,
     @Body() subscriptionData: UpdateSubscriptionDto,
+    @Req() req,
   ): Promise<any> {
     return this.subscriptionService.updateSubscription(
       subscriptionId,
       subscriptionData,
+      req.user,
     );
   }
 

@@ -27,6 +27,9 @@ export class User extends Document {
   @Prop()
   password: string;
 
+  @Prop({ default: false })
+  mustChangePassword: boolean;
+
   @Prop()
   balance: number;
 

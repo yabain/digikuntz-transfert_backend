@@ -405,7 +405,6 @@ export class FlutterwaveService {
     };
 
     try {
-      console.log('in try of createPayin raw:', raw)
       const savedTransaction =
         await this.transactionService.createTransaction(raw);
       if (!savedTransaction) {
@@ -703,7 +702,7 @@ export class FlutterwaveService {
         .notifyAdminPayoutPending(transaction)
         .catch(() => undefined);
     } catch (err) {
-      console.log('(fw service: handleTransfer) Error: ', err);
+      console.error('(fw service: handleTransfer) Error: ', err);
     }
   }
 
@@ -757,7 +756,6 @@ export class FlutterwaveService {
   }
 
   async handleSubscription(transaction) {
-    console.log('In handleSubscription transaction: ', transaction);
     try {
       const getEntityId = (value: any): string | undefined => {
         if (!value) return undefined;
@@ -800,8 +798,6 @@ export class FlutterwaveService {
         resp = await this.subscriptionService.createSubscriptionWithTransaction(payload, transaction._id);
       }
 
-      console.log('handleSubscription - resp: ', resp);
-
       // Send notification
       // this.whatsappService.sendNewSubscriberMessage(transaction.planId.toString(), transaction.userId.toString(), transaction._id.toString());
       return;
@@ -838,7 +834,7 @@ export class FlutterwaveService {
         .notifyAdminPayoutPending(transaction)
         .catch(() => undefined);
     } catch (err) {
-      console.log('(fw service: handleWithdrawal) Error: ', err);
+      console.error('(fw service: handleWithdrawal) Error: ', err);
       return {
         message: '(fw service: handleWithdrawal) Error: ' + err,
         status: 'error',

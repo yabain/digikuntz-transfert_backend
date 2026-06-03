@@ -453,6 +453,41 @@ export class UserService {
     return users;
   }
 
+  async searchSubscriberCandidates(query: Query): Promise<any[]> {
+    const rawKeyword = String(query.keyword || '').trim();
+    if (rawKeyword.length < 3) return [];
+
+    const normalizedDigits = rawKeyword.replace(/\D/g, '');
+    const orFilters: any[] = [
+      { email: { $regex: this.escapeRegex(rawKeyword), $options: 'i' } },
+    ];
+
+    if (normalizedDigits.length >= 6) {
+      const digitsPattern = new RegExp(
+        `^\\D*${normalizedDigits.split('').join('\\D*')}\\D*$`,
+      );
+      orFilters.push(
+        { whatsapp: rawKeyword },
+        { whatsapp: rawKeyword.replace(/\s+/g, '') },
+        { whatsapp: { $regex: digitsPattern } },
+        { phone: { $regex: digitsPattern } },
+      );
+    }
+
+    return await this.userModel
+      .find({ $or: orFilters })
+      .select('firstName lastName name email phone whatsapp accountType pictureUrl countryId cityId isActive')
+      .populate('countryId', 'name code flagUrl')
+      .populate('cityId', 'name')
+      .sort({ createdAt: -1 })
+      .limit(8)
+      .lean();
+  }
+
+  private escapeRegex(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
   /**
    * Returns the user's name formatted for display, with a fallback to the username if no first or last name is provided.
    * @param userData - The user data object containing name information

@@ -159,7 +159,6 @@ export class ItemService {
   async createItemForUpdate(
     item: CreateItemDto,
   ): Promise<any> {
-    console.log('Enter createItemForUpdate: ', item);
 
     const itemData = {
       ...item,
@@ -167,7 +166,6 @@ export class ItemService {
     };
 
     const createdItemt = await this.itemModel.create(itemData);
-    if (createdItemt) console.log('createItemForUpdate done for: ',createdItemt);
 
     return createdItemt;
   }

@@ -154,8 +154,8 @@ export class PlansController {
   @ApiResponse({ status: 401, description: 'Authentication required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async addSubscriber(@Body() data: any): Promise<any> {
-    return this.plansService.addSubscriber(data);
+  async addSubscriber(@Body() data: any, @Req() req): Promise<any> {
+    return this.plansService.addSubscriber(data, req.user);
   }
 
   @Put('update-plans/:id')

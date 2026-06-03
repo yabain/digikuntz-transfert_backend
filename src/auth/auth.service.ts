@@ -251,6 +251,7 @@ export class AuthService {
 
     const hashedPwd = await bcrypt.hash(newPassword, 10);
     user.password = hashedPwd;
+    user.mustChangePassword = false;
     user.resetPasswordToken = ''; // Clear the reset token
     user.resetPasswordTokenExpiresAt = null;
     await user.save();
@@ -261,6 +262,35 @@ export class AuthService {
     void this.whatsappService.sendPasswordUpdatedMessage(user).catch((error) =>
       console.error('sendPasswordUpdatedMessage failed:', error),
     );
+    return true;
+  }
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<boolean> {
+    if (!currentPassword || !newPassword || newPassword.length < 8) {
+      throw new BadRequestException('Invalid password');
+    }
+
+    const user = await this.userModel.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const isPwdMatched = await bcrypt.compare(currentPassword, user.password);
+    if (!isPwdMatched) {
+      throw new UnauthorizedException('Current password invalid');
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    user.mustChangePassword = false;
+    await user.save();
+
+    void this.emailService.sendPasswordUpdatedEmail(user).catch((error) =>
+      console.error('sendPasswordUpdatedEmail failed:', error),
+    );
+    void this.whatsappService.sendPasswordUpdatedMessage(user).catch((error) =>
+      console.error('sendPasswordUpdatedMessage failed:', error),
+    );
+
     return true;
   }
 
