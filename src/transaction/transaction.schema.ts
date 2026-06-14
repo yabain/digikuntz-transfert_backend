@@ -208,6 +208,16 @@ export class Transaction {
   // If transaction is for service
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
   serviceId: Service;
+
+  /**
+   * Marqueur dénormalisé : `true` quand la transaction représente un retrait
+   * initié via l'API `/dev/payout` (transactionType reste `apiCall` pour
+   * conserver la rétro-compatibilité des intégrations existantes). Toutes les
+   * vues admin de retraits doivent inclure les documents avec cet indicateur,
+   * et le flow de retry directe sur ce type de transaction est désactivé.
+   */
+  @Prop({ default: false, index: true })
+  isApiPayout?: boolean;
 }
 
 export const TransactionSchema = SchemaFactory.createForClass(Transaction);
@@ -218,3 +228,4 @@ TransactionSchema.index({ userId: 1, createdAt: -1 });
 TransactionSchema.index({ senderId: 1, createdAt: -1 });
 TransactionSchema.index({ receiverId: 1, createdAt: -1 });
 TransactionSchema.index({ fundraisingId: 1, createdAt: -1 });
+TransactionSchema.index({ isApiPayout: 1, status: 1, createdAt: -1 });

@@ -96,7 +96,12 @@ export class TransactionService {
       {
         $match: {
           $and: [
-            { transactionType: { $in: ['transfer', 'withdrawal'] } },
+            {
+              $or: [
+                { transactionType: { $in: ['transfer', 'withdrawal'] } },
+                { isApiPayout: true },
+              ],
+            },
             { ...keywordFilter },
           ],
         },
@@ -184,17 +189,32 @@ export class TransactionService {
     const currentPage = Number(query?.page) || 1;
     const skip = resPerPage * (currentPage - 1);
 
-    let matchCondition: any = {
-      transactionType: { $in: ['transfer', 'withdrawal'] },
+    const withdrawalLikeMatch = {
+      $or: [
+        { transactionType: { $in: ['transfer', 'withdrawal'] } },
+        { isApiPayout: true },
+      ],
     };
+
+    let matchCondition: any = { ...withdrawalLikeMatch };
 
     switch (status) {
       case 'rejected':
-        matchCondition.status = 'transaction_payin_rejected';
+        matchCondition = {
+          $and: [
+            { status: 'transaction_payin_rejected' },
+            withdrawalLikeMatch,
+          ],
+        };
         break;
 
       case 'accepted':
-        matchCondition.status = 'transaction_payout_success';
+        matchCondition = {
+          $and: [
+            { status: 'transaction_payout_success' },
+            withdrawalLikeMatch,
+          ],
+        };
         break;
 
       case 'pending':
@@ -208,7 +228,7 @@ export class TransactionService {
                 ],
               },
             },
-            { transactionType: { $in: ['transfer', 'withdrawal'] } },
+            withdrawalLikeMatch,
           ],
         };
         break;
@@ -216,18 +236,19 @@ export class TransactionService {
       case 'error':
         matchCondition = {
           $and: [
-            {
-              status: {
-                $in: ['transaction_payout_error'],
-              },
-            },
-            { transactionType: { $in: ['transfer', 'withdrawal'] } },
+            { status: { $in: ['transaction_payout_error'] } },
+            withdrawalLikeMatch,
           ],
         };
         break;
 
       default:
-        matchCondition.status = 'transaction_payin_success';
+        matchCondition = {
+          $and: [
+            { status: 'transaction_payin_success' },
+            withdrawalLikeMatch,
+          ],
+        };
         break;
     }
 
@@ -311,7 +332,12 @@ export class TransactionService {
               $cond: [
                 {
                   $and: [
-                    { $eq: ['$transactionType', 'withdrawal'] },
+                    {
+                      $or: [
+                        { $eq: ['$transactionType', 'withdrawal'] },
+                        { $eq: ['$isApiPayout', true] },
+                      ],
+                    },
                     { $eq: ['$status', TStatus.PAYOUTSUCCESS] },
                   ],
                 },
@@ -355,7 +381,10 @@ export class TransactionService {
               },
             },
             {
-              transactionType: { $in: ['transfer', 'withdrawal'] }
+              $or: [
+                { transactionType: { $in: ['transfer', 'withdrawal'] } },
+                { isApiPayout: true },
+              ],
             },
             {
               updatedAt: { $lt: eightHoursAgo },
@@ -1237,7 +1266,10 @@ export class TransactionService {
 
   async getTotalWithdrawalTransaction(): Promise<number> {
     return await this.transactionModel.countDocuments({
-      transactionType: 'withdrawal',
+      $or: [
+        { transactionType: 'withdrawal' },
+        { isApiPayout: true },
+      ],
     });
   }
 
@@ -1253,7 +1285,10 @@ export class TransactionService {
   async getEndedWithdrawalTransaction(): Promise<number> {
     return await this.transactionModel.countDocuments({
       status: 'transaction_payout_success',
-      transactionType: 'withdrawal',
+      $or: [
+        { transactionType: 'withdrawal' },
+        { isApiPayout: true },
+      ],
     });
   }
 
@@ -1269,7 +1304,10 @@ export class TransactionService {
   async getErrorWithdrawalTransaction(): Promise<number> {
     return await this.transactionModel.countDocuments({
       status: 'transaction_payout_error',
-      transactionType: 'withdrawal',
+      $or: [
+        { transactionType: 'withdrawal' },
+        { isApiPayout: true },
+      ],
     });
   }
 
@@ -1283,7 +1321,10 @@ export class TransactionService {
   async getPendingWithdrawalTransaction(): Promise<number> {
     return await this.transactionModel.countDocuments({
       status: 'transaction_payin_success',
-      transactionType: 'withdrawal',
+      $or: [
+        { transactionType: 'withdrawal' },
+        { isApiPayout: true },
+      ],
     });
   }
 
@@ -1297,7 +1338,10 @@ export class TransactionService {
   async getRejectedWithdrawalTransaction(): Promise<number> {
     return await this.transactionModel.countDocuments({
       status: 'transaction_payin_rejected',
-      transactionType: 'withdrawal',
+      $or: [
+        { transactionType: 'withdrawal' },
+        { isApiPayout: true },
+      ],
     });
   }
   // ---------------- / System statistic ------------------------
@@ -1331,8 +1375,11 @@ export class TransactionService {
       throw new NotFoundException('Invalid user ID');
     }
     return await this.transactionModel.countDocuments({
-      transactionType: 'withdrawal',
-      userId: userId
+      userId: userId,
+      $or: [
+        { transactionType: 'withdrawal' },
+        { isApiPayout: true },
+      ],
     });
   }
 

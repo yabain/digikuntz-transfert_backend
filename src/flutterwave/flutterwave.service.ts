@@ -950,6 +950,18 @@ export class FlutterwaveService {
 
   // ---------- Payouts ----------
   async payout(transactionId: string, userId: any, retrying: boolean = false) {
+    // Retraits initiés via /dev/payout : pas de retry direct sur la même
+    // transaction. Le compte API doit créer une nouvelle requête (qui
+    // re-débitera son solde) pour relancer le paiement Flutterwave.
+    if (retrying) {
+      const current = await this.transactionService.findById(transactionId);
+      if (current?.isApiPayout === true) {
+        throw new ConflictException(
+          'Retry not allowed for API payouts. Create a new payout request from the API instead.',
+        );
+      }
+    }
+
     const transaction = await this.transactionService.claimTransactionForPayout(
       transactionId,
     );

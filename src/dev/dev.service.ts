@@ -320,6 +320,10 @@ export class DevService {
       raisonForTransfer: data.narration || 'API Payout',
       status: TStatus.PAYINSUCCESS,
       noFees: true,
+      // Marque la transaction comme un retrait initié via API : permet aux
+      // vues et notifications admin de l'inclure aux côtés des withdrawals
+      // « natifs » sans changer le `transactionType` (rétro-compatibilité).
+      isApiPayout: true,
       ...(webhookUrl && { callbackUrl: webhookUrl }),
     };
 

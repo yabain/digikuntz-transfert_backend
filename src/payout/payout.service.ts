@@ -318,7 +318,8 @@ export class PayoutService {
           if (
             transaction &&
             (transaction.transactionType === 'transfer' ||
-              transaction.transactionType === 'withdrawal')
+              transaction.transactionType === 'withdrawal' ||
+              transaction.isApiPayout === true)
           ) {
             void this.operationNotificationService.notifyAdminPayoutPending(transaction);
           }
