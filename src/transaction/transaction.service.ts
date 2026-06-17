@@ -550,6 +550,28 @@ export class TransactionService {
 
     return transaction;
   }
+
+  /**
+   * Recherche une transaction à partir de son `transactionRef` (référence
+   * lisible générée à la création, indexée). Utilisé par les consommateurs
+   * externes (Eat) qui préfèrent référencer la transaction par sa ref plutôt
+   * que par son `_id` Mongo.
+   */
+  async findByTransactionRef(transactionRef: string): Promise<any> {
+    const ref = String(transactionRef || '').trim();
+    if (!ref) throw new NotFoundException('Invalid transactionRef');
+    const transaction: any = await this.transactionModel
+      .findOne({ transactionRef: ref })
+      .populate('userId');
+    if (!transaction) {
+      throw new NotFoundException('transaction not found');
+    }
+    if (transaction.userId) {
+      transaction.userId.resetPasswordToken = '';
+      transaction.userId.password = '';
+    }
+    return transaction;
+  }
   
   async getTransactionsListOfUser(
     userId: any,

@@ -225,8 +225,21 @@ export class DevService {
 
   //// - Transaction requests
   async getTransactionData(transactionId: string, userId): Promise<any> {
-
     const transaction = await this.transactionService.findById(transactionId);
+    return this.serializeTransactionForApi(transaction, userId);
+  }
+
+  /**
+   * Variante de `getTransactionData` qui résout la transaction via son
+   * `transactionRef` plutôt que son `_id`. Utilisée par les consommateurs
+   * externes (Eat) qui poll la transaction par sa référence stable.
+   */
+  async getTransactionDataByRef(transactionRef: string, userId): Promise<any> {
+    const transaction = await this.transactionService.findByTransactionRef(transactionRef);
+    return this.serializeTransactionForApi(transaction, userId);
+  }
+
+  private async serializeTransactionForApi(transaction: any, userId: any): Promise<any> {
     if (!transaction) return 'no transaction found';
     if (!this.isUserInTransaction(transaction, userId)) return 'Unauthorized';
 
@@ -242,17 +255,45 @@ export class DevService {
     else if (transaction.status === 'transaction_payout_rejected') status = 'payout_rejected'
     else return 'unknown transaction status';
 
+    // Les statuts terminaux (succès/erreur/fermé/rejeté) n'ont pas besoin
+    // d'être re-vérifiés côté Flutterwave — leur état est déjà figé en base
+    // par l'admin ou la callback. Les apiPayouts n'ont pas de Payin associé
+    // (créés via /dev/payout, débit direct du solde), donc on évite aussi de
+    // chercher un objet Payin qui n'existe pas.
+    const isTerminalStatus = (
+      status === 'payout_success'
+      || status === 'payout_error'
+      || status === 'payout_closed'
+      || status === 'payout_rejected'
+      || status === 'payin_error'
+      || status === 'payin_closed'
+    );
+    const isApiPayout = !!(transaction as any).isApiPayout;
+
     let payIn: any = '';
-    if (transaction.status !== 'transaction_payin_success') {
-      // payIn = await this.payinService.verifyPayin(transaction.txRef);
-      payIn = await this.payinService.getPayinByTransactionId(transactionId);
+    if (
+      !isTerminalStatus
+      && !isApiPayout
+      && transaction.status !== 'transaction_payin_success'
+    ) {
+      payIn = await this.payinService.getPayinByTransactionId(String(transaction._id));
       if (!payIn) return 'payin not found';
       if (transaction.status.includes('payin')) {
         await this.fwService.verifyPayin(transaction.txRef);
-        const refreshedPayin = await this.payinService.getPayinByTransactionId(transactionId);
+        const refreshedPayin = await this.payinService.getPayinByTransactionId(String(transaction._id));
         if (refreshedPayin) payIn = refreshedPayin;
       } else if (transaction.status.includes('payout')) {
-        await this.fwService.verifyPayout(transaction.txRef, true);
+        // best-effort : si la vérification échoue (payout non trouvé côté
+        // Flutterwave pour des transactions rejetées avant envoi), on ne
+        // bloque pas la réponse — le statut local fait foi.
+        try {
+          await this.fwService.verifyPayout(transaction.txRef, true);
+        } catch (error: any) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `getTransactionData: verifyPayout(${transaction.txRef}) failed: ${error?.message || error}`,
+          );
+        }
       }
     }
     return {
@@ -283,9 +324,17 @@ export class DevService {
     callbackUrl?: string;
   }, userId: string): Promise<any> {
     const devData = await this.getDevDataByUserId(userId);
-    const webhookUrl = devData?.webhookUrl
+    // Priorité au callbackUrl fourni dans le corps de la requête (override
+    // par appel) ; sinon on retombe sur le webhookUrl configuré globalement
+    // dans les paramètres du dev. Permet à l'intégrateur (Eat) de scoper
+    // l'URL de webhook par transaction (ex: /webhook/digikuntz/:withdrawalId).
+    const requestCallbackUrl = data.callbackUrl
+      ? this.normalizeCallbackUrl(data.callbackUrl, 'callbackUrl')
+      : undefined;
+    const fallbackWebhookUrl = devData?.webhookUrl
       ? this.normalizeCallbackUrl(devData.webhookUrl, 'webhookUrl')
       : undefined;
+    const webhookUrl = requestCallbackUrl || fallbackWebhookUrl;
     const user = await this.userService.getUserById(userId);
     if (!user) throw new ConflictException('user not found');
     const payoutAmount = Number(data.amount);

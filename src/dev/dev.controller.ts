@@ -190,6 +190,27 @@ export class DevController {
     );
   }
 
+  @Get('transaction-by-ref')
+  @ApiOperation({
+    summary: 'Get API transaction data by its `transactionRef` (instead of Mongo _id)',
+  })
+  @ApiHeader({ name: 'x-user-id', required: true })
+  @ApiHeader({ name: 'x-secret-key', required: true })
+  @ApiQuery({ name: 'transactionRef', required: true, type: String })
+  @UsePipes(ValidationPipe)
+  async getTransactionDataByRef(
+    @Headers('x-user-id') userId: string,
+    @Headers('x-secret-key') secretKey: string,
+    @Query('transactionRef') transactionRef: string,
+  ): Promise<any> {
+    if (!secretKey) throw new NotFoundException('secretKey is required');
+    if (!userId) throw new NotFoundException('userId is required');
+    const valid = await this.devService.authKey(userId, secretKey);
+    if (!valid) return 'invalid credentials or invalid user status or API access desabled';
+    if (!transactionRef) throw new NotFoundException('transactionRef is required');
+    return this.devService.getTransactionDataByRef(transactionRef, userId);
+  }
+
   @Get('transaction')
   @ApiOperation({ summary: 'Get API transaction data with key headers' })
   @ApiHeader({ name: 'x-user-id', required: true })
