@@ -9,7 +9,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import type mongoose from 'mongoose';
+import mongoose from 'mongoose';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { randomBytes } from 'crypto';
@@ -1050,16 +1050,22 @@ export class PayinService {
     const currentPage = Number(query.page) || 1;
     const skip = resPerPage * (currentPage - 1);
 
-    const keyword = query.keyword
-      ? {
-          title: {
-            $regex: query.keyword,
-            $options: 'i',
-          },
-        }
-      : {};
+    let keywordFilter: any = {};
+    if (typeof query.keyword === 'string' && query.keyword) {
+      const kw = query.keyword;
+      const conditions: any[] = [
+        { txRef: { $regex: kw, $options: 'i' } },
+        { customerName: { $regex: kw, $options: 'i' } },
+        { customerEmail: { $regex: kw, $options: 'i' } },
+      ];
+      if (mongoose.Types.ObjectId.isValid(kw)) {
+        conditions.push({ _id: new mongoose.Types.ObjectId(kw) });
+        conditions.push({ transactionId: new mongoose.Types.ObjectId(kw) });
+      }
+      keywordFilter = { $or: conditions };
+    }
     const transactions = await this.payinModel
-      .find({ ...keyword })
+      .find(keywordFilter)
       .limit(resPerPage)
       .sort({ createdAt: -1 }) // Sort recent to old
       .skip(skip)

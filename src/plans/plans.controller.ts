@@ -12,7 +12,9 @@ import {
   Put,
   Query,
   Req,
+  UploadedFiles,
   UseGuards,
+  UseInterceptors,
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
@@ -21,12 +23,15 @@ import { AuthGuard } from '@nestjs/passport';
 import {
   ApiBearerAuth,
   ApiBody,
+  ApiConsumes,
   ApiOperation,
   ApiParam,
   ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import { multerConfigForPlan } from '../multer.config';
 import { PlansService } from './plans.service';
 import { Plans } from './plans.schema';
 import { CreatePlansDto } from './create-plans.dto';
@@ -113,6 +118,14 @@ export class PlansController {
     return this.plansService.getPlansList(userId, req.user);
   }
 
+  @Get('public-plan-list/:id')
+  @ApiOperation({ summary: 'Get public plans list of a user (no auth required)' })
+  @ApiParam({ name: 'id', description: 'User ID', type: String })
+  @ApiResponse({ status: 200, description: 'Public plans list returned.', schema: { example: [] } })
+  async getPublicPlansList(@Param('id') userId: string): Promise<any> {
+    return this.plansService.getPublicPlansList(userId);
+  }
+
   @Put('update-status/:id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Toggle plan active status' })
@@ -173,6 +186,34 @@ export class PlansController {
     @Req() req,
   ): Promise<any> {
     return this.plansService.updatePlans(req.user, plansId, plansData);
+  }
+
+  @Put('picture/:id')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Upload plan picture' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        pictureFile: { type: 'string', format: 'binary', description: 'Plan picture file' },
+      },
+    },
+  })
+  @ApiParam({ name: 'id', description: 'Plan ID', type: String })
+  @ApiResponse({ status: 200, description: 'Plan picture updated.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UseInterceptors(FilesInterceptor('pictureFile', 1, multerConfigForPlan))
+  async uploadPicture(
+    @Param('id') plansId: string,
+    @UploadedFiles() picture: Array<Express.Multer.File>,
+    @Req() req,
+  ): Promise<any> {
+    if (!picture || picture.length === 0) {
+      throw new NotFoundException('No file uploaded');
+    }
+    return this.plansService.updatePlanPicture(plansId, picture, req.user);
   }
 
   @Delete('delete/:id')

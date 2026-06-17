@@ -297,6 +297,18 @@ export class ServicePaymentController {
     return this.servicePaymentService.getItemStatistics(userId);
   }
 
+  @Get('service/:serviceId')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get payers by service',
+    description: 'Retrieve all payments for a specific service.',
+  })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async getPayersByService(@Param('serviceId') serviceId: string): Promise<any> {
+    return this.servicePaymentService.getPayersByServiceId(serviceId);
+  }
+
   /**
    * Get servicePayment by ID
    * @param servicePaymentId - ID of the servicePayment to retrieve

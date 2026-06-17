@@ -123,6 +123,22 @@ export const multerConfigForService = {
   },
 };
 
+// Configuration for Multer to handle plan image uploads
+export const multerConfigForPlan = {
+  storage: diskStorage({
+    destination: getUploadPath(),
+    filename: (req, file, callback) => {
+      const planId = req.params.id;
+      const fileExt = path.extname(file.originalname);
+      const fileName = `planImage_${planId}${fileExt}`;
+      callback(null, fileName);
+    },
+  }),
+  limits: {
+    fileSize: 2 * 1024 * 1024, // 2 MB
+  },
+};
+
 // Configuration for Multer to handle fundraising cover uploads
 export const multerConfigForFundraising = {
   storage: diskStorage({

@@ -20,6 +20,8 @@ import { AuthService } from 'src/auth/auth.service';
 import { SubscriptionService } from './subscription/subscription.service';
 import { WhatsappService } from 'src/wa/whatsapp.service';
 import { UserService } from 'src/user/user.service';
+import { EmailService } from 'src/email/email.service';
+import { generateFileUrl } from '../multer.config';
 import { randomBytes } from 'crypto';
 
 @Injectable()
@@ -36,6 +38,7 @@ export class PlansService {
     @Inject(forwardRef(() => WhatsappService))
     private waService: WhatsappService,
     private userService: UserService,
+    private emailService: EmailService,
   ) { }
 
   private sanitizeUser(user: any): any {
@@ -103,6 +106,28 @@ export class PlansService {
     }
 
     // console.log('user plan list', resp);
+    return resp;
+  }
+
+  async getPublicPlansList(userId: string): Promise<Plans[]> {
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new NotFoundException('Invalid user ID');
+    }
+
+    const plansList = await this.plansModel
+      .find({ author: userId })
+      .populate('author', 'firstName lastName name email phone whatsapp accountType pictureUrl countryId cityId');
+    if (!plansList) {
+      return [];
+    }
+
+    const resp: any = [];
+    for (const plan of plansList) {
+      const planOption = await this.optionsService.getAllOptionsOfPlans(plan._id);
+      const planData = { ...plan.toObject(), options: planOption };
+      resp.push(planData);
+    }
+
     return resp;
   }
 
@@ -236,23 +261,42 @@ export class PlansService {
         }
         userCreation = false;
       } else if (userCreation) {
-        user.password = randomBytes(12).toString('base64url');
+        const plainPassword = randomBytes(12).toString('base64url');
+        user.password = plainPassword;
         user.mustChangePassword = true;
-        newUser = await this.authService.signUp(user, false);
+        newUser = await this.authService.signUp(user, true, true, false);
         if (!newUser) {
           throw new NotFoundException('Unable to add this user');
         }
+
+        const createdUser = newUser.userData;
+        const userName = createdUser.name || `${createdUser.firstName || ''} ${createdUser.lastName || ''}`.trim() || createdUser.email;
+        void this.emailService.sendEmail(
+          createdUser.email,
+          'Vos identifiants de connexion - digiKUNTZ Payments',
+          `<p>Bonjour ${userName},</p>
+          <p>Votre compte a été créé sur <strong>digiKUNTZ Payments</strong>.</p>
+          <p>Voici vos identifiants de connexion :</p>
+          <ul>
+            <li><strong>Email :</strong> ${createdUser.email}</li>
+            <li><strong>Mot de passe :</strong> ${plainPassword}</li>
+          </ul>
+          <p>Nous vous recommandons de changer votre mot de passe après votre première connexion.</p>
+          <p>Vous avez été assigné au plan : <strong>${plan.title}</strong>.</p>
+          <p>Votre abonnement sera actif après paiement.</p>`
+        );
       }
+
+      const quantity = Number(dataBackup.quantity) || 1;
 
       const subscription = await this.subscriptionService.subscribe({
         userId: selectedUserId || newUser.userData._id,
         receiverId: plan.author._id,
         planId: plan._id,
-        quantity: 0,
+        quantity,
         cycle: plan.cycle,
         startDate: dataBackup.subscriptionStartDate,
-        endDate: userCreation ? dataBackup.subscriptionStartDate : this.calculateEndDate(dataBackup.subscriptionStartDate, plan.cycle, dataBackup.quantity),
-         // endDate:  dataBackup.subscriptionEndDate,
+        endDate: this.calculateEndDate(dataBackup.subscriptionStartDate, plan.cycle, quantity),
         status: false,
       });
 
@@ -428,6 +472,29 @@ export class PlansService {
     } else {
       throw new ForbiddenException('Unauthorized');
     }
+  }
+
+  async updatePlanPicture(plansId: string, picture: Array<Express.Multer.File>, userData: any): Promise<any> {
+    if (!mongoose.Types.ObjectId.isValid(plansId)) {
+      throw new NotFoundException('Invalid plan ID');
+    }
+
+    const plan = await this.plansModel.findById(plansId);
+    if (!plan) {
+      throw new NotFoundException('Plan not found');
+    }
+
+    if (plan.author.toString() !== userData._id.toString() && !userData.isAdmin) {
+      throw new ForbiddenException('Unauthorized');
+    }
+
+    const imageUrl = generateFileUrl(picture[0].filename);
+
+    return this.plansModel.findByIdAndUpdate(
+      plansId,
+      { imageUrl },
+      { new: true, runValidators: true },
+    );
   }
 
   async searchByTitle(query: Query): Promise<any[]> {

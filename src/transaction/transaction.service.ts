@@ -63,14 +63,8 @@ export class TransactionService {
     const currentPage = Number(query.page) || 1;
     const skip = resPerPage * (currentPage - 1);
 
-    const keyword = query.keyword
-      ? {
-        title: {
-          $regex: query.keyword,
-          $options: 'i',
-        },
-      }
-      : {};
+    const searchKeyword = typeof query.keyword === 'string' ? query.keyword : '';
+    const keyword = searchKeyword ? this.buildKeywordFilter(searchKeyword) : {};
     const transactions = await this.transactionModel
       .find({ ...keyword })
       .select(this.listProjection)
@@ -81,28 +75,51 @@ export class TransactionService {
     return transactions;
   }
 
+  private buildKeywordFilter(keyword?: string): any {
+    if (!keyword) return {};
+
+    const conditions: any[] = [
+      { transactionRef: { $regex: keyword, $options: 'i' } },
+      { senderName: { $regex: keyword, $options: 'i' } },
+      { receiverName: { $regex: keyword, $options: 'i' } },
+    ];
+
+    if (mongoose.Types.ObjectId.isValid(keyword)) {
+      conditions.push({ _id: new mongoose.Types.ObjectId(keyword) });
+    }
+
+    return { $or: conditions };
+  }
+
+  private apiPayoutMatch(): any {
+    return { isApiPayout: true };
+  }
+
+  private withdrawalPayoutMatch(): any {
+    return {
+      $or: [{ transactionType: 'withdrawal' }, this.apiPayoutMatch()],
+    };
+  }
+
+  private payoutTransactionMatch(): any {
+    return {
+      $or: [{ transactionType: 'transfer' }, this.withdrawalPayoutMatch()],
+    };
+  }
+
   async getAllPayoutTransactoins(query: Query): Promise<Transaction[]> {
     const resPerPage = Number(query?.resPerPage) || 10;
     const currentPage = Number(query?.page) || 1;
     const skip = resPerPage * (currentPage - 1);
 
-    const keywordFilter = query.keyword
-      ? {
-        title: { $regex: query.keyword, $options: 'i' },
-      }
-      : {};
+    const keywordFilter = typeof query.keyword === 'string' ? this.buildKeywordFilter(query.keyword) : {};
 
     const res = await this.transactionModel.aggregate([
       {
         $match: {
           $and: [
-            {
-              $or: [
-                { transactionType: { $in: ['transfer', 'withdrawal'] } },
-                { isApiPayout: true },
-              ],
-            },
-            { ...keywordFilter },
+            this.payoutTransactionMatch(),
+            keywordFilter,
           ],
         },
       },
@@ -138,13 +155,18 @@ export class TransactionService {
 
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
-    const matchFilter = {
+    const userFilter = {
       $or: [
         { receiverId: userId },
         { senderId: userObjectId },
         { userId: userObjectId },
       ],
     };
+
+    const keywordFilter = typeof query.keyword === 'string' ? this.buildKeywordFilter(query.keyword) : {};
+    const matchFilter = Object.keys(keywordFilter).length
+      ? { $and: [userFilter, keywordFilter] as any[] }
+      : userFilter;
 
     const aggregated = await this.transactionModel.aggregate([
       { $match: matchFilter },
@@ -189,12 +211,7 @@ export class TransactionService {
     const currentPage = Number(query?.page) || 1;
     const skip = resPerPage * (currentPage - 1);
 
-    const withdrawalLikeMatch = {
-      $or: [
-        { transactionType: { $in: ['transfer', 'withdrawal'] } },
-        { isApiPayout: true },
-      ],
-    };
+    const withdrawalLikeMatch = this.payoutTransactionMatch();
 
     let matchCondition: any = { ...withdrawalLikeMatch };
 
@@ -202,7 +219,14 @@ export class TransactionService {
       case 'rejected':
         matchCondition = {
           $and: [
-            { status: 'transaction_payin_rejected' },
+            {
+              status: {
+                $in: [
+                  TStatus.PAYOUTREJECTED,
+                  'transaction_payin_rejected',
+                ],
+              },
+            },
             withdrawalLikeMatch,
           ],
         };
@@ -236,7 +260,14 @@ export class TransactionService {
       case 'error':
         matchCondition = {
           $and: [
-            { status: { $in: ['transaction_payout_error'] } },
+            {
+              status: {
+                $in: [
+                  'transaction_payout_error',
+                  'transaction_payin_error',
+                ],
+              },
+            },
             withdrawalLikeMatch,
           ],
         };
@@ -250,6 +281,13 @@ export class TransactionService {
           ],
         };
         break;
+    }
+
+    const statusKeyword = typeof query?.keyword === 'string' ? query.keyword : '';
+    if (statusKeyword) {
+      matchCondition = {
+        $and: [matchCondition, this.buildKeywordFilter(statusKeyword)],
+      };
     }
 
     const res = await this.transactionModel.aggregate([
@@ -822,9 +860,9 @@ export class TransactionService {
         {
           _id: transactionId,
           status: TStatus.PAYINSUCCESS,
-          transactionType: { $in: ['transfer', 'withdrawal', 'apiCall'] },
+          ...this.payoutTransactionMatch(),
         },
-        { status: 'transaction_payin_rejected' },
+        { status: TStatus.PAYOUTREJECTED },
         { new: true },
       )
       .exec();
@@ -1265,12 +1303,9 @@ export class TransactionService {
   }
 
   async getTotalWithdrawalTransaction(): Promise<number> {
-    return await this.transactionModel.countDocuments({
-      $or: [
-        { transactionType: 'withdrawal' },
-        { isApiPayout: true },
-      ],
-    });
+    return await this.transactionModel.countDocuments(
+      this.withdrawalPayoutMatch(),
+    );
   }
 
   async getEndedTransferTransaction(): Promise<number> {
@@ -1285,17 +1320,14 @@ export class TransactionService {
   async getEndedWithdrawalTransaction(): Promise<number> {
     return await this.transactionModel.countDocuments({
       status: 'transaction_payout_success',
-      $or: [
-        { transactionType: 'withdrawal' },
-        { isApiPayout: true },
-      ],
+      ...this.withdrawalPayoutMatch(),
     });
   }
 
   async getErrorTransferTransaction(): Promise<number> {
     return await this.transactionModel.countDocuments(
       {
-        status: 'transaction_payout_error',
+        status: { $in: ['transaction_payout_error', 'transaction_payin_error'] },
         transactionType: 'transfer',
       },
     );
@@ -1303,11 +1335,8 @@ export class TransactionService {
 
   async getErrorWithdrawalTransaction(): Promise<number> {
     return await this.transactionModel.countDocuments({
-      status: 'transaction_payout_error',
-      $or: [
-        { transactionType: 'withdrawal' },
-        { isApiPayout: true },
-      ],
+      status: { $in: ['transaction_payout_error', 'transaction_payin_error'] },
+      ...this.withdrawalPayoutMatch(),
     });
   }
 
@@ -1321,27 +1350,25 @@ export class TransactionService {
   async getPendingWithdrawalTransaction(): Promise<number> {
     return await this.transactionModel.countDocuments({
       status: 'transaction_payin_success',
-      $or: [
-        { transactionType: 'withdrawal' },
-        { isApiPayout: true },
-      ],
+      ...this.withdrawalPayoutMatch(),
     });
   }
 
   async getRejectedTransferTransaction(): Promise<number> {
     return await this.transactionModel.countDocuments({
-      status: 'transaction_payin_rejected',
+      status: {
+        $in: [TStatus.PAYOUTREJECTED, 'transaction_payin_rejected'],
+      },
       transactionType: 'transfer',
     });
   }
 
   async getRejectedWithdrawalTransaction(): Promise<number> {
     return await this.transactionModel.countDocuments({
-      status: 'transaction_payin_rejected',
-      $or: [
-        { transactionType: 'withdrawal' },
-        { isApiPayout: true },
-      ],
+      status: {
+        $in: [TStatus.PAYOUTREJECTED, 'transaction_payin_rejected'],
+      },
+      ...this.withdrawalPayoutMatch(),
     });
   }
   // ---------------- / System statistic ------------------------
@@ -1376,10 +1403,7 @@ export class TransactionService {
     }
     return await this.transactionModel.countDocuments({
       userId: userId,
-      $or: [
-        { transactionType: 'withdrawal' },
-        { isApiPayout: true },
-      ],
+      ...this.withdrawalPayoutMatch(),
     });
   }
 

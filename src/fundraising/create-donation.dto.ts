@@ -10,6 +10,10 @@ export class CreateDonationDto {
   visibility?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  isAnonymous?: boolean;
+
+  @IsOptional()
   @IsString()
   message?: string;
 }

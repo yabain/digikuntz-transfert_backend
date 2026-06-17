@@ -313,6 +313,8 @@ export class DevService {
       senderCountry: user.countryId.name,
       senderCurrency: user.countryId.currency,
       receiverName: data.receiverName,
+      receiverAmount: payoutAmount,
+      receiverCountry: user.countryId.name,
       receiverCurrency: data.currency,
       receiverCountryCode: user.countryId?.code,
       bankCode: data.accountBankCode,

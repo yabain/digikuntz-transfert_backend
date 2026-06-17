@@ -13,7 +13,7 @@ export class Donation {
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: User.name, required: true })
   fundraisingCreatorId: string;
 
-  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: User.name, required: true })
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: User.name })
   donorId: string;
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: Transaction.name, required: true, unique: true })
@@ -30,6 +30,15 @@ export class Donation {
 
   @Prop({ default: '' })
   message: string;
+
+  @Prop({ default: false })
+  isAnonymous: boolean;
+
+  @Prop()
+  donorName: string;
+
+  @Prop()
+  donorEmail: string;
 
   @Prop({ default: 'successful' })
   status: string;

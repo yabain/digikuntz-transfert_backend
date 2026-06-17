@@ -12,6 +12,7 @@ import { UserService } from 'src/user/user.service';
 import { BalanceService } from 'src/balance/balance.service';
 import { OperationNotificationService } from 'src/notification/operation-notification.service';
 import { CreateDonationDto } from './create-donation.dto';
+import { CreatePublicDonationDto } from './create-public-donation.dto';
 import { CreateFundraisingDto } from './create-fundraising.dto';
 import {
   Fundraising,
@@ -357,6 +358,62 @@ export class FundraisingService {
       .exec();
   }
 
+  async buildPublicDonationTransactionData(
+    fundraisingId: string,
+    data: CreatePublicDonationDto,
+  ) {
+    const fundraising = await this.findById(fundraisingId);
+    if (fundraising.status !== true) {
+      throw new BadRequestException('This fundraising is not active');
+    }
+    if (fundraising.visibility !== FundraisingVisibility.PUBLIC) {
+      throw new BadRequestException('This fundraising is private');
+    }
+    if (new Date(fundraising.endDate) <= new Date()) {
+      throw new BadRequestException('This fundraising is closed');
+    }
+
+    const creator: any = fundraising.creatorId;
+    if (!creator) {
+      throw new NotFoundException('Fundraising creator not found');
+    }
+
+    const countryCodeReceiver = creator?.countryId?.code?.toString?.() || '';
+
+    return {
+      transactionRef: `PUB-DON-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+      estimation: Number(data.amount),
+      transactionType: 'fundraising',
+      fundraisingId: String(fundraising._id),
+      donorVisibility: false,
+      donationMessage: data.message || '',
+      raisonForTransfer:
+        data.message || `Donation for fundraising: ${fundraising.title}`,
+
+      senderId: undefined,
+      senderName: data.donorName || 'Anonymous',
+      senderEmail: data.donorEmail || 'anonymous@donation.com',
+      senderContact: '',
+      senderCountry: '',
+      senderCountryCode: '',
+      senderCurrency: fundraising.currency,
+
+      receiverId: creator._id.toString(),
+      receiverName: creator?.name || `${creator.firstName} ${creator.lastName}`,
+      receiverEmail: creator.email,
+      receiverContact: creator.phone,
+      receiverCountry: creator?.countryId?.name || '',
+      receiverCountryCode: countryCodeReceiver,
+      receiverCurrency: fundraising.currency,
+
+      isAnonymous: true,
+      donorName: data.donorName || '',
+      donorEmail: data.donorEmail || '',
+
+      status: 'transaction_payin_pending',
+    };
+  }
+
   async buildDonationTransactionData(
     fundraisingId: string,
     donorId: string,
@@ -373,9 +430,14 @@ export class FundraisingService {
       throw new BadRequestException('This fundraising is closed');
     }
 
+    const creatorFromFund: any = fundraising.creatorId;
+    const creatorId = creatorFromFund?._id
+      ? String(creatorFromFund._id)
+      : String(creatorFromFund);
+
     const [donor, creator] = await Promise.all([
       this.userService.getUserById(donorId),
-      this.userService.getUserById(String(fundraising.creatorId)),
+      this.userService.getUserById(creatorId),
     ]);
 
     if (!donor) {
@@ -393,7 +455,8 @@ export class FundraisingService {
       estimation: Number(data.amount),
       transactionType: 'fundraising',
       fundraisingId: String(fundraising._id),
-      donorVisibility: typeof data.visibility === 'boolean' ? data.visibility : true,
+      donorVisibility: data.isAnonymous ? false : (typeof data.visibility === 'boolean' ? data.visibility : true),
+      isAnonymous: data.isAnonymous === true,
       donationMessage: data.message || '',
       raisonForTransfer:
         data.message || `Donation for fundraising: ${fundraising.title}`,
@@ -441,10 +504,12 @@ export class FundraisingService {
       throw new BadRequestException('Invalid donation amount');
     }
 
+    const donorId = transaction.senderId || transaction.userId || undefined;
+
     const donation = await this.donationModel.create({
       fundraisingId: String(fundraising._id),
       fundraisingCreatorId: String(fundraising.creatorId),
-      donorId: String(transaction.senderId || transaction.userId),
+      donorId: donorId || undefined,
       transactionId: String(transaction._id),
       amount,
       currency: fundraising.currency,
@@ -452,6 +517,9 @@ export class FundraisingService {
         typeof transaction.donorVisibility === 'boolean'
           ? transaction.donorVisibility
           : true,
+      isAnonymous: transaction.isAnonymous === true,
+      donorName: transaction.donorName || '',
+      donorEmail: transaction.donorEmail || '',
       message: transaction.donationMessage || '',
       status: 'successful',
     });

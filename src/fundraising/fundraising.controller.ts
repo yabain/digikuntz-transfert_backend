@@ -30,6 +30,7 @@ import { FilesInterceptor } from '@nestjs/platform-express';
 import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
 import { multerConfigForFundraising } from 'src/multer.config';
 import { CreateDonationDto } from './create-donation.dto';
+import { CreatePublicDonationDto } from './create-public-donation.dto';
 import { CreateFundraisingDto } from './create-fundraising.dto';
 import { FundraisingService } from './fundraising.service';
 import { UpdateFundraisingDto } from './update-fundraising.dto';
@@ -393,5 +394,28 @@ export class FundraisingController {
       body,
     );
     return this.flutterwaveService.createPayin(transactionData, String(req.user._id));
+  }
+
+  @Post(':id/donate/public')
+  @ApiOperation({
+    summary: 'Create a public/anonymous donation payin (no login required)',
+    description:
+      'Allows anyone to donate without authentication. Donor name/email are optional.',
+  })
+  @ApiParam({ name: 'id', description: 'Fundraising ID' })
+  @ApiBody({ type: CreatePublicDonationDto })
+  @ApiResponse({ status: 201, description: 'Donation payin initialized.' })
+  @ApiResponse({ status: 400, description: 'Invalid donation payload or fundraising unavailable.' })
+  @ApiResponse({ status: 404, description: 'Fundraising not found.' })
+  @UsePipes(ValidationPipe)
+  async donatePublic(
+    @Param('id') fundraisingId: string,
+    @Body() body: CreatePublicDonationDto,
+  ) {
+    const transactionData = await this.fundraisingService.buildPublicDonationTransactionData(
+      fundraisingId,
+      body,
+    );
+    return this.flutterwaveService.createPayin(transactionData, undefined);
   }
 }

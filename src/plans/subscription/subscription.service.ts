@@ -185,9 +185,7 @@ export class SubscriptionService {
       throw new NotFoundException('Subscription not found');
     }
 
-    // const incrementSubscriberOnPlan = await this.plansService.incrementSubscriberNumber(subscriptionWithDates.planId.toString());
-
-    // console.log('incrementSubscriberOnPlan: ', incrementSubscriberOnPlan);
+    await this.plansService.incrementSubscriberNumber(subscriptionWithDates.planId.toString());
 
     void this.whatsappService.sendNewSubscriberMessageForPlanAuthor(
       subscription.planId,
@@ -234,7 +232,7 @@ export class SubscriptionService {
     if (!subscription) {
       throw new NotFoundException('Subscription not found');
     }
-    // await this.plansService.incrementSubscriberNumber(subscription.planId.toString());
+    await this.plansService.incrementSubscriberNumber(subscription.planId.toString());
 
     if (startDate != endDate) {
       const item = {

@@ -334,6 +334,18 @@ export class ServicePaymentService {
     }
   }
 
+  async getPayersByServiceId(serviceId: string): Promise<ServicePayment[]> {
+    if (!mongoose.Types.ObjectId.isValid(serviceId)) {
+      throw new NotFoundException('Invalid service ID');
+    }
+
+    try {
+      return await this.serviceModel.find({ serviceId }).populate('userId').exec();
+    } catch (e) {
+      throw new NotFoundException('Error to find payers for service: ' + e);
+    }
+  }
+
   async searchByTitle(query: Query): Promise<ServicePayment[]> {
     const resPerPage = 20;
     const currentPage = Number(query.page) || 1;
