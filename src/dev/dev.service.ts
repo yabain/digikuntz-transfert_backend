@@ -324,17 +324,13 @@ export class DevService {
     callbackUrl?: string;
   }, userId: string): Promise<any> {
     const devData = await this.getDevDataByUserId(userId);
-    // Priorité au callbackUrl fourni dans le corps de la requête (override
-    // par appel) ; sinon on retombe sur le webhookUrl configuré globalement
-    // dans les paramètres du dev. Permet à l'intégrateur (Eat) de scoper
-    // l'URL de webhook par transaction (ex: /webhook/digikuntz/:withdrawalId).
-    const requestCallbackUrl = data.callbackUrl
-      ? this.normalizeCallbackUrl(data.callbackUrl, 'callbackUrl')
-      : undefined;
-    const fallbackWebhookUrl = devData?.webhookUrl
-      ? this.normalizeCallbackUrl(devData.webhookUrl, 'webhookUrl')
-      : undefined;
-    const webhookUrl = requestCallbackUrl || fallbackWebhookUrl;
+    // Pour un payout, il n'y a pas de redirection utilisateur (le `callbackUrl`
+    // du body est réservé au flow payin pour rediriger après paiement
+    // Flutterwave). L'URL de webhook pour les changements de statut vient
+    // exclusivement de la config globale du dev (`devData.webhookUrl`).
+    // Validation non bloquante : URL mal formée → warn + ignorée plutôt que
+    // de tuer toute la transaction.
+    const webhookUrl = this.safeNormalizeCallbackUrl(devData?.webhookUrl, 'webhookUrl');
     const user = await this.userService.getUserById(userId);
     if (!user) throw new ConflictException('user not found');
     const payoutAmount = Number(data.amount);
@@ -514,6 +510,25 @@ export class DevService {
       senderId === normalizedUserId ||
       receiverId === normalizedUserId
     );
+  }
+
+  /**
+   * Wrapper non-throwing de `normalizeCallbackUrl` : si la validation échoue
+   * (URL invalide / mauvais protocole en prod), on retourne `undefined` et on
+   * loggue un warning au lieu de propager une BadRequestException. Évite
+   * qu'un mauvais webhook fasse échouer toute la transaction de payout.
+   */
+  private safeNormalizeCallbackUrl(callbackUrl?: string, fieldName = 'callbackUrl'): string | undefined {
+    if (!callbackUrl) return undefined;
+    try {
+      return this.normalizeCallbackUrl(callbackUrl, fieldName);
+    } catch (error: any) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `createPayoutTransaction: ignoring invalid ${fieldName} "${callbackUrl}" — ${error?.message || error}`,
+      );
+      return undefined;
+    }
   }
 
   private normalizeCallbackUrl(callbackUrl?: string, fieldName = 'callbackUrl'): string | undefined {
