@@ -206,6 +206,117 @@ export class TransactionService {
     };
   }
 
+  async getApiCallTransactions(
+    userId: string,
+    query: {
+      page?: number;
+      limit?: number;
+      startDate?: string;
+      endDate?: string;
+      status?: string;
+      type?: 'payin' | 'payout';
+    },
+  ): Promise<any> {
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new NotFoundException('Invalid user ID');
+    }
+
+    const page = Number(query.page) > 0 ? Number(query.page) : 1;
+    const requestedLimit = Number(query.limit);
+    const limit = requestedLimit > 0 ? Math.min(requestedLimit, 100) : 10;
+    const skip = (page - 1) * limit;
+
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const matchFilter: any = {
+      $and: [
+        { transactionType: 'apiCall' },
+        {
+          $or: [
+            { receiverId: userId },
+            { senderId: userObjectId },
+            { userId: userObjectId },
+          ],
+        },
+      ],
+    };
+
+    if (query.startDate || query.endDate) {
+      const dateFilter: any = {};
+      if (query.startDate) dateFilter.$gte = new Date(query.startDate);
+      if (query.endDate) dateFilter.$lte = new Date(query.endDate);
+      matchFilter.$and.push({ createdAt: dateFilter });
+    }
+
+    if (query.status) {
+      const statusMap: Record<string, string> = {
+        payin_pending: 'transaction_payin_pending',
+        payin_success: 'transaction_payin_success',
+        payin_error: 'transaction_payin_error',
+        payin_closed: 'transaction_payin_closed',
+        payout_pending: 'transaction_payout_pending',
+        payout_success: 'transaction_payout_success',
+        payout_error: 'transaction_payout_error',
+        payout_closed: 'transaction_payout_closed',
+        payout_rejected: 'transaction_payout_rejected',
+      };
+      const internalStatus = statusMap[query.status];
+      if (internalStatus) {
+        matchFilter.$and.push({ status: internalStatus });
+      }
+    }
+
+    if (query.type === 'payin') {
+      matchFilter.$and.push({
+        status: {
+          $in: [
+            'transaction_payin_pending', 'transaction_payin_success',
+            'transaction_payin_error', 'transaction_payin_closed',
+          ],
+        },
+      });
+    } else if (query.type === 'payout') {
+      matchFilter.$and.push({
+        $or: [
+          { status: { $in: [
+            'transaction_payout_pending', 'transaction_payout_success',
+            'transaction_payout_error', 'transaction_payout_closed',
+            'transaction_payout_rejected',
+          ] } },
+          { isApiPayout: true },
+        ],
+      });
+    }
+
+    const aggregated = await this.transactionModel.aggregate([
+      { $match: matchFilter },
+      { $sort: { createdAt: -1 } },
+      {
+        $facet: {
+          data: [
+            { $skip: skip },
+            { $limit: limit },
+            { $project: { raw: 0, message: 0, token: 0, reqErrorCode: 0, reqStatusCode: 0 } },
+          ],
+          totalCount: [{ $count: 'count' }],
+        },
+      },
+    ]);
+
+    const transactions = aggregated?.[0]?.data || [];
+    const total = aggregated?.[0]?.totalCount?.[0]?.count || 0;
+
+    return {
+      data: transactions,
+      pagination: {
+        currentPage: page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        totalItems: total,
+        hasNextPage: page * limit < total,
+      },
+    };
+  }
+
   async getPayoutListByStatus(status: string, query?: any): Promise<any> {
     const resPerPage = Number(query?.resPerPage) || 10;
     const currentPage = Number(query?.page) || 1;

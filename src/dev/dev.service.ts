@@ -121,6 +121,8 @@ export class DevService {
   }
 
   async resetKey(userId): Promise<any> {
+    const verifUser = await this.verifyUserConditions(userId);
+    if (!verifUser) return false;
     try {
       const sKey = this.generateKey('SK');
       const pKey = this.generateKey('PK')
@@ -169,6 +171,8 @@ export class DevService {
   }
 
   async updateStatus(userId: string, status: boolean) {
+    const verifUser = await this.verifyUserConditions(userId);
+    if (!verifUser) return false;
     const devData = await this.getDevDataByUserId(userId);
     if (!devData) return 'no developer found with this id';
     if (devData.userId.toString() !== userId.toString()) return 'unauthorized';
@@ -194,6 +198,8 @@ export class DevService {
   }
 
   async updateWebhookUrl(userId: string, webhookUrl?: string): Promise<any> {
+    const verifUser = await this.verifyUserConditions(userId);
+    if (!verifUser) return false;
     const devData = await this.getDevDataByUserId(userId);
     if (!devData) return 'no developer found with this id';
     if (devData.userId.toString() !== userId.toString()) return 'unauthorized';
@@ -466,6 +472,30 @@ export class DevService {
       currency: user.countryId.currency,
       lastUpdate: balance.updatedAt
     }
+  }
+
+  async getApiTransactions(userId: string, query: any): Promise<any> {
+    const res = await this.transactionService.getApiCallTransactions(userId, {
+      page: query.page,
+      limit: query.limit || 10,
+      startDate: query.startDate,
+      endDate: query.endDate,
+      status: query.status,
+      type: query.type,
+    });
+    return res;
+  }
+
+  async getApiPayouts(userId: string, query: any): Promise<any> {
+    const res = await this.transactionService.getApiCallTransactions(userId, {
+      page: query.page,
+      limit: query.limit || 10,
+      startDate: query.startDate,
+      endDate: query.endDate,
+      status: query.status,
+      type: 'payout',
+    });
+    return res;
   }
 
   async getTransactions(userId: string, query: { page?: number; limit?: number }): Promise<any> {

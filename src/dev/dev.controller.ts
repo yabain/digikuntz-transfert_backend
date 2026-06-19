@@ -464,6 +464,117 @@ export class DevController {
     return this.devService.createPayoutTransaction(data, userId);
   }
 
+  @Get('api-transactions')
+  @ApiOperation({ summary: 'Get paginated API transactions (apiCall) with filters' })
+  @ApiHeader({ name: 'x-user-id', required: true })
+  @ApiHeader({ name: 'x-secret-key', required: true })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
+  @ApiQuery({ name: 'startDate', required: false, type: String, example: '2025-01-01' })
+  @ApiQuery({ name: 'endDate', required: false, type: String, example: '2025-12-31' })
+  @ApiQuery({ name: 'status', required: false, type: String, example: 'payin_success', description: 'Filter by simplified status (payin_pending, payin_success, payin_error, payin_closed, payout_pending, payout_success, payout_error, payout_closed, payout_rejected)' })
+  @ApiQuery({ name: 'type', required: false, type: String, example: 'payin', description: 'Filter by transaction type: payin or payout' })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated API transactions list returned.',
+    schema: {
+      example: {
+        data: [
+          {
+            _id: '664f1a2b3c4d5e6f7a8b9c0d',
+            transactionType: 'apiCall',
+            status: 'transaction_payin_success',
+            estimation: '10000',
+            transactionRef: 'IN123#250101120000',
+            receiverCurrency: 'XAF',
+            createdAt: '2025-01-01T12:00:00.000Z',
+            updatedAt: '2025-01-01T12:00:00.000Z',
+          },
+        ],
+        pagination: {
+          currentPage: 1,
+          limit: 10,
+          totalPages: 3,
+          totalItems: 25,
+          hasNextPage: true,
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Missing/invalid credentials.' })
+  @UsePipes(ValidationPipe)
+  async getApiTransactions(
+    @Headers('x-user-id') userId: string,
+    @Headers('x-secret-key') secretKey: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('status') status?: string,
+    @Query('type') type?: string,
+  ): Promise<any> {
+    if (!secretKey) throw new NotFoundException('secretKey is required');
+    if (!userId) throw new NotFoundException('userId is required');
+    const valid = await this.devService.authKey(userId, secretKey);
+    if (!valid) return 'invalid credentials';
+    return this.devService.getApiTransactions(userId, { page, limit, startDate, endDate, status, type });
+  }
+
+  @Get('api-payouts')
+  @ApiOperation({ summary: 'Get paginated API payout transactions list (apiCall payouts only)' })
+  @ApiHeader({ name: 'x-user-id', required: true })
+  @ApiHeader({ name: 'x-secret-key', required: true })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
+  @ApiQuery({ name: 'startDate', required: false, type: String, example: '2025-01-01' })
+  @ApiQuery({ name: 'endDate', required: false, type: String, example: '2025-12-31' })
+  @ApiQuery({ name: 'status', required: false, type: String, example: 'payout_pending', description: 'Filter by simplified payout status' })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated API payout transactions list returned.',
+    schema: {
+      example: {
+        data: [
+          {
+            _id: '664f1a2b3c4d5e6f7a8b9c0d',
+            transactionType: 'apiCall',
+            isApiPayout: true,
+            status: 'transaction_payout_pending',
+            estimation: '5000',
+            transactionRef: 'IN598#260618164000',
+            receiverCurrency: 'XAF',
+            createdAt: '2025-01-01T12:00:00.000Z',
+            updatedAt: '2025-01-01T12:00:00.000Z',
+          },
+        ],
+        pagination: {
+          currentPage: 1,
+          limit: 10,
+          totalPages: 2,
+          totalItems: 15,
+          hasNextPage: true,
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Missing/invalid credentials.' })
+  @UsePipes(ValidationPipe)
+  async getApiPayouts(
+    @Headers('x-user-id') userId: string,
+    @Headers('x-secret-key') secretKey: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('status') status?: string,
+  ): Promise<any> {
+    if (!secretKey) throw new NotFoundException('secretKey is required');
+    if (!userId) throw new NotFoundException('userId is required');
+    const valid = await this.devService.authKey(userId, secretKey);
+    if (!valid) return 'invalid credentials';
+    return this.devService.getApiPayouts(userId, { page, limit, startDate, endDate, status });
+  }
+
   @Get('balance')
   @ApiOperation({ summary: 'Get user balance through API key headers' })
   @ApiHeader({ name: 'x-user-id', required: true })
