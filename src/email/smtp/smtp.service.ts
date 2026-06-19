@@ -24,7 +24,7 @@ export class SmtpService {
     const mailSmtp = await this.getSmtpData();
     let newMailSmtp: any;
     if (!mailSmtp) {
-      newMailSmtp = this.resetSmtp();
+      newMailSmtp = await this.resetSmtp();
     } else newMailSmtp = mailSmtp;
 
     return newMailSmtp;

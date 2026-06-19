@@ -737,19 +737,19 @@ export class FlutterwaveService {
       await this.handleService(transaction);
     }
     if (transaction.transactionType === 'withdrawal') {
-      await this.handleWithdrawal(transaction);
+      await this.handleWithdrawal(claimed);
     }
     if (transaction.transactionType === 'apiCall') {
-      await this.handleApiCall(transaction);
+      await this.handleApiCall(claimed);
     }
     if (transaction.transactionType === 'fundraising') {
-      await this.handleFundraising(transaction);
+      await this.handleFundraising(claimed);
     }
     if (transaction.transactionType === 'paymentRequest') {
-      await this.handlePaymentRequest(transaction);
+      await this.handlePaymentRequest(claimed);
     }
     if (transaction.transactionType === 'transfer') {
-      await this.handleTransfer(transaction);
+      await this.handleTransfer(claimed);
     }
 
     return;
