@@ -64,7 +64,7 @@ export class TransactionController {
 
   @Get('all-payout')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get all transactions (admin only)' })
+  @ApiOperation({ summary: 'Get all payout transactions (admin only)' })
   @ApiQuery({
     name: 'search',
     required: false,
@@ -153,7 +153,23 @@ export class TransactionController {
   })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
-  @ApiResponse({ status: 200, description: 'Plans Statistics.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Payout list returned.',
+    schema: {
+      example: {
+        _id: '6a341f60841d03dcfbf8b2f4',
+        transactionType: 'withdrawal',
+        estimation: '5000',
+        transactionRef: 'IN598#260618164000',
+        receiverCurrency: 'XAF',
+        status: 'transaction_payin_success',
+        isApiPayout: false,
+        createdAt: '2026-06-18T16:40:00.590Z',
+        updatedAt: '2026-06-19T18:43:10.624Z',
+      },
+    },
+  })
   @ApiResponse({ status: 401, description: 'Authentication required.' })
   @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
@@ -201,8 +217,22 @@ export class TransactionController {
   @Put('reject-payout/:transactionId')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Reject a payout awaiting admin validation (admin only)' })
-  @ApiParam({ name: 'transactionId', description: 'Internal transaction ID' })
-  @ApiResponse({ status: 200, description: 'Payout transaction rejected.' })
+  @ApiParam({ name: 'transactionId', example: '6a341f60841d03dcfbf8b2f4', description: 'Internal transaction ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Payout transaction rejected and balance refunded.',
+    schema: {
+      example: {
+        _id: '6a341f60841d03dcfbf8b2f4',
+        status: 'transaction_payout_rejected',
+        transactionType: 'withdrawal',
+        estimation: '5000',
+        transactionRef: 'IN598#260618164000',
+        createdAt: '2026-06-18T16:40:00.590Z',
+        updatedAt: '2026-06-19T18:43:10.624Z',
+      },
+    },
+  })
   @ApiResponse({ status: 401, description: 'Authentication required.' })
   @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @ApiResponse({ status: 404, description: 'Transaction not found or not eligible for rejection.' })

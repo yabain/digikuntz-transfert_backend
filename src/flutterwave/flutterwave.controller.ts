@@ -144,6 +144,21 @@ export class FlutterwaveController {
   @Post('transfer-from-balance')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a transfer from user account balance' })
+  @ApiBody({
+    schema: {
+      example: {
+        estimation: 5000,
+        senderCurrency: 'XAF',
+        receiverCurrency: 'XAF',
+        senderName: 'John Doe',
+        receiverName: 'Jane Doe',
+        bankCode: 'ORANGEMONEY',
+        bankAccountNumber: '2376XXXXXXX',
+        receiverCountry: 'Cameroon',
+        raisonForTransfer: 'Paiement fournisseur',
+      },
+    },
+  })
   @ApiResponse({ status: 201, description: 'Transfer created and awaiting admin payout validation.' })
   @ApiResponse({ status: 400, description: 'Invalid payload or insufficient balance.' })
   @ApiResponse({ status: 401, description: 'Authentication required.' })
@@ -165,7 +180,7 @@ export class FlutterwaveController {
         receiverCurrency: 'XAF',
         senderName: 'John Doe',
         receiverName: 'John Doe',
-        bankCode: 'MTN',
+        bankCode: 'ORANGEMONEY',
         bankAccountNumber: '2376XXXXXXX',
       },
     },
@@ -221,8 +236,17 @@ export class FlutterwaveController {
   @Get('payout/:transactionId')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Initialize payout for a successful payin transaction (admin only)' })
-  @ApiParam({ name: 'transactionId', description: 'Internal transaction ID' })
-  @ApiResponse({ status: 200, description: 'Payout initialized.' })
+  @ApiParam({ name: 'transactionId', example: '6a341f60841d03dcfbf8b2f4', description: 'Internal transaction ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Payout initialized.',
+    schema: {
+      example: {
+        status: 'transaction_payout_success',
+        transactionId: '6a341f60841d03dcfbf8b2f4',
+      },
+    },
+  })
   @ApiResponse({ status: 401, description: 'Authentication required.' })
   @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @ApiResponse({ status: 404, description: 'Transaction not found or invalid status.' })

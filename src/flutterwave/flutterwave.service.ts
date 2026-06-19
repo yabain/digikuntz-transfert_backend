@@ -1044,7 +1044,7 @@ export class FlutterwaveService {
     }
     try {
       const payload = {
-        account_bank: payloadPayout.accountBankCode, // bank or MoMo operator
+        account_bank: (payloadPayout.accountBankCode || '').toUpperCase(), // bank or MoMo operator
         account_number: payloadPayout.accountNumber, // account number or MSISDN
         amount: Number(payloadPayout.amount),
         currency: payloadPayout.destinationCurrency,

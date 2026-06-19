@@ -422,16 +422,16 @@ export class DevController {
   })
   @ApiResponse({
     status: 201,
-    description: 'Payout initiated.',
+    description: 'Payout initiated (pending admin validation).',
     schema: {
       example: {
         id: '664f1a2b3c4d5e6f7a8b9c0d',
-        status: 'payin_pending',
+        status: 'payout_pending',
         data: {
           estimation: '5000',
-          transactionRef: 'IN123#250101120000',
-          invoiceTaxes: '250',
-          paymentWithTaxes: '5250',
+          transactionRef: 'IN598#260618164000',
+          invoiceTaxes: '0',
+          paymentWithTaxes: '5000',
           raisonForTransfer: 'Paiement fournisseur',
           receiverCurrency: 'XAF',
           transactionType: 'apiCall',

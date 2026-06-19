@@ -271,27 +271,29 @@ async function bootstrap() {
 
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  // Configuration Swagger
-  const config = new DocumentBuilder()
-    .setTitle('digiKUNTZ Payments API')
-    .setDescription(
-      'Official digiKUNTZ Payments API documentation with standardized responses and error models.',
-    )
-    .setVersion('1.0')
-    .addServer('http://127.0.0.1:3002', 'Local')
-    .addServer('https://app.digikuntz.com', 'Production')
-    .setContact(
-      'digiKUNTZ Engineering',
-      'https://digikuntz.com',
-      'support@digikuntz.com',
-    )
-    .addBearerAuth()
-    .build();
-  const rawDocument = SwaggerModule.createDocument(app, config);
-  const document = enhanceSwaggerDocument(rawDocument);
-  SwaggerModule.setup('api/docs', app, document);
-  SwaggerModule.setup('api-docs', app, document);
-  SwaggerModule.setup('api-doc', app, document);
+  // Swagger — accessible uniquement hors production
+  if (process.env.NODE_ENV !== 'production') {
+    const config = new DocumentBuilder()
+      .setTitle('digiKUNTZ Payments API')
+      .setDescription(
+        'Official digiKUNTZ Payments API documentation with standardized responses and error models.',
+      )
+      .setVersion('1.0')
+      .addServer('http://127.0.0.1:3002', 'Local')
+      .addServer('https://app.digikuntz.com', 'Production')
+      .setContact(
+        'digiKUNTZ Engineering',
+        'https://digikuntz.com',
+        'support@digikuntz.com',
+      )
+      .addBearerAuth()
+      .build();
+    const rawDocument = SwaggerModule.createDocument(app, config);
+    const document = enhanceSwaggerDocument(rawDocument);
+    SwaggerModule.setup('api/docs', app, document);
+    SwaggerModule.setup('api-docs', app, document);
+    SwaggerModule.setup('api-doc', app, document);
+  }
 
   // await app.listen(process.env.PORT ?? 3002, '0.0.0.0'); // Sstart Backend on port 3002 because 3000 is already used on server
   const port = Number(process.env.PORT) || 3002;

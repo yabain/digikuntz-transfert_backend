@@ -362,7 +362,7 @@ export class DevService {
       receiverCountry: user.countryId.name,
       receiverCurrency: data.currency,
       receiverCountryCode: user.countryId?.code,
-      bankCode: data.accountBankCode,
+      bankCode: (data.accountBankCode || '').toUpperCase(),
       bankAccountNumber: data.accountNumber,
       raisonForTransfer: data.narration || 'API Payout',
       status: TStatus.PAYINSUCCESS,
