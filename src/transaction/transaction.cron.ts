@@ -54,7 +54,7 @@ export class TransactionCron {
   async handlePayinPendinding(resPerPage): Promise<any>{
     const pending: any =
       await this.transactionService.getPayinPendingListByStatus(resPerPage);
-    console.log(`[TransactionCron] ${pending.length} payin(s) pending à vérifier`);
+    // console.log(`[TransactionCron] ${pending.length} payin(s) pending à vérifier`);
       for (const t of pending) {
         try {
           await this.transactionService.verifyTransactionPayinStatus(t);
