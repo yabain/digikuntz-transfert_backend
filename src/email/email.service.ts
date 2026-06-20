@@ -56,8 +56,6 @@ export class EmailService {
       host: this.smtpData.smtpHost || 'smtppro.zoho.com',
       port: this.smtpData.smtpPort || '465',
       secure: this.smtpData.smtpSecure || true,
-      // port: 587,       // STARTTLS
-      // secure: false,   // false = STARTTLS, pas SSL direct
       auth: {
         user: this.smtpData.smtpUser || 'payments@digikuntz.com',
         pass: this.smtpData.smtpPassword || 'YD7pkyKyarD8',
@@ -65,6 +63,9 @@ export class EmailService {
       tls: {
         rejectUnauthorized: true,
       },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
     });
   }
 
@@ -270,7 +271,7 @@ export class EmailService {
 
   async proceedToSendEmail(to, subject, html, url?: string): Promise<boolean> {
     if (!(await this.isEmailNotificationsEnabled())) {
-      return false;
+      throw new Error('Les notifications email sont désactivées. Activez emailNotificationsEnabled dans la collection system.');
     }
 
     if (Array.isArray(to)) {
