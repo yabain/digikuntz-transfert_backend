@@ -283,10 +283,13 @@ export class PayinService {
       const resp = await this.fwPost(url, payload);
       const resData = resp.data;
 
+      const flwTxId = (resData as any)?.data?.id;
+
       await this.payinModel.create({
         userId: dto.userId,
         transactionId: dto.transactionId,
         txRef,
+        flwTxId,
         amount: dto.amount,
         currency: dto.currency,
         customerEmail: dto.customerEmail,
@@ -840,7 +843,7 @@ export class PayinService {
   /**
    * Generic verify: accept either numeric FW id or txRef
    */
-  async verifyPayin(idOrTxRef: string, saveLocal = false) {
+  async verifyPayin(idOrTxRef: string, saveLocal = false, flwTxId?: string) {
     const localAnyRef = await this.payinModel
       .findOne({ $or: [{ txRef: idOrTxRef }, { flwTxId: String(idOrTxRef) }] })
       .lean()
@@ -856,8 +859,11 @@ export class PayinService {
     // console.log('verifyPayin: idOrTxRef', idOrTxRef);
     try {
       let resp;
-      if (/^\d+$/.test(idOrTxRef)) {
-        // this.logger.debug(`verifyPayin: idOrTxRef is numeric: ${idOrTxRef}`);
+      const effectiveFlwTxId = flwTxId || localAnyRef?.flwTxId;
+      if (effectiveFlwTxId) {
+        // Use numeric ID endpoint when available (most reliable)
+        resp = await this.fwGet(`${this.fwBaseUrlV3}/transactions/${effectiveFlwTxId}/verify`);
+      } else if (/^\d+$/.test(idOrTxRef)) {
         // numeric -> verify by tx id
         resp = await this.fwGet(`${this.fwBaseUrlV3}/transactions/${idOrTxRef}/verify`);
       } else {
@@ -1031,15 +1037,24 @@ export class PayinService {
       throw new UnauthorizedException('Invalid Flutterwave webhook signature');
     }
 
-    // Exemple : mettre à jour si charge.completed + successful
     if (body.event === 'charge.completed' && body.data?.status === 'successful') {
-      await this.payinModel
+      const txRef = body.data.tx_ref;
+      const flwTxId = body.data.id;
+
+      const payin = await this.payinModel
         .findOneAndUpdate(
-          { flwTxId: body.data.id },
-          { status: PayinStatus.SUCCESSFUL },
+          {
+            $or: [
+              { flwTxId },
+              { txRef },
+            ],
+          },
+          { status: PayinStatus.SUCCESSFUL, flwTxId },
           { new: true },
         )
         .exec();
+
+      return { status: 'ok', payin };
     }
 
     return { status: 'ok' };

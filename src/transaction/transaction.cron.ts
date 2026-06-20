@@ -38,8 +38,9 @@ export class TransactionCron {
   async handlePayoutPendinding(resPerPage): Promise<any>{
     const pending: any =
       await this.transactionService.getPayoutPendingListByStatus(resPerPage);
-    // console.log('(Transaction Cron) Verify transaction Payout: ', pending);
+    console.log(`[TransactionCron] ${pending.length} payout(s) pending à vérifier`);
       for (const t of pending) {
+        console.log(`[TransactionCron] vérification tx=${t.txRef} type=${t.transactionType} status=${t.status}`);
         try {
           await this.transactionService.verifyTransactionPayoutStatus(t);
         } catch (err) {
@@ -53,7 +54,7 @@ export class TransactionCron {
   async handlePayinPendinding(resPerPage): Promise<any>{
     const pending: any =
       await this.transactionService.getPayinPendingListByStatus(resPerPage);
-    // console.log('(Transaction Cron) Verify transaction Payin: ', pending);
+    console.log(`[TransactionCron] ${pending.length} payin(s) pending à vérifier`);
       for (const t of pending) {
         try {
           await this.transactionService.verifyTransactionPayinStatus(t);

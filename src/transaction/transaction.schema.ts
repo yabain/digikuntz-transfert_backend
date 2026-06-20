@@ -218,6 +218,9 @@ export class Transaction {
    */
   @Prop({ default: false, index: true })
   isApiPayout?: boolean;
+
+  @Prop()
+  flwTxId?: string;
 }
 
 export const TransactionSchema = SchemaFactory.createForClass(Transaction);
@@ -229,3 +232,4 @@ TransactionSchema.index({ senderId: 1, createdAt: -1 });
 TransactionSchema.index({ receiverId: 1, createdAt: -1 });
 TransactionSchema.index({ fundraisingId: 1, createdAt: -1 });
 TransactionSchema.index({ isApiPayout: 1, status: 1, createdAt: -1 });
+TransactionSchema.index({ flwTxId: 1 });

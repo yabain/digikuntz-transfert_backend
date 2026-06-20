@@ -401,7 +401,7 @@ export class FlutterwaveService {
       ...transactionData,
       userId,
       txRef,
-      // transactionType: 'transfer',
+      status: TStatus.PAYINPENDING,
     };
 
     try {
@@ -419,7 +419,7 @@ export class FlutterwaveService {
         );
       }
 
-      return this.payinService.createPayin({
+      const payinResult = await this.payinService.createPayin({
         // KES flow goes to M-Pesa; pre-normalize phone for internal transfer payloads.
         amount,
         txRef,
@@ -438,6 +438,17 @@ export class FlutterwaveService {
         status: 'pending',
         userId,
       });
+
+      // Store flwTxId from Flutterwave on the transaction
+      const createdPayin = await this.payinService.getPayinByTxRef(txRef);
+      if (createdPayin?.flwTxId) {
+        await this.transactionService.updateTransactionFlwTxId(
+          String(savedTransaction._id),
+          String(createdPayin.flwTxId),
+        );
+      }
+
+      return payinResult;
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
@@ -521,8 +532,8 @@ export class FlutterwaveService {
     return this.subscriptionService.parseTransactionToSubscription(transaction);
   }
 
-  async verifyPayin(txRef: string) {
-    const payin: any = await this.payinService.verifyPayin(txRef);
+  async verifyPayin(txRef: string, flwTxId?: string) {
+    const payin: any = await this.payinService.verifyPayin(txRef, false, flwTxId);
     if (!payin) {
       throw new NotFoundException('Payin not found');
     }
@@ -593,8 +604,8 @@ export class FlutterwaveService {
     }
   }
 
-  async verifyAndClosePayin(txRef: string) {
-    const payin: any = await this.payinService.verifyPayin(txRef, true);
+  async verifyAndClosePayin(txRef: string, flwTxId?: string) {
+    const payin: any = await this.payinService.verifyPayin(txRef, true, flwTxId);
     if (!payin) {
       throw new NotFoundException('Payin not found');
     }
@@ -1098,6 +1109,14 @@ export class FlutterwaveService {
         newTxRef,
       );
 
+      const fwTransferId = String(res.data?.data?.id ?? '');
+      if (fwTransferId) {
+        await this.transactionService.updateTransactionFlwTxId(
+          transactionId,
+          fwTransferId,
+        );
+      }
+
       // console.log('update: ', update)
       return update;
     } catch (err) {
@@ -1166,8 +1185,8 @@ export class FlutterwaveService {
     else return 'wallet';
   }
 
-  async verifyPayout(reference: string, verifyPayout = false) {
-    return await this.payoutService.verifyPayout(reference, verifyPayout);
+  async verifyPayout(reference: string, verifyPayout = false, flwTxId?: string) {
+    return await this.payoutService.verifyPayout(reference, verifyPayout, flwTxId);
   }
 
   /**
@@ -1185,7 +1204,22 @@ export class FlutterwaveService {
   }
 
   async verifyWebhookPayin(req) {
-    return this.payinService.verifyWebhook(req);
+    const result = await this.payinService.verifyWebhook(req);
+
+    if (result?.payin?.status === 'successful' && result.payin.transactionId) {
+      try {
+        const transaction = await this.transactionService.findById(
+          String(result.payin.transactionId),
+        );
+        if (transaction) {
+          await this.processSuccessfulPayin(transaction, String(result.payin.transactionId));
+        }
+      } catch (err) {
+        this.logger.error('Webhook processSuccessfulPayin failed', err);
+      }
+    }
+
+    return result;
   }
 
   async getBanksList(country: string) {
@@ -1810,6 +1844,60 @@ export class FlutterwaveService {
       .replace(/[^a-zA-Z0-9]/g, '')
       // 3. Supprimer les espaces (facultatif selon besoin)
       .trim();
+  }
+
+  async checkPayinStatusOnFlutterwave(txRef: string, flwTxId?: string): Promise<string | null> {
+    try {
+      // Use numeric ID endpoint when available (most reliable)
+      if (flwTxId) {
+        const resp = await firstValueFrom(
+          this.http.get(`${this.fwBaseUrlV3}/transactions/${flwTxId}/verify`, {
+            headers: this.authHeader(),
+          }),
+        );
+        const status = resp?.data?.data?.status;
+        if (status) return status;
+      }
+      // Fallback: verify by reference
+      const resp = await firstValueFrom(
+        this.http.get(`${this.fwBaseUrlV3}/transactions/verify_by_reference`, {
+          headers: this.authHeader(),
+          params: { tx_ref: txRef },
+        }),
+      );
+      return resp?.data?.data?.status || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async checkPayoutStatusOnFlutterwave(reference: string, flwTxId?: string): Promise<string | null> {
+    try {
+      // Use numeric transfer ID endpoint when available (most reliable)
+      if (flwTxId) {
+        const resp = await firstValueFrom(
+          this.http.get(`${this.fwBaseUrlV3}/transfers/${flwTxId}`, {
+            headers: this.authHeader(),
+          }),
+        );
+        const status = resp?.data?.data?.status;
+        if (status) return status;
+      }
+      // Fallback: filter by reference
+      const resp = await firstValueFrom(
+        this.http.get(`${this.fwBaseUrlV3}/transfers`, {
+          headers: this.authHeader(),
+          params: { reference },
+        }),
+      );
+      const data = resp?.data?.data;
+      if (Array.isArray(data) && data.length > 0) {
+        return data[0].status || null;
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   async handleTestWithdrawal(transactionData: any) {

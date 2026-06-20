@@ -64,6 +64,9 @@ export class Payout extends Document  {
   @Prop({ type: Object })
   raw?: any; // API response}
 
+  @Prop()
+  flwTxId?: string; // Flutterwave numeric transfer ID
+
   @Prop({ default: PayoutProvider.FLUTTERWAVE })
   provider: PayoutProvider;
 }

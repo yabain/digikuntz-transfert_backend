@@ -7,6 +7,7 @@ import {
   Delete,
   ForbiddenException,
   Get,
+  MessageEvent,
   NotFoundException,
   Param,
   Post,
@@ -14,10 +15,12 @@ import {
   Query,
   Req,
   Res,
+  Sse,
   UseGuards,
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
+import { Observable } from 'rxjs';
 import { Query as ExpressQuery } from 'express-serve-static-core';
 import { AuthGuard } from '@nestjs/passport';
 import { Response } from 'express';
@@ -273,6 +276,51 @@ export class TransactionController {
       throw new ForbiddenException('Unauthorised');
     }
     return this.transactionService.investigateBalanceByReceiver(userId);
+  }
+
+  @Post('reconcile/:userId')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Réconcilier le solde d\'un utilisateur en vérifiant chaque transaction chez Flutterwave',
+  })
+  @ApiParam({ name: 'userId', description: 'User ID', type: String })
+  @ApiResponse({ status: 200, description: 'Rapport de réconciliation.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
+  @UseGuards(AuthGuard('jwt'))
+  async reconcileBalance(@Param('userId') userId: string, @Req() req): Promise<any> {
+    if (!req.user.isAdmin) {
+      throw new ForbiddenException('Unauthorised');
+    }
+    return this.transactionService.reconcileUserBalance(userId);
+  }
+
+  @Post('reconcile/:userId/stream')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Réconcilier avec logs temps réel (stream SSE)',
+  })
+  @ApiParam({ name: 'userId', description: 'User ID', type: String })
+  @UseGuards(AuthGuard('jwt'))
+  async reconcileBalanceStream(@Param('userId') userId: string, @Req() req, @Res() res): Promise<void> {
+    if (!req.user.isAdmin) {
+      throw new ForbiddenException('Unauthorised');
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    const report = await this.transactionService.reconcileUserBalance(userId, (msg: string) => {
+      res.write(`data: ${JSON.stringify({ type: 'log', message: msg })}\n\n`);
+    });
+
+    res.write(`data: ${JSON.stringify({ type: 'report', ...report })}\n\n`);
+    res.end();
   }
 
   @Get(':id')

@@ -133,7 +133,7 @@ export class PayoutService {
     const status =
       provider === PayoutProvider.PAYSTACK || provider === PayoutProvider.MPESA
         ? this.normalizeMpesaPayoutStatus(providerData)
-        : this.normalizeStatus(providerData?.data?.data?.status);
+        : this.normalizeStatus(providerData?.data?.status);
 
     const created = await this.payoutModel.create({
       reference: payloadPayout.reference,
@@ -150,6 +150,7 @@ export class PayoutService {
       narration: this.toAlphanumeric(payloadPayout.narration),
       status,
       raw: providerData,
+      flwTxId: String(providerData?.data?.id ?? ''),
     });
 
     // Always return a plain JSON object (avoid circular Mongoose internals in downstream raw saves)
@@ -185,6 +186,14 @@ export class PayoutService {
 
   async getPayoutByTransactionId(transactionId: string) {
     return this.payoutModel.find({ transactionId }).lean().exec();
+  }
+
+  async findByTxRef(txRef: string) {
+    return this.payoutModel.findOne({ txRef }).lean().exec();
+  }
+
+  async findByReference(reference: string) {
+    return this.payoutModel.findOne({ reference }).lean().exec();
   }
 
   private async updateLocalByRef(
@@ -229,6 +238,15 @@ export class PayoutService {
       .exec();
   }
 
+  async forceFailStuckPayout(reference: string, transactionId: string) {
+    await this.payoutModel
+      .findOneAndUpdate({ reference }, { status: PayoutStatus.FAILED }, { new: true })
+      .exec();
+    await this.transactionService
+      .updateTransactionStatus(transactionId, TStatus.PAYOUTERROR)
+      .catch(() => undefined);
+  }
+
   async updatePayout(data: any) {
     const reference = data.reference;
     if (!reference)
@@ -245,7 +263,7 @@ export class PayoutService {
       .exec();
   }
 
-  async verifyPayout(reference: string, updateOnPending: boolean = false) {
+  async verifyPayout(reference: string, updateOnPending: boolean = false, flwTxId?: string) {
     const localPayout: any = await this.payoutModel
       .findOne({ reference })
       .lean()
@@ -262,16 +280,45 @@ export class PayoutService {
     }
 
     const oldStatus = localPayout.status;
+    // Support backward-compat : extraire flwTxId du raw si le champ n'existe pas encore
+    const effectiveFlwTxId = flwTxId || localPayout.flwTxId || localPayout?.raw?.data?.id;
+    console.log(`[PayoutCron] reference=${reference} oldStatus=${oldStatus} flwTxId(argument)=${flwTxId} localPayout.flwTxId=${localPayout.flwTxId} raw.id=${localPayout?.raw?.data?.id} → effectiveFlwTxId=${effectiveFlwTxId}`);
 
-    const url = `${this.fwBaseUrlV3}/transfers?reference=${reference}`;
-    const res: any = await this.http
-      .get(url, {
-        headers: { Authorization: `Bearer ${this.fwSecret}` },
-      })
-      .toPromise();
+    // Try numeric transfer ID endpoint first (most reliable)
+    let res: any;
+    if (effectiveFlwTxId) {
+      try {
+        const url = `${this.fwBaseUrlV3}/transfers/${effectiveFlwTxId}`;
+        console.log(`[PayoutCron] → GET ${url}`);
+        res = await this.http
+          .get(url, {
+            headers: { Authorization: `Bearer ${this.fwSecret}` },
+          })
+          .toPromise();
+        console.log(`[PayoutCron] → réponse numeric ID:`, JSON.stringify(res?.data));
+      } catch {
+        console.log(`[PayoutCron] → numeric ID endpoint a échoué`);
+        res = null;
+      }
+    }
 
-    if (res.data && res.data.data && res.data.data.length > 0) {
-      const payout = res.data.data[0];
+    // Fallback: filter by reference
+    if (!res?.data?.data) {
+      const url = `${this.fwBaseUrlV3}/transfers?reference=${reference}`;
+      console.log(`[PayoutCron] → fallback GET ${url}`);
+      res = await this.http
+        .get(url, {
+          headers: { Authorization: `Bearer ${this.fwSecret}` },
+        })
+        .toPromise();
+      console.log(`[PayoutCron] → réponse fallback:`, JSON.stringify(res?.data));
+    }
+
+    if (res.data && res.data.data) {
+      const payout = Array.isArray(res.data.data) ? res.data.data[0] : res.data.data;
+      if (!payout) {
+        throw new NotFoundException('Payout not found on Flutterwave');
+      }
       console.log('payout from FW', payout);
 
       if (oldStatus !== payout.status) {

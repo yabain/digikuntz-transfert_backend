@@ -10,6 +10,7 @@
 
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { HttpService } from '@nestjs/axios';
+import { firstValueFrom } from 'rxjs';
 import {
   Injectable,
   Inject,
@@ -80,6 +81,7 @@ export class TransactionService {
 
     const conditions: any[] = [
       { transactionRef: { $regex: keyword, $options: 'i' } },
+      { txRef: { $regex: keyword, $options: 'i' } },
       { senderName: { $regex: keyword, $options: 'i' } },
       { receiverName: { $regex: keyword, $options: 'i' } },
     ];
@@ -720,33 +722,79 @@ export class TransactionService {
     if (!payout) {
       payout = await this.getPayout(transactionData.txRef);
       if (!payout) {
+        console.log(`[TransactionCron] tx=${transactionData.txRef} → aucun payout trouvé, fermeture`);
         return this.updateTransactionStatus(
           transactionData._id,
           TStatus.PAYOUTCLOSED,
         );
       }
     }
+
+    console.log(`[TransactionCron] tx=${transactionData.txRef} → payout trouvé status=${payout.status} flwTxId=${payout.flwTxId || payout.raw?.id} reference=${payout.reference}`);
+
+    // Statut terminal : mettre à jour la transaction
     if (payout.status === 'SUCCESSFUL') {
-      return this.updateTransactionStatus(
-        transactionData._id,
-        TStatus.PAYOUTSUCCESS,
-      );
-    } else if (payout.status === 'FAILED') {
-      return this.updateTransactionStatus(
-        transactionData._id,
-        TStatus.PAYOUTERROR,
-      );
-    } else if (payout.status === 'PENDING') {
-      return this.updateTransactionStatus(
-        transactionData._id,
-        TStatus.PAYOUTPENDING,
-      );
-    } else if (payout.status === 'INITIATED') {
-      return this.updateTransactionStatus(
-        transactionData._id,
-        TStatus.PAYOUTPENDING,
-      );
-    } else return false;
+      console.log(`[TransactionCron] → PAYOUTSUCCESS`);
+      return this.updateTransactionStatus(transactionData._id, TStatus.PAYOUTSUCCESS);
+    }
+    if (payout.status === 'FAILED') {
+      console.log(`[TransactionCron] → PAYOUTERROR`);
+      return this.updateTransactionStatus(transactionData._id, TStatus.PAYOUTERROR);
+    }
+
+    // Statut non terminal : vérifier directement chez Flutterwave
+    console.log(`[TransactionCron] → statut local "${payout.status}" non terminal, vérification FW...`);
+    const fwFlwTxId = payout.flwTxId || payout.raw?.data?.id || payout.raw?.id;
+    const fwSecret = this.configService.get<string>('FLUTTERWAVE_SECRET_KEY');
+    const authHeader = { Authorization: `Bearer ${fwSecret}` };
+    const fwBaseUrl = 'https://api.flutterwave.com/v3';
+    let fwStatus: string | null = null;
+
+    if (fwFlwTxId) {
+      try {
+        const resp: any = await firstValueFrom(
+          this.httpService.get(`${fwBaseUrl}/transfers/${fwFlwTxId}`, {
+            headers: authHeader,
+          }),
+        );
+        fwStatus = resp?.data?.data?.status;
+        console.log(`[TransactionCron] → FW numeric ID ${fwFlwTxId} → status=${fwStatus}`);
+      } catch { /* ignore */ }
+    }
+
+    if (!fwStatus) {
+      try {
+        const resp: any = await firstValueFrom(
+          this.httpService.get(`${fwBaseUrl}/transfers`, {
+            headers: authHeader,
+            params: { reference: payout.reference },
+          }),
+        );
+        const data = resp?.data?.data;
+        fwStatus = Array.isArray(data) && data.length > 0 ? data[0].status : data?.status;
+        console.log(`[TransactionCron] → FW reference fallback → status=${fwStatus}`);
+      } catch { /* ignore */ }
+    }
+
+    if (!fwStatus) {
+      console.log(`[TransactionCron] → pas de statut FW, abandon`);
+      return false;
+    }
+
+    if (fwStatus === 'SUCCESSFUL') {
+      console.log(`[TransactionCron] → FW dit SUCCESSFUL, mise à jour payout + transaction`);
+      await this.payoutModel.findOneAndUpdate({ _id: payout._id }, { status: 'SUCCESSFUL' }).exec();
+      return this.updateTransactionStatus(transactionData._id, TStatus.PAYOUTSUCCESS);
+    }
+    if (fwStatus === 'FAILED') {
+      console.log(`[TransactionCron] → FW dit FAILED, mise à jour payout + transaction`);
+      await this.payoutModel.findOneAndUpdate({ _id: payout._id }, { status: 'FAILED' }).exec();
+      return this.updateTransactionStatus(transactionData._id, TStatus.PAYOUTERROR);
+    }
+
+    // FW toujours en statut intermédiaire (NEW/PENDING/QUEUED)
+    console.log(`[TransactionCron] → FW toujours "${fwStatus}", pas de changement`);
+    return false;
   }
 
   async updateTransactionStatus(
@@ -1127,6 +1175,22 @@ export class TransactionService {
     const transaction: any = await this.transactionModel.findByIdAndUpdate(
         transactionId,
         { txRef },
+        { new: true },
+      );
+    if (!transaction) throw new NotFoundException('Transaction not found');
+    return transaction;
+  }
+
+  async updateTransactionFlwTxId(
+    transactionId: string,
+    flwTxId: string,
+  ): Promise<any> {
+    if (!mongoose.Types.ObjectId.isValid(transactionId)) {
+      throw new NotFoundException('Invalid transaction ID');
+    }
+    const transaction: any = await this.transactionModel.findByIdAndUpdate(
+        transactionId,
+        { flwTxId },
         { new: true },
       );
     if (!transaction) throw new NotFoundException('Transaction not found');
@@ -1518,6 +1582,279 @@ export class TransactionService {
       totalPayoutTransactions,
       totalPayinTransactions,
       totalTransactions,
+    };
+  }
+
+  async reconcileUserBalance(userId: string, onLog?: (message: string) => void): Promise<any> {
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new NotFoundException('Invalid user ID');
+    }
+
+    const fwSecret = this.configService.get<string>('FLUTTERWAVE_SECRET_KEY');
+    const authHeader = { Authorization: `Bearer ${fwSecret}` };
+    const fwBaseUrl = 'https://api.flutterwave.com/v3';
+
+    const transactions = await this.transactionModel
+      .find({
+        $or: [
+          { receiverId: userId },
+          { senderId: userId },
+          { userId },
+        ],
+        status: {
+          $nin: [
+            TStatus.PAYINPENDING,
+            TStatus.INITIALIZED,
+          ],
+        },
+      })
+      .lean()
+      .exec();
+
+    const adjustments: any[] = [];
+    let netAdjustment = 0;
+    let checkedCount = 0;
+    let discrepancyCount = 0;
+    const log = (msg: string) => {
+      console.log(msg);
+      onLog?.(msg);
+    };
+
+    log(`[Reconcile] Début pour userId=${userId}, ${transactions.length} transactions à vérifier`);
+
+    for (const tx of transactions) {
+      const payinTypes = [
+        'fundraising', 'service', 'payment', 'subscription',
+        'deposit', 'transfer', 'paymentRequest',
+      ];
+
+      try {
+        if (tx.transactionType === 'apiCall' && !tx.isApiPayout) {
+          // Le payin peut stocker soit tx.txRef (txPayin-...) soit
+          // tx.transactionRef (IN115#...) selon comment il a été créé.
+          // Essayer les deux pour trouver le payin.
+          const txRefCandidates = [tx.txRef, tx.transactionRef].filter(Boolean) as string[];
+          let payin: any = null;
+          for (const ref of txRefCandidates) {
+            payin = await this.payinService.getPayinByTxRef(ref);
+            if (payin) break;
+          }
+          if (!payin) {
+            log(`[Reconcile] Payin tx=${tx.txRef} transactionRef=${tx.transactionRef} skip: aucun payin trouvé`);
+            continue;
+          }
+
+          // Pour interroger FW, utiliser flwTxId (disponible directement ou via payin)
+          // ou à défaut le tx_ref que FW connaît (transactionRef ou payin.txRef)
+          const effectiveFlwTxId = tx.flwTxId || payin.flwTxId;
+
+          // Backfill flwTxId on transaction if found from payin
+          if (payin.flwTxId && !tx.flwTxId) {
+            await this.updateTransactionFlwTxId(String(tx._id), String(payin.flwTxId));
+          }
+          const fwTxRef = tx.transactionRef || payin.txRef;
+          log(`[Reconcile] Payin tx=${tx.txRef} flwTxId=${effectiveFlwTxId} fwTxRef=${fwTxRef} local=${tx.status} → vérification FW...`);
+
+          let fwStatus: string | null = null;
+
+          // Use numeric ID endpoint when available (most reliable)
+          if (effectiveFlwTxId) {
+            const resp: any = await firstValueFrom(
+              this.httpService.get(`${fwBaseUrl}/transactions/${effectiveFlwTxId}/verify`, {
+                headers: authHeader,
+              }),
+            );
+            fwStatus = resp?.data?.data?.status;
+          }
+
+          // Fallback: verify by reference
+          if (!fwStatus) {
+            const resp: any = await firstValueFrom(
+              this.httpService.get(`${fwBaseUrl}/transactions/verify_by_reference`, {
+                headers: authHeader,
+                params: { tx_ref: fwTxRef },
+              }),
+            );
+            fwStatus = resp?.data?.data?.status;
+          }
+
+          if (!fwStatus) {
+            log(`[Reconcile]   → pas de status FW retourné`);
+            continue;
+          }
+
+          const isLocalSuccess = tx.status === TStatus.PAYINSUCCESS;
+          const isLocalFailed = tx.status === TStatus.PAYINERROR || tx.status === TStatus.PAYINCLOSED;
+
+          checkedCount++;
+          log(`[Reconcile]   fw=${fwStatus}`);
+
+          if (isLocalFailed && fwStatus === 'successful') {
+            const amount = Number(tx.estimation) || 0;
+            adjustments.push({
+              transactionId: tx._id,
+              txRef: tx.txRef,
+              type: 'payin',
+              localStatus: tx.status,
+              fwStatus,
+              action: 'credit',
+              amount,
+              reason: 'Payin local échec mais FW succès → crédit',
+            });
+            discrepancyCount++;
+            netAdjustment += amount;
+            await this.updateTransactionStatus(String(tx._id), TStatus.PAYINSUCCESS);
+            log(`[Reconcile]   → CREDIT ${amount} (update status → PAYINSUCCESS)`);
+          } else if (isLocalSuccess && (fwStatus === 'failed' || fwStatus === 'pending')) {
+            const amount = Number(tx.estimation) || 0;
+            adjustments.push({
+              transactionId: tx._id,
+              txRef: tx.txRef,
+              type: 'payin',
+              localStatus: tx.status,
+              fwStatus,
+              action: 'debit',
+              amount,
+              reason: 'Payin local succès mais FW échec → débit',
+            });
+            discrepancyCount++;
+            netAdjustment -= amount;
+            await this.updateTransactionStatus(String(tx._id), TStatus.PAYINERROR);
+            log(`[Reconcile]   → DEBIT ${amount} (update status → PAYINERROR)`);
+          } else {
+            log(`[Reconcile]   → OK, pas d'action`);
+          }
+        }
+
+        if (
+          (tx.transactionType === 'transfer') ||
+          (tx.transactionType === 'withdrawal') ||
+          (tx.transactionType === 'apiCall' && tx.isApiPayout)
+        ) {
+          const payout = await this.payoutModel.findOne({ txRef: tx.txRef }).lean().exec();
+          if (!payout) {
+            log(`[Reconcile] Payout tx=${tx.txRef} skip: aucun payout trouvé`);
+            continue;
+          }
+
+          log(`[Reconcile] Payout tx=${tx.txRef} ref=${payout.reference} local=${tx.status} → vérification FW...`);
+
+          let fwStatus: string | null = null;
+
+          const payoutFlwTxId = tx.flwTxId || (payout as any)?.flwTxId;
+
+          // Use numeric transfer ID endpoint when available (most reliable)
+          if (payoutFlwTxId) {
+            try {
+              const resp: any = await firstValueFrom(
+                this.httpService.get(`${fwBaseUrl}/transfers/${payoutFlwTxId}`, {
+                  headers: authHeader,
+                }),
+              );
+              fwStatus = resp?.data?.data?.status;
+            } catch {
+              fwStatus = null;
+            }
+          }
+
+          // Fallback: filter by reference
+          if (!fwStatus) {
+            const resp: any = await firstValueFrom(
+              this.httpService.get(`${fwBaseUrl}/transfers`, {
+                headers: authHeader,
+                params: { reference: payout.reference },
+              }),
+            );
+            const data = resp?.data?.data;
+            fwStatus = Array.isArray(data) && data.length > 0 ? data[0].status : null;
+          }
+
+          if (!fwStatus) {
+            log(`[Reconcile]   → pas de status FW retourné`);
+            continue;
+          }
+
+          const isLocalSuccess = tx.status === TStatus.PAYOUTSUCCESS;
+          const isLocalFailed =
+            tx.status === TStatus.PAYOUTERROR ||
+            tx.status === TStatus.PAYOUTCLOSED ||
+            tx.status === TStatus.PAYOUTREJECTED;
+
+          checkedCount++;
+          log(`[Reconcile] Payout tx=${tx.txRef} local=${tx.status} fw=${fwStatus}`);
+
+          if (isLocalSuccess && fwStatus === 'FAILED') {
+            const amount = Number(tx.estimation) || 0;
+            adjustments.push({
+              transactionId: tx._id,
+              txRef: tx.txRef,
+              type: 'payout',
+              localStatus: tx.status,
+              fwStatus,
+              action: 'credit',
+              amount,
+              reason: 'Payout local succès mais FW échec → crédit',
+            });
+            discrepancyCount++;
+            netAdjustment += amount;
+            await this.updateTransactionStatus(String(tx._id), TStatus.PAYOUTERROR);
+            log(`[Reconcile]   → CREDIT ${amount} (update status → PAYOUTERROR)`);
+          } else if (isLocalFailed && fwStatus === 'SUCCESSFUL') {
+            const amount = Number(tx.estimation) || 0;
+            adjustments.push({
+              transactionId: tx._id,
+              txRef: tx.txRef,
+              type: 'payout',
+              localStatus: tx.status,
+              fwStatus,
+              action: 'debit',
+              amount,
+              reason: 'Payout local échec mais FW succès → débit',
+            });
+            discrepancyCount++;
+            netAdjustment -= amount;
+            await this.updateTransactionStatus(String(tx._id), TStatus.PAYOUTSUCCESS);
+            log(`[Reconcile]   → DEBIT ${amount} (update status → PAYOUTSUCCESS)`);
+          } else {
+            log(`[Reconcile]   → OK, pas d'action`);
+          }
+        }
+      } catch (e) {
+        log(`[Reconcile]   → ERREUR (tx=${tx.txRef}, type=${tx.transactionType}): ${e?.message || e}`);
+        adjustments.push({
+          transactionId: tx._id,
+          txRef: tx.txRef,
+          type: tx.transactionType,
+          error: e?.message || 'Erreur vérification Flutterwave',
+        });
+      }
+    }
+
+    if (netAdjustment !== 0) {
+      const userBalance = await this.balanceService.getBalanceByUserId(userId);
+      const newBalance = userBalance.balance + netAdjustment;
+
+      log(`[Reconcile] Ajustement solde: ${userBalance.balance} → ${newBalance} (${netAdjustment > 0 ? 'credit' : 'debit'} ${Math.abs(netAdjustment)})`);
+
+      if (netAdjustment > 0) {
+        await this.balanceService.creditBalance(userId, netAdjustment, userBalance.currency || 'XAF');
+      } else {
+        await this.balanceService.debitBalance(userId, Math.abs(netAdjustment), userBalance.currency || 'XAF');
+      }
+    } else {
+      log(`[Reconcile] Aucun ajustement nécessaire`);
+    }
+
+    const userBalance = await this.balanceService.getBalanceByUserId(userId);
+
+    return {
+      userId,
+      netAdjustment,
+      previousBalance: userBalance.balance - netAdjustment,
+      newBalance: userBalance.balance,
+      checkedCount,
+      discrepancyCount,
+      adjustments,
     };
   }
 
