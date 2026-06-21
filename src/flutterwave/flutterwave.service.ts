@@ -1003,6 +1003,12 @@ export class FlutterwaveService {
       type: this.getreceiverAccountType(transaction), // 'bank' | 'mobile_money' | 'wallet'
     };
 
+    // Flutterwave exige l'indicatif pays pour les comptes mobile money
+    const cc = transaction.receiverCountryCode || '237';
+    if (payloadPayout.type === 'mobile_money' && payloadPayout.accountNumber && !payloadPayout.accountNumber.startsWith(cc)) {
+      payloadPayout.accountNumber = cc + payloadPayout.accountNumber;
+    }
+
     // KES payouts are processed through direct M-Pesa integration (Daraja API).
     if (String(payloadPayout.destinationCurrency).toUpperCase() === 'KES') {
       try {
