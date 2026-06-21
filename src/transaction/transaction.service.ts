@@ -17,6 +17,8 @@ import {
   forwardRef,
   NotFoundException,
   Logger,
+  HttpException,
+  HttpStatus,
   // UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -1329,6 +1331,100 @@ export class TransactionService {
     // }
 
     return transaction;
+  }
+
+  /**
+   * Vérifie que le montant d'une transaction est dans les limites
+   * min/max configurées dans les paramètres système pour la devise concernée.
+   *
+   * @param amount    - Montant de la transaction
+   * @param currency  - Devise (XAF, EUR, USD, KES, etc.)
+   * @param type      - Type de transaction : 'deposit' (encaissement) ou 'withdrawal' (retrait)
+   * @returns         - `true` si la validation passe, ou lève une exception HttpException
+   */
+  async validateTransactionLimit(
+    amount: number,
+    currency: string,
+    type: 'deposit' | 'withdrawal',
+  ): Promise<boolean> {
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new HttpException(
+        { message: 'Invalid transaction amount' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const systemData = await this.systemService.getSystemData();
+    const limits = systemData?.transactionLimits || [];
+
+    const currencyLimit = limits.find(
+      (l: any) => String(l.currency || '').toUpperCase() === String(currency || '').toUpperCase(),
+    );
+
+    if (!currencyLimit) {
+      // Pas de limite configurée pour cette devise → autorisé
+      return true;
+    }
+
+    if (type === 'deposit') {
+      const min = Number(currencyLimit.minDeposit);
+      const max = Number(currencyLimit.maxDeposit);
+
+      if (Number.isFinite(min) && min > 0 && amount < min) {
+        throw new HttpException(
+          {
+            message: `Minimum deposit amount is ${min} ${currency}`,
+            code: 'AMOUNT_BELOW_MINIMUM',
+            minAmount: min,
+            currency,
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      if (Number.isFinite(max) && max > 0 && amount > max) {
+        throw new HttpException(
+          {
+            message: `Maximum deposit amount is ${max} ${currency}`,
+            code: 'AMOUNT_EXCEEDS_MAXIMUM',
+            maxAmount: max,
+            currency,
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+
+    if (type === 'withdrawal') {
+      const min = Number(currencyLimit.minWithdrawal);
+      const max = Number(currencyLimit.maxWithdrawal);
+
+      if (Number.isFinite(min) && min > 0 && amount < min) {
+        throw new HttpException(
+          {
+            message: `Minimum withdrawal amount is ${min} ${currency}`,
+            code: 'AMOUNT_BELOW_MINIMUM',
+            minAmount: min,
+            currency,
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      if (Number.isFinite(max) && max > 0 && amount > max) {
+        throw new HttpException(
+          {
+            message: `Maximum withdrawal amount is ${max} ${currency}`,
+            code: 'AMOUNT_EXCEEDS_MAXIMUM',
+            maxAmount: max,
+            currency,
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+
+    return true;
   }
 
   async calculateTaxesAmount(price: number): Promise<any> {

@@ -80,6 +80,25 @@ export class System extends Document {
   @Prop()
   twitter: string;
 
+  @Prop({
+    type: [
+      {
+        currency: { type: String, required: true },
+        minDeposit: { type: Number, default: 0 },
+        maxDeposit: { type: Number, default: 0 },
+        minWithdrawal: { type: Number, default: 0 },
+        maxWithdrawal: { type: Number, default: 0 },
+      },
+    ],
+    default: [],
+  })
+  transactionLimits: {
+    currency: string;
+    minDeposit: number;
+    maxDeposit: number;
+    minWithdrawal: number;
+    maxWithdrawal: number;
+  }[];
 }
 
 export const SystemSchema = SchemaFactory.createForClass(System);

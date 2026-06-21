@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { randomBytes } from 'crypto';
 import { Dev } from './dev.schema';
@@ -344,6 +344,24 @@ export class DevService {
       throw new ConflictException('Invalid payout amount');
     }
 
+    // Rejet immédiat si le montant dépasse les limites de retrait pour la devise
+    const payoutCurrency = data.currency || user.countryId?.currency || 'XAF';
+    try {
+      await this.transactionService.validateTransactionLimit(
+        payoutAmount,
+        payoutCurrency,
+        'withdrawal',
+      );
+    } catch (error) {
+      throw new HttpException(
+        {
+          message: error?.response?.message || `Transaction amount exceeds allowed withdrawal limits for ${payoutCurrency}`,
+          code: 'LIMIT_EXCEEDED',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
     const balance = await this.balanceService.getBalanceByUserId(userId);
     if (balance.balance < payoutAmount) {
       throw new ConflictException('Insufficient balance');
@@ -406,6 +424,27 @@ export class DevService {
   }
 
   async createPayinTransaction(transactionData: any, userId): Promise<any> {
+    // Rejet immédiat si le montant dépasse les limites d'encaissement pour la devise
+    const depositAmount = Number(transactionData.estimation);
+    if (Number.isFinite(depositAmount) && depositAmount > 0) {
+      try {
+        await this.transactionService.validateTransactionLimit(
+          depositAmount,
+          transactionData.senderCurrency || transactionData.receiverCurrency || 'XAF',
+          'deposit',
+        );
+      } catch (error) {
+        // Pas de création de transaction, rejet immédiat
+        throw new HttpException(
+          {
+            message: error?.response?.message || 'Transaction amount exceeds allowed limits',
+            code: 'LIMIT_EXCEEDED',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+
     const flutterwaveCallbackUrl = this.normalizeCallbackUrl(
       transactionData?.callbackUrl,
       'callbackUrl',

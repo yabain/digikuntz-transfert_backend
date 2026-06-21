@@ -317,6 +317,16 @@ export class FlutterwaveService {
   }
 
   async withdrawal(transactionData: any, userId) {
+    // Vérifier les limites de retrait
+    const withdrawalAmount = Number(transactionData.estimation);
+    if (Number.isFinite(withdrawalAmount) && withdrawalAmount > 0) {
+      await this.transactionService.validateTransactionLimit(
+        withdrawalAmount,
+        transactionData.senderCurrency || 'XAF',
+        'withdrawal',
+      );
+    }
+
     transactionData.userId = userId;
     const raw = {
       ...transactionData,
@@ -330,7 +340,6 @@ export class FlutterwaveService {
     };
     // console.log('withdrawal raw: ', raw);
     const balance = await this.balanceService.getBalanceByUserId(String(userId));
-    const withdrawalAmount = Number(transactionData.estimation);
     if (!Number.isFinite(withdrawalAmount) || withdrawalAmount <= 0) {
       throw new HttpException(
         {
@@ -395,6 +404,16 @@ export class FlutterwaveService {
       paymentRequestInput?: CreatePaymentRequestDto;
     },
   ) {
+    // Vérifier les limites d'encaissement pour la devise
+    const depositAmount = Number(transactionData.estimation);
+    if (Number.isFinite(depositAmount) && depositAmount > 0) {
+      await this.transactionService.validateTransactionLimit(
+        depositAmount,
+        transactionData.senderCurrency || transactionData.receiverCurrency || 'XAF',
+        'deposit',
+      );
+    }
+
     transactionData.userId = userId;
     const txRef = this.payinService.generateTxRef('txPayin')
     const raw = {
@@ -473,9 +492,18 @@ export class FlutterwaveService {
       );
     }
 
+    // Vérifier les limites de retrait (un transfert depuis le solde est un retrait)
+    const senderCurrency = String(transactionData?.senderCurrency || '');
+    if (senderCurrency) {
+      await this.transactionService.validateTransactionLimit(
+        amount,
+        senderCurrency,
+        'withdrawal',
+      );
+    }
+
     const taxesDetails = await this.transactionService.calculateTaxesAmount(amount);
     const totalToDebit = Number(taxesDetails.paymentWithTaxes);
-    const senderCurrency = String(transactionData?.senderCurrency || '');
     if (!senderCurrency) {
       throw new HttpException(
         { status: HttpStatus.BAD_REQUEST, error: 'Missing sender currency' },

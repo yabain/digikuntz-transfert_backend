@@ -70,6 +70,7 @@ export class SystemService {
       'linkedIn',
       'instagram',
       'twitter',
+      'transactionLimits',
     ];
 
     const patchData = Object.fromEntries(
