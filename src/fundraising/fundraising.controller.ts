@@ -115,6 +115,15 @@ export class FundraisingController {
     return this.fundraisingService.getAllSystem(query);
   }
 
+  @Get('my/stats')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get current user fundraising statistics (total, active, inactive)' })
+  @ApiResponse({ status: 200, description: 'Fundraising stats returned.' })
+  @UseGuards(AuthGuard('jwt'))
+  async getMyFundraisingStats(@Req() req) {
+    return this.fundraisingService.getMyFundraisingStats(String(req.user._id));
+  }
+
   @Get('my/list')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user fundraising list' })

@@ -1061,7 +1061,7 @@ export class PayinService {
   }
 
   async getAllPayinTransactoins(query: Query): Promise<any[]> {
-    const resPerPage = 10;
+    const resPerPage = Number(query?.limit || query?.resPerPage) || 10;
     const currentPage = Number(query.page) || 1;
     const skip = resPerPage * (currentPage - 1);
 

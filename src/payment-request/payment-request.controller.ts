@@ -27,6 +27,26 @@ import { PaymentRequestService } from './payment-request.service';
 export class PaymentRequestController {
   constructor(private readonly paymentRequestService: PaymentRequestService) {}
 
+  @Get('stats')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get all payment request stats (admin only)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'System-wide payment request stats.',
+  })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async getAllPaymentRequestStats(@Req() req) {
+    if (!req.user?.isAdmin) {
+      throw new ForbiddenException('Unauthorised');
+    }
+    return this.paymentRequestService.getAllPaymentRequestStats();
+  }
+
   @Get()
   @ApiBearerAuth()
   @ApiOperation({
@@ -69,6 +89,20 @@ export class PaymentRequestController {
       String(req.user._id),
       dto,
     );
+  }
+
+  @Get('my/stats')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get my payment request stats' })
+  @ApiResponse({
+    status: 200,
+    description: 'Payment request stats (total, pending, success, canceled, failed).',
+  })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async getMyPaymentRequestStats(@Req() req) {
+    return this.paymentRequestService.getMyPaymentRequestStats(String(req.user._id));
   }
 
   @Get('my')

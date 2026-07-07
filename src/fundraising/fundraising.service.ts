@@ -187,6 +187,28 @@ export class FundraisingService {
     return updated;
   }
 
+  async getMyFundraisingStats(userId: string) {
+    const now = new Date();
+    const [total, completed, active, inactive] = await Promise.all([
+      this.fundraisingModel.countDocuments({ creatorId: userId }),
+      this.fundraisingModel.countDocuments({
+        creatorId: userId,
+        endDate: { $lt: now },
+      }),
+      this.fundraisingModel.countDocuments({
+        creatorId: userId,
+        status: false,
+        endDate: { $gte: now },
+      }),
+      this.fundraisingModel.countDocuments({
+        creatorId: userId,
+        status: true,
+        endDate: { $gte: now },
+      }),
+    ]);
+    return { total, active, completed, inactive };
+  }
+
   async getAllSystem(query: any) {
     const { page, limit, skip } = this.getPagination(query);
 

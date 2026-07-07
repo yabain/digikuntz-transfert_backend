@@ -6,6 +6,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { TransactionService } from './transaction.service';
+import { TStatus } from './transaction.schema';
 
 @Injectable()
 export class TransactionCron {
@@ -30,6 +31,7 @@ export class TransactionCron {
     };
     this.handlePayinPendinding(resPerPage);
     this.handlePayoutPendinding(resPerPage);
+    this.handleInitializedPendinding(resPerPage);
     } finally {
       this.isRunning = false;
     }
@@ -49,6 +51,20 @@ export class TransactionCron {
           );
         }
       }
+  }
+
+  async handleInitializedPendinding(resPerPage): Promise<any> {
+    const pending: any =
+      await this.transactionService.getInitializedPendingList(resPerPage);
+    for (const t of pending) {
+      try {
+        await this.transactionService.updateTransactionStatus(t._id, TStatus.ERROR);
+      } catch (err) {
+        this.logger.warn(
+          '(Transaction Cron) Error closing initialized transaction ' + t.txRef + ' : ' + err.message,
+        );
+      }
+    }
   }
 
   async handlePayinPendinding(resPerPage): Promise<any>{

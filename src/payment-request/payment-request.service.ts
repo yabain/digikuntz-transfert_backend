@@ -17,12 +17,15 @@ import {
   PaymentRequestDocument,
   PaymentRequestStatus,
 } from './payment-request.schema';
+import { Transaction } from 'src/transaction/transaction.schema';
 
 @Injectable()
 export class PaymentRequestService {
   constructor(
     @InjectModel(PaymentRequest.name)
     private readonly paymentRequestModel: mongoose.Model<PaymentRequestDocument>,
+    @InjectModel(Transaction.name)
+    private readonly transactionModel: mongoose.Model<any>,
     private readonly userService: UserService,
     private readonly balanceService: BalanceService,
     @Inject(forwardRef(() => FlutterwaveService))
@@ -216,18 +219,98 @@ export class PaymentRequestService {
       .exec();
   }
 
+  async getMyPaymentRequestStats(userId: string): Promise<{
+    total: number;
+    pending: number;
+    success: number;
+    canceled: number;
+    failed: number;
+  }> {
+    const [total, pending, success, canceled, failed] = await Promise.all([
+      this.paymentRequestModel.countDocuments({ userId }),
+      this.paymentRequestModel.countDocuments({ userId, status: PaymentRequestStatus.PENDING }),
+      this.paymentRequestModel.countDocuments({ userId, status: PaymentRequestStatus.SUCCESS }),
+      this.paymentRequestModel.countDocuments({ userId, status: PaymentRequestStatus.CANCELED }),
+      this.paymentRequestModel.countDocuments({ userId, status: PaymentRequestStatus.FAILED }),
+    ]);
+    return { total, pending, success, canceled, failed };
+  }
+
+  async getAllPaymentRequestStats(): Promise<{
+    total: number;
+    pending: number;
+    success: number;
+    canceled: number;
+    failed: number;
+  }> {
+    const [total, pending, success, canceled, failed] = await Promise.all([
+      this.paymentRequestModel.countDocuments(),
+      this.paymentRequestModel.countDocuments({ status: PaymentRequestStatus.PENDING }),
+      this.paymentRequestModel.countDocuments({ status: PaymentRequestStatus.SUCCESS }),
+      this.paymentRequestModel.countDocuments({ status: PaymentRequestStatus.CANCELED }),
+      this.paymentRequestModel.countDocuments({ status: PaymentRequestStatus.FAILED }),
+    ]);
+    return { total, pending, success, canceled, failed };
+  }
+
+  private buildFilter(query: any, userId?: string) {
+    const filter: any = {};
+    if (userId) filter.userId = userId;
+
+    if (query.dateFrom || query.dateTo) {
+      filter.createdAt = {};
+      if (query.dateFrom) filter.createdAt.$gte = new Date(query.dateFrom);
+      if (query.dateTo) {
+        const end = new Date(query.dateTo);
+        end.setHours(23, 59, 59, 999);
+        filter.createdAt.$lte = end;
+      }
+    }
+
+    if (query.status && query.status !== 'all') {
+      if (query.status === 'failed') {
+        filter.$or = [
+          { status: PaymentRequestStatus.FAILED },
+          { status: PaymentRequestStatus.CANCELED },
+        ];
+      } else {
+        filter.status = query.status;
+      }
+    }
+
+    if (query.keyword) {
+      const keyword = String(query.keyword).trim();
+      const conditions: any[] = [];
+      if (mongoose.Types.ObjectId.isValid(keyword)) {
+        conditions.push({ _id: new mongoose.Types.ObjectId(keyword) });
+      }
+      const num = Number(keyword);
+      if (!isNaN(num)) {
+        conditions.push({ amount: num });
+      }
+      conditions.push({ currency: { $regex: keyword, $options: 'i' } });
+      conditions.push({ status: { $regex: keyword, $options: 'i' } });
+      if (conditions.length > 0) {
+        filter.$or = conditions;
+      }
+    }
+
+    return filter;
+  }
+
   async getMyPaymentRequests(userId: string, query: any) {
     const { page, limit, skip } = this.getPagination(query);
+    const filter = this.buildFilter(query, userId);
     const [data, totalItems] = await Promise.all([
       this.paymentRequestModel
-        .find({ userId })
+        .find(filter)
         .populate('transactionId')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean()
         .exec(),
-      this.paymentRequestModel.countDocuments({ userId }),
+      this.paymentRequestModel.countDocuments(filter),
     ]);
 
     return {
@@ -242,11 +325,64 @@ export class PaymentRequestService {
     };
   }
 
+  private statusMap: Record<string, PaymentRequestStatus> = {
+    transaction_payin_success: PaymentRequestStatus.SUCCESS,
+    transaction_success: PaymentRequestStatus.SUCCESS,
+    transaction_payout_success: PaymentRequestStatus.SUCCESS,
+    transaction_payin_error: PaymentRequestStatus.FAILED,
+    transaction_payout_error: PaymentRequestStatus.FAILED,
+    transaction_payout_rejected: PaymentRequestStatus.FAILED,
+    transaction_error: PaymentRequestStatus.FAILED,
+    transaction_payin_closed: PaymentRequestStatus.CANCELED,
+    transaction_payout_closed: PaymentRequestStatus.CANCELED,
+  };
+
+  async syncPendingPaymentRequests(): Promise<number> {
+    const pendings = await this.paymentRequestModel
+      .find({ status: PaymentRequestStatus.PENDING })
+      .select('transactionId')
+      .lean()
+      .exec();
+
+    if (pendings.length === 0) return 0;
+
+    const txIds = pendings
+      .map((p: any) => p.transactionId)
+      .filter((id: any) => mongoose.Types.ObjectId.isValid(id));
+
+    const transactions = await this.transactionModel
+      .find({ _id: { $in: txIds } })
+      .select('_id status')
+      .lean()
+      .exec();
+
+    const txStatusMap = new Map<string, string>();
+    for (const tx of transactions) {
+      txStatusMap.set(String(tx._id), tx.status);
+    }
+
+    let updated = 0;
+    for (const pr of pendings) {
+      const txStatus = txStatusMap.get(String(pr.transactionId));
+      if (!txStatus) continue;
+      const mapped = this.statusMap[txStatus];
+      if (!mapped) continue;
+
+      await this.paymentRequestModel
+        .findOneAndUpdate({ _id: pr._id }, { status: mapped })
+        .exec();
+      updated++;
+    }
+
+    return updated;
+  }
+
   async getAllSystemPaymentRequests(query: any) {
     const { page, limit, skip } = this.getPagination(query);
+    const filter = this.buildFilter(query);
     const [data, totalItems] = await Promise.all([
       this.paymentRequestModel
-        .find()
+        .find(filter)
         .populate('transactionId')
         .populate('userId')
         .sort({ createdAt: -1 })
@@ -254,7 +390,7 @@ export class PaymentRequestService {
         .limit(limit)
         .lean()
         .exec(),
-      this.paymentRequestModel.countDocuments(),
+      this.paymentRequestModel.countDocuments(filter),
     ]);
 
     return {

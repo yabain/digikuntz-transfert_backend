@@ -9,6 +9,8 @@ import {
 } from './payment-request.schema';
 import { PaymentRequestService } from './payment-request.service';
 import { PaymentRequestController } from './payment-request.controller';
+import { PaymentRequestCron } from './payment-request.cron';
+import { Transaction, TransactionSchema } from 'src/transaction/transaction.schema';
 
 @Module({
   imports: [
@@ -17,10 +19,11 @@ import { PaymentRequestController } from './payment-request.controller';
     forwardRef(() => FlutterwaveModule),
     MongooseModule.forFeature([
       { name: PaymentRequest.name, schema: PaymentRequestSchema },
+      { name: Transaction.name, schema: TransactionSchema },
     ]),
   ],
   controllers: [PaymentRequestController],
-  providers: [PaymentRequestService],
+  providers: [PaymentRequestService, PaymentRequestCron],
   exports: [PaymentRequestService],
 })
 export class PaymentRequestModule {}

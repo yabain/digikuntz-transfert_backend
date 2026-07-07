@@ -55,7 +55,8 @@ export class UserService {
 
   async getAllUsers(query: any): Promise<any> {
     const page = Number(query.page) > 0 ? Number(query.page) : 1;
-    const limit = 25;
+    const requestedLimit = Number(query.limit);
+    const limit = requestedLimit > 0 ? Math.min(requestedLimit, 100) : 25;
     const skip = (page - 1) * limit;
 
     // Requête optimisée sans populate
@@ -68,12 +69,17 @@ export class UserService {
     //   .limit(limit)
     //   .lean();
 
-    // Parallel execution
-    const [total, totalActive, adminers, users, personal] = await Promise.all([
+    const filter: any = {};
+    if (query.status === 'active') filter.isActive = true;
+    else if (query.status === 'inactive') filter.isActive = false;
+    else if (query.status === 'admin') filter.isAdmin = true;
+
+    const [totalFiltered, totalAll, totalActive, adminers, users, personal] = await Promise.all([
+      this.userModel.countDocuments(filter),
       this.userModel.countDocuments(),
       this.userModel.countDocuments({ isActive: true }),
       this.userModel.countDocuments({ isAdmin: true }),
-      this.userModel.find({})
+      this.userModel.find(filter)
         .select('firstName lastName name email pictureUrl isActive isAdmin accountType whatsapp verified createdAt')
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -81,7 +87,7 @@ export class UserService {
         .populate('countryId', 'name flagUrl')
         .populate('cityId', 'name')
         .lean(),
-        this.userModel.countDocuments({ accountType: 'personal' }),
+      this.userModel.countDocuments({ accountType: 'personal' }),
     ]);
 
 
@@ -89,14 +95,15 @@ export class UserService {
       data: users,
       pagination: {
         currentPage: page,
-        totalPages: Math.ceil(total / limit),
-        totalItems: total,
-        hasNextPage: page * limit < total,
+        totalPages: Math.ceil(totalFiltered / limit),
+        totalItems: totalFiltered,
+        hasNextPage: page * limit < totalFiltered,
+        totalItemsAll: totalAll,
         totalActive,
-        totalInactive: total - totalActive,
+        totalInactive: totalAll - totalActive,
         adminers,
         totalPersonal: personal,
-        totalOrganisation: total - personal
+        totalOrganisation: totalAll - personal,
       },
     };
   }

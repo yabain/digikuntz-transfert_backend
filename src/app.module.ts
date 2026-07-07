@@ -35,6 +35,8 @@ import { AppCacheModule } from './cache/cache.module';
 import { FundraisingModule } from './fundraising/fundraising.module';
 import { PaymentRequestModule } from './payment-request/payment-request.module';
 import { PaymentMethodModule } from './payment-method/payment-method.module';
+import { TrackingModule } from './tracking/tracking.module';
+import { AuditLogModule } from './audit-log/audit-log.module';
 
 @Module({
   imports: [
@@ -100,7 +102,9 @@ import { PaymentMethodModule } from './payment-method/payment-method.module';
     FundraisingModule,
     PaymentRequestModule,
     PaymentMethodModule,
+    TrackingModule,
     DevModule,
+    AuditLogModule,
   ],
   controllers: [AppController],
   providers: [AppService],

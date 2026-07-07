@@ -95,6 +95,18 @@ export class TransactionService {
     return { $or: conditions };
   }
 
+  private buildStatusFilter(status?: string): any {
+    if (!status) return null;
+    const statusGroups: Record<string, string[]> = {
+      pending: ['transaction_initialized', 'transaction_payin_pending', 'transaction_payout_pending'],
+      success: ['transaction_payin_success', 'transaction_payout_success'],
+      failed: ['transaction_payin_error', 'transaction_payin_closed', 'transaction_payout_error', 'transaction_payout_closed', 'transaction_payout_rejected', 'transaction_error'],
+    };
+    const group = statusGroups[status];
+    if (group) return { status: { $in: group } };
+    return { status };
+  }
+
   private apiPayoutMatch(): any {
     return { isApiPayout: true };
   }
@@ -112,7 +124,7 @@ export class TransactionService {
   }
 
   async getAllPayoutTransactoins(query: Query): Promise<Transaction[]> {
-    const resPerPage = Number(query?.resPerPage) || 10;
+    const resPerPage = Number(query?.limit || query?.resPerPage) || 10;
     const currentPage = Number(query?.page) || 1;
     const skip = resPerPage * (currentPage - 1);
 
@@ -168,9 +180,11 @@ export class TransactionService {
     };
 
     const keywordFilter = typeof query.keyword === 'string' ? this.buildKeywordFilter(query.keyword) : {};
-    const matchFilter = Object.keys(keywordFilter).length
-      ? { $and: [userFilter, keywordFilter] as any[] }
-      : userFilter;
+    const statusFilter = this.buildStatusFilter(query.status);
+    const conditions: any[] = [userFilter];
+    if (Object.keys(keywordFilter).length) conditions.push(keywordFilter);
+    if (statusFilter) conditions.push(statusFilter);
+    const matchFilter = conditions.length === 1 ? conditions[0] : { $and: conditions };
 
     const aggregated = await this.transactionModel.aggregate([
       { $match: matchFilter },
@@ -578,6 +592,28 @@ export class TransactionService {
     ]);
 
     return res;
+  }
+
+  async getInitializedPendingList(query?): Promise<any> {
+    const resPerPage = Number(query?.resPerPage) || 10;
+    const currentPage = Number(query?.page) || 1;
+    const skip = resPerPage * (currentPage - 1);
+
+    const eightHoursAgo = new Date();
+    eightHoursAgo.setMinutes(eightHoursAgo.getMinutes() - 480);
+
+    return this.transactionModel.aggregate([
+      {
+        $match: {
+          $and: [
+            { status: 'transaction_initialized' },
+            { updatedAt: { $lt: eightHoursAgo } },
+          ],
+        },
+      },
+      { $skip: skip },
+      { $limit: resPerPage },
+    ]);
   }
 
   async getPayinByTxRef(txRef: string) {
@@ -1667,6 +1703,41 @@ export class TransactionService {
   // ---------------- / System statistic ------------------------
 
   // ------------------- User transactions statistic
+  async getMyTransactionStats(userId: string): Promise<{
+    total: number;
+    success: number;
+    pending: number;
+    failed: number;
+  }> {
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new NotFoundException('Invalid user ID');
+    }
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const userFilter = {
+      $or: [
+        { receiverId: userId },
+        { senderId: userObjectId },
+        { userId: userObjectId },
+      ],
+    };
+    const [total, success, pending, failed] = await Promise.all([
+      this.transactionModel.countDocuments(userFilter),
+      this.transactionModel.countDocuments({
+        ...userFilter,
+        status: { $in: ['transaction_payin_success', 'transaction_payout_success'] },
+      }),
+      this.transactionModel.countDocuments({
+        ...userFilter,
+        status: { $in: ['transaction_initialized', 'transaction_payin_pending', 'transaction_payout_pending'] },
+      }),
+      this.transactionModel.countDocuments({
+        ...userFilter,
+        status: { $in: ['transaction_payin_error', 'transaction_payin_closed', 'transaction_payout_error', 'transaction_payout_closed', 'transaction_payout_rejected', 'transaction_error'] },
+      }),
+    ]);
+    return { total, success, pending, failed };
+  }
+
   async getTransactionsStatisticsOfUser(userId: string): Promise<any>{
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       throw new NotFoundException('Invalid user ID');

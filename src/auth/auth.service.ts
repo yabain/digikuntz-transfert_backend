@@ -23,6 +23,7 @@ import { JwtService } from '@nestjs/jwt';
 import { RevokedToken } from 'src/revoked-token/revoked-token.schema';
 import { EmailService } from 'src/email/email.service';
 import { WhatsappService } from 'src/wa/whatsapp.service';
+import { AuditLogService } from 'src/audit-log/audit-log.service';
 
 @Injectable()
 export class AuthService {
@@ -35,6 +36,7 @@ export class AuthService {
     private emailService: EmailService,
     @Inject(forwardRef(() => WhatsappService))
     private whatsappService: WhatsappService,
+    private auditLogService: AuditLogService,
   ) { }
 
   /**
@@ -164,6 +166,19 @@ export class AuthService {
 
     user.password = ''; // Remove the password from the response for security
     user.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
+
+    this.auditLogService.record({
+      actorId: user._id?.toString(),
+      actorEmail: user.email,
+      actorRole: user.isAdmin ? 'admin' : user.accountType || 'user',
+      action: 'auth.login',
+      resourceType: 'user',
+      resourceId: user._id?.toString(),
+      resourceLabel: user.email,
+      method: 'POST',
+      path: '/auth/signin',
+      statusCode: 200,
+    });
 
     // Return the user data and a JWT token for authentication
     return { userData: user, token: this.jwtService.sign({ id: user._id }) };

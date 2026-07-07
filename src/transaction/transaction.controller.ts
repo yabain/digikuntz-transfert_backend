@@ -188,6 +188,23 @@ export class TransactionController {
     return this.transactionService.getPayoutListByStatus(status, query);
   }
 
+  @Get('my-stats')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get transaction stats for the current user (status breakdown)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Current user transaction stats.',
+    schema: {
+      example: { total: 100, success: 70, pending: 20, failed: 10 },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async getMyTransactionStats(@Req() req): Promise<any> {
+    return this.transactionService.getMyTransactionStats(req.user._id);
+  }
+
   @Get('my-statistics')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get transaction statistics for the current user' })
