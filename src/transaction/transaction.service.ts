@@ -1320,7 +1320,10 @@ export class TransactionService {
           taxesAmount: 0,
           paymentWithTaxes: this.arrondOnExeed(Number(transactionData.estimation)),
         }
-      : await this.calculateTaxesAmount(transactionData.estimation);
+      : await this.calculateTaxesAmount(
+          transactionData.estimation,
+          Number(transactionData.invoiceTaxes) || undefined,
+        );
     const { noFees: _noFees, ...persistedTransactionData } = transactionData;
     const payload = {
       ...persistedTransactionData,
@@ -1463,15 +1466,14 @@ export class TransactionService {
     return true;
   }
 
-  async calculateTaxesAmount(price: number): Promise<any> {
-    const systemData = await this.systemService.getSystemData();
-    const taxesAmount = this.arrondOnExeed(price * (systemData.invoiceTaxes / 100));
+  async calculateTaxesAmount(price: number, taxRate?: number): Promise<any> {
+    const rate = taxRate ?? (await this.systemService.getSystemData()).invoiceTaxes ?? 0;
+    const taxesAmount = this.arrondOnExeed(price * (rate / 100));
     const paymentWithTaxes = this.arrondOnExeed(price + taxesAmount);
     return {
-      invoiceTaxes: systemData.invoiceTaxes,
+      invoiceTaxes: rate,
       price: this.arrondOnExeed(price),
       taxesAmount,
-      // keep legacy key for backward compatibility
       paymentWhitTaxes: paymentWithTaxes,
       paymentWithTaxes,
     }

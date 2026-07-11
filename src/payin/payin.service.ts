@@ -56,11 +56,11 @@ type FWErrorPayload = {
 export class PayinService {
   private readonly logger = new Logger(PayinService.name);
 
-  private readonly fwSecret: string;
-  private readonly fwPublic: string;
+  private fwSecret: string;
+  private fwPublic: string;
   private readonly fwBaseUrlV3: string;
   private readonly fwBaseUrlV4: string; // conservé (non utilisé ici)
-  private readonly secretHash?: string;
+  private secretHash: string;
   private readonly redirectDefault?: string;
   private readonly mpesaCallbackBase: string;
   private readonly mpesaBaseUrl: string;
@@ -85,9 +85,15 @@ export class PayinService {
     this.fwBaseUrlV4 =
       this.config.get<string>('FLUTTERWAVE_BASE_URL_V4') ??
       'https://api.flutterwave.cloud';
-    this.secretHash = this.config.get<string>('FLUTTERWAVE_SECRET_HASH');
+    this.secretHash = this.config.get<string>('FLUTTERWAVE_SECRET_HASH') ?? '';
     const frontUrl = this.config.get<string>('FRONT_URL')?.replace(/\/+$/, '');
     this.redirectDefault = frontUrl ? `${frontUrl}/dashboard` : undefined;
+  }
+
+  setCredentials(creds: Record<string, any>): void {
+    if (creds.secretKey) this.fwSecret = creds.secretKey;
+    if (creds.publicKey) this.fwPublic = creds.publicKey;
+    if (creds.secretHash) this.secretHash = creds.secretHash;
   }
 
   /* ========================= Helpers ========================= */

@@ -77,11 +77,23 @@ export class FlutterwaveService {
     @Inject(forwardRef(() => WhatsappService))
     private whatsappService: WhatsappService,
   ) {
+    this.loadFromEnv();
+  }
+
+  private loadFromEnv(): void {
     this.secretHash = this.config.get<string>('FLUTTERWAVE_SECRET_HASH');
     this.fwSecret = this.config.get<string>('FLUTTERWAVE_SECRET_KEY');
     this.fwPublic = this.config.get<string>('FLUTTERWAVE_PUBLIC_KEY');
     this.fwSecretNGN = this.config.get<string>('FLUTTERWAVE_SECRET_KEY_NGN');
     this.fwPublicNGN = this.config.get<string>('FLUTTERWAVE_PUBLIC_KEY_NGN');
+  }
+
+  setCredentials(creds: Record<string, any>): void {
+    if (creds.secretKey) this.fwSecret = creds.secretKey;
+    if (creds.publicKey) this.fwPublic = creds.publicKey;
+    if (creds.secretHash) this.secretHash = creds.secretHash;
+    if (creds.FLUTTERWAVE_SECRET_KEY_NGN) this.fwSecretNGN = creds.FLUTTERWAVE_SECRET_KEY_NGN;
+    if (creds.FLUTTERWAVE_PUBLIC_KEY_NGN) this.fwPublicNGN = creds.FLUTTERWAVE_PUBLIC_KEY_NGN;
   }
 
   private isInsufficientPayoutBalance(details: any): boolean {
@@ -246,9 +258,11 @@ export class FlutterwaveService {
 
     const url = `${this.fwBaseUrlV3}/transactions`;
     try {
+      console.log('FW listPayinTransactions URL:', url, 'params:', JSON.stringify(params), 'key:', countryWallet === 'CM' ? 'fwSecret (FLUTTERWAVE_SECRET_KEY)' : 'fwSecretNGN (FLUTTERWAVE_SECRET_KEY_NGN)', 'len:', headers?.Authorization?.length);
       const res = await firstValueFrom(this.http.get(url, { headers, params }));
       return res.data;
     } catch (err: any) {
+      console.error('FW listPayinTransactions error:', err?.message, err?.response?.status, JSON.stringify(err?.response?.data));
       const parsed = this.sanitizeFlutterwaveError(
         err,
         'Flutterwave API connection error while listing payin transactions',
@@ -483,6 +497,232 @@ export class FlutterwaveService {
     }
   }
 
+  private authHeaderByCurrency(currency?: string): Record<string, string> {
+    const normalized = String(currency || '').toUpperCase();
+    if (normalized === 'NGN' && this.fwSecretNGN) {
+      return { Authorization: `Bearer ${this.fwSecretNGN}` };
+    }
+    return this.authHeader();
+  }
+
+  private getCountryForCurrency(currency: string): string | undefined {
+    const map: Record<string, string> = {
+      XAF: 'CM',
+      XOF: 'CI',
+      NGN: 'NG',
+      KES: 'KE',
+      GHS: 'GH',
+      UGX: 'UG',
+      RWF: 'RW',
+    };
+    return map[currency];
+  }
+
+  private validateDirectChargePayload(dto: {
+    amount: number;
+    currency: string;
+    phone: string;
+    email: string;
+    name?: string;
+    network?: string;
+    txRef: string;
+  }): void {
+    const currency = String(dto.currency || '').toUpperCase();
+    const amount = Number(dto.amount);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new HttpException(
+        { status: HttpStatus.BAD_REQUEST, error: 'Invalid amount: must be a positive number' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (!dto.txRef) {
+      throw new HttpException(
+        { status: HttpStatus.BAD_REQUEST, error: 'txRef is required' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (!dto.phone || String(dto.phone).replace(/\s+/g, '').length < 5) {
+      throw new HttpException(
+        { status: HttpStatus.BAD_REQUEST, error: 'A valid phone number is required' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (!dto.email) {
+      throw new HttpException(
+        { status: HttpStatus.BAD_REQUEST, error: 'Customer email is required' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (currency === 'NGN' && !dto.network) {
+      throw new HttpException(
+        { status: HttpStatus.BAD_REQUEST, error: 'network is required for NGN mobile money (MTN, AIRTEL, GLO, 9MOBILE)' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (currency === 'GHS' && !dto.network) {
+      throw new HttpException(
+        { status: HttpStatus.BAD_REQUEST, error: 'network is required for GHS mobile money (MTN, VODAFONE, AIRTELTIGO)' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const supportedCurrencies = ['XAF', 'XOF', 'NGN', 'KES', 'GHS', 'UGX', 'RWF'];
+    if (!supportedCurrencies.includes(currency)) {
+      throw new HttpException(
+        { status: HttpStatus.BAD_REQUEST, error: `Unsupported currency: ${currency}. Supported: ${supportedCurrencies.join(', ')}` },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  async directMobileMoneyCharge(dto: {
+    amount: number;
+    currency: string;
+    phone: string;
+    email: string;
+    name?: string;
+    network?: string;
+    txRef: string;
+  }): Promise<any> {
+    this.validateDirectChargePayload(dto);
+
+    const currency = String(dto.currency || '').toUpperCase();
+    const phone = dto.phone.replace(/\s+/g, '').trim();
+
+    const payload: any = {
+      tx_ref: dto.txRef,
+      amount: Number(dto.amount),
+      currency,
+      email: dto.email,
+      phone_number: phone,
+      fullname: dto.name || 'Customer',
+      meta: { app: 'digikuntz-payments', flow: 'direct_charge' },
+    };
+
+    if (dto.network) {
+      payload.network = dto.network.toUpperCase();
+    }
+
+    const countryOverride = this.getCountryForCurrency(currency);
+    if (countryOverride && (currency === 'XAF' || currency === 'XOF')) {
+      payload.country = countryOverride;
+    }
+
+    let chargeType: string;
+    switch (currency) {
+      case 'KES':
+        chargeType = 'mpesa';
+        break;
+      case 'XAF':
+      case 'XOF':
+        chargeType = 'mobile_money_franco';
+        break;
+      case 'GHS':
+        chargeType = 'mobile_money_ghana';
+        break;
+      case 'NGN':
+        chargeType = 'mobile_money_nigeria';
+        break;
+      case 'UGX':
+        chargeType = 'mobile_money_uganda';
+        break;
+      case 'RWF':
+        chargeType = 'mobile_money_rwanda';
+        break;
+      default:
+        chargeType = 'mobile_money';
+    }
+
+    const res = await firstValueFrom(
+      this.http.post(
+        `${this.fwBaseUrlV3}/charges?type=${chargeType}`,
+        payload,
+        {
+          headers: this.authHeaderByCurrency(currency),
+          timeout: 30000,
+        },
+      ),
+    );
+    return res.data;
+  }
+
+  async createDirectCharge(data: any, userId: any): Promise<any> {
+    const depositAmount = Number(data.estimation);
+    if (Number.isFinite(depositAmount) && depositAmount > 0) {
+      await this.transactionService.validateTransactionLimit(
+        depositAmount,
+        data.currency || 'XAF',
+        'deposit',
+      );
+    }
+
+    const txRef = this.payinService.generateTxRef('txDirect');
+    const transactionData = {
+      transactionRef: this.transactionService.generateInRef(),
+      estimation: data.estimation,
+      transactionType: data.transactionType || 'deposite',
+      userId,
+      senderId: userId,
+      senderName: data.name || 'Customer',
+      senderEmail: data.email || '',
+      senderContact: data.phone,
+      senderCountry: data.country || '',
+      senderCurrency: data.currency,
+      receiverId: userId,
+      receiverName: data.name || 'Customer',
+      receiverEmail: data.email || '',
+      receiverContact: data.phone,
+      receiverCurrency: data.currency,
+      status: TStatus.PAYINPENDING,
+      invoiceTaxes: data.invoiceTaxes,
+    };
+
+    const savedTransaction =
+      await this.transactionService.createTransaction(transactionData);
+    if (!savedTransaction) {
+      throw new NotFoundException('Error to save transaction details');
+    }
+
+    const chargeResult = await this.directMobileMoneyCharge({
+      amount: Number(savedTransaction.paymentWithTaxes),
+      currency: data.currency,
+      phone: data.phone,
+      email: data.email || '',
+      name: data.name,
+      network: data.network,
+      txRef,
+    });
+
+    await this.payinService.createPayin({
+      amount: Number(savedTransaction.paymentWithTaxes),
+      txRef,
+      transactionId: savedTransaction._id,
+      currency: data.currency,
+      customerEmail: data.email || '',
+      customerName: data.name || 'Customer',
+      customerPhone: data.phone,
+      status: 'pending',
+      userId,
+    });
+
+    return {
+      status: 'payin_pending',
+      transactionId: savedTransaction._id,
+      txRef,
+      estimation: savedTransaction.estimation,
+      invoiceTaxes: savedTransaction.invoiceTaxes,
+      taxesAmount: savedTransaction.taxesAmount,
+      paymentWithTaxes: savedTransaction.paymentWithTaxes,
+      chargeResponse: chargeResult,
+    };
+  }
+
   async createTransferFromBalance(transactionData: any, userId: any) {
     const amount = Number(transactionData?.estimation);
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -502,7 +742,8 @@ export class FlutterwaveService {
       );
     }
 
-    const taxesDetails = await this.transactionService.calculateTaxesAmount(amount);
+    const customRate = Number(transactionData?.invoiceTaxes) || undefined;
+    const taxesDetails = await this.transactionService.calculateTaxesAmount(amount, customRate);
     const totalToDebit = Number(taxesDetails.paymentWithTaxes);
     if (!senderCurrency) {
       throw new HttpException(
@@ -749,7 +990,7 @@ export class FlutterwaveService {
     await this.operationNotificationService.notifyAdminPayoutPending(transaction);
   }
 
-  private async processSuccessfulPayin(transaction: any, transactionId: string) {
+  async processSuccessfulPayin(transaction: any, transactionId: string) {
     const claimed =
       await this.transactionService.claimTransactionForSuccessfulPayin(
         transactionId,

@@ -14,6 +14,7 @@ import {
   UsePipes,
   ValidationPipe,ForbiddenException,
   NotFoundException,
+  BadRequestException,
   Param,
 } from '@nestjs/common';
 import { FlutterwaveService } from './flutterwave.service';
@@ -28,11 +29,15 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { PaymentMethodService } from 'src/payment-method/payment-method.service';
 
 @ApiTags('flutterwave')
 @Controller('fw')
 export class FlutterwaveController {
-  constructor(private readonly fw: FlutterwaveService) {}
+  constructor(
+    private readonly fw: FlutterwaveService,
+    private readonly paymentMethodService: PaymentMethodService,
+  ) {}
 
   @Get('balance/:countryWallet')
   @ApiBearerAuth()
@@ -139,6 +144,65 @@ export class FlutterwaveController {
   createPayin(@Body() transactionData: any, @Req() req) {
     console.log('(fw controller) transactionData: ', transactionData);
     return this.fw.createPayin(transactionData, req.user._id);
+  }
+
+  @Post('direct-charge')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Initiate a direct mobile money charge (no hosted checkout)' })
+  @ApiBody({
+    schema: {
+      example: {
+        estimation: 1000,
+        currency: 'XAF',
+        phone: '237691224472',
+        email: 'customer@mail.com',
+        name: 'John Doe',
+        paymentMethodCode: 'ORANGEMONEY',
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Direct charge initialized.' })
+  @ApiResponse({ status: 400, description: 'Invalid payload.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async createDirectCharge(@Body() data: any, @Req() req) {
+    let feeRate: number | undefined;
+    let network: string | undefined;
+
+    if (data.paymentMethodCode) {
+      const code = String(data.paymentMethodCode).toUpperCase();
+      const method = await this.paymentMethodService.findByCode(code);
+      if (!method) {
+        throw new NotFoundException(`Payment method '${code}' not found`);
+      }
+      if (String(method.currency).toUpperCase() !== String(data.currency).toUpperCase()) {
+        throw new BadRequestException(
+          `Currency mismatch: method '${code}' is for ${method.currency}, not ${data.currency}`,
+        );
+      }
+      if (!method.statusPayin) {
+        throw new BadRequestException(`Payment method '${code}' is not available for payin`);
+      }
+      const amount = Number(data.estimation);
+      if (Number.isFinite(amount)) {
+        if (method.minAmount > 0 && amount < method.minAmount) {
+          throw new BadRequestException(`Amount ${amount} is below minimum ${method.minAmount} for method '${code}'`);
+        }
+        if (method.maxAmount > 0 && amount > method.maxAmount) {
+          throw new BadRequestException(`Amount ${amount} exceeds maximum ${method.maxAmount} for method '${code}'`);
+        }
+      }
+      feeRate = Number(method.taxesTransfer) || undefined;
+      network = String(method.code).toUpperCase();
+    } else {
+      network = data.network ? String(data.network).toUpperCase() : undefined;
+    }
+
+    return this.fw.createDirectCharge(
+      { ...data, invoiceTaxes: feeRate, network },
+      req.user._id,
+    );
   }
 
   @Post('transfer-from-balance')

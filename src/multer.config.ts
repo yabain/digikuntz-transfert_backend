@@ -139,6 +139,22 @@ export const multerConfigForPlan = {
   },
 };
 
+// Configuration for Multer to handle gateway image uploads
+export const multerConfigForGateway = {
+  storage: diskStorage({
+    destination: getUploadPath(),
+    filename: (req, file, callback) => {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+      const ext = extname(file.originalname);
+      const fileName = `gateway_${uniqueSuffix}${ext}`;
+      callback(null, fileName);
+    },
+  }),
+  limits: {
+    fileSize: 2 * 1024 * 1024, // 2 MB
+  },
+};
+
 // Configuration for Multer to handle fundraising cover uploads
 export const multerConfigForFundraising = {
   storage: diskStorage({

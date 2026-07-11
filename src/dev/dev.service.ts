@@ -11,6 +11,7 @@ import { UserService } from 'src/user/user.service';
 import { CryptService } from './crypt.service';
 import { BalanceService } from 'src/balance/balance.service';
 import { PayoutService } from 'src/payout/payout.service';
+import { PaymentMethodService } from 'src/payment-method/payment-method.service';
 import { TStatus } from 'src/transaction/transaction.schema';
 
 @Injectable()
@@ -26,6 +27,7 @@ export class DevService {
     private cryptService: CryptService,
     private balanceService: BalanceService,
     private payoutService: PayoutService,
+    private paymentMethodService: PaymentMethodService,
   ) { }
 
   async getDevDataById(devId): Promise<any> {
@@ -498,6 +500,157 @@ export class DevService {
         paymentLink: createPayin?.redirect_url,
         createdAt: transaction.createdAt,
         updatedAt: transaction.updatedAt,
+      },
+    };
+  }
+
+  async createDirectPayinTransaction(data: any, userId): Promise<any> {
+    const depositAmount = Number(data.estimation);
+    if (Number.isFinite(depositAmount) && depositAmount > 0) {
+      try {
+        await this.transactionService.validateTransactionLimit(
+          depositAmount,
+          data.currency || 'XAF',
+          'deposit',
+        );
+      } catch (error) {
+        throw new HttpException(
+          {
+            message: error?.response?.message || 'Transaction amount exceeds allowed limits',
+            code: 'LIMIT_EXCEEDED',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+
+    let feeRate: number | undefined;
+    let network: string | undefined;
+
+    if (data.paymentMethodCode) {
+      const code = String(data.paymentMethodCode).toUpperCase();
+      const method = await this.paymentMethodService.findByCode(code);
+      if (!method) {
+        throw new HttpException(
+          { message: `Payment method '${code}' not found`, code: 'METHOD_NOT_FOUND' },
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      if (String(method.currency).toUpperCase() !== String(data.currency).toUpperCase()) {
+        throw new HttpException(
+          {
+            message: `Currency mismatch: method '${code}' is for ${method.currency}, not ${data.currency}`,
+            code: 'CURRENCY_MISMATCH',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      if (!method.statusPayin) {
+        throw new HttpException(
+          { message: `Payment method '${code}' is not available for payin`, code: 'METHOD_DISABLED' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      const amount = Number(data.estimation);
+      if (Number.isFinite(amount)) {
+        if (method.minAmount > 0 && amount < method.minAmount) {
+          throw new HttpException(
+            { message: `Amount ${amount} is below minimum ${method.minAmount} for method '${code}'`, code: 'AMOUNT_BELOW_MIN' },
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+        if (method.maxAmount > 0 && amount > method.maxAmount) {
+          throw new HttpException(
+            { message: `Amount ${amount} exceeds maximum ${method.maxAmount} for method '${code}'`, code: 'AMOUNT_EXCEEDS_MAX' },
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+      }
+      feeRate = Number(method.taxesTransfer) || undefined;
+      network = String(method.code).toUpperCase();
+    } else {
+      network = data.network ? String(data.network).toUpperCase() : undefined;
+    }
+
+    const callbackUrl = data.callbackUrl
+      ? this.normalizeCallbackUrl(data.callbackUrl, 'callbackUrl')
+      : undefined;
+
+    const devData = await this.getDevDataByUserId(userId);
+    const webhookUrl = devData?.webhookUrl
+      ? this.normalizeCallbackUrl(devData.webhookUrl, 'webhookUrl')
+      : undefined;
+
+    const txRef = this.payinService.generateTxRef('txDirect');
+    const transactionData = {
+      transactionRef: this.transactionService.generateInRef(),
+      estimation: data.estimation,
+      transactionType: 'apiCall',
+      userId,
+      senderId: userId,
+      senderName: 'API Call: ' + (data.name || 'Customer'),
+      senderEmail: data.email || '',
+      senderContact: data.phone,
+      senderCountry: data.country || '',
+      senderCurrency: data.currency,
+      receiverId: userId,
+      receiverName: data.name || 'Customer',
+      receiverEmail: data.email || '',
+      receiverContact: data.phone,
+      receiverCurrency: data.currency,
+      status: TStatus.PAYINPENDING,
+      invoiceTaxes: feeRate,
+      ...(callbackUrl && { callbackUrl }),
+      ...(webhookUrl && { callbackUrl: webhookUrl }),
+    };
+
+    const savedTransaction =
+      await this.transactionService.createTransaction(transactionData);
+
+    const chargeResult = await this.fwService.directMobileMoneyCharge({
+      amount: Number(savedTransaction.paymentWithTaxes),
+      currency: data.currency,
+      phone: data.phone,
+      email: data.email || '',
+      name: data.name,
+      network,
+      txRef,
+    });
+
+    await this.payinService.createPayin({
+      amount: Number(savedTransaction.paymentWithTaxes),
+      txRef,
+      transactionId: savedTransaction._id,
+      currency: data.currency,
+      customerEmail: data.email || '',
+      customerName: data.name || 'Customer',
+      customerPhone: data.phone,
+      status: 'pending',
+      userId,
+    });
+
+    const statusMap: Record<string, string> = {
+      transaction_payin_pending: 'payin_pending',
+      transaction_payin_success: 'payin_success',
+      transaction_payin_error: 'payin_error',
+      transaction_payin_closed: 'payin_closed',
+    };
+
+    return {
+      id: savedTransaction._id,
+      status: statusMap[savedTransaction.status] ?? savedTransaction.status,
+      data: {
+        estimation: savedTransaction.estimation,
+        transactionRef: savedTransaction.transactionRef,
+        invoiceTaxes: savedTransaction.taxesAmount,
+        paymentWithTaxes: savedTransaction.paymentWithTaxes,
+        currency: data.currency,
+        transactionType: 'apiCall',
+        paymentMethodCode: data.paymentMethodCode || null,
+        appliedFeeRate: feeRate || 0,
+        txRef,
+        createdAt: savedTransaction.createdAt,
+        updatedAt: savedTransaction.updatedAt,
       },
     };
   }

@@ -9,11 +9,15 @@ import {
   Put,
   Query,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
   UsePipes,
   ValidationPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -28,6 +32,7 @@ import { CreatePaymentMethodDto } from './create-payment-method.dto';
 import { UpdatePaymentMethodDto } from './update-payment-method.dto';
 import { PaymentMethod } from './payment-method.schema';
 import { PaymentMethodService } from './payment-method.service';
+import { multerConfigForGateway, generateFileUrl } from '../multer.config';
 
 @ApiTags('payment-methods')
 @Controller('payment-methods')
@@ -44,6 +49,16 @@ export class PaymentMethodController {
   async create(@Body() dto: CreatePaymentMethodDto, @Req() req): Promise<PaymentMethod> {
     this.assertAdmin(req);
     return this.paymentMethodService.create(dto);
+  }
+
+  @Post('upload-image')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'))
+  @UseInterceptors(FileInterceptor('image', multerConfigForGateway))
+  async uploadImage(@UploadedFile() file: Express.Multer.File, @Req() req): Promise<any> {
+    this.assertAdmin(req);
+    if (!file) throw new BadRequestException('No file uploaded');
+    return { imageUrl: generateFileUrl(file.filename) };
   }
 
   @Get()

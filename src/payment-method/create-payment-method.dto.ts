@@ -3,8 +3,10 @@ import {
   IsBoolean,
   IsEnum,
   IsMongoId,
+  IsIn,
   IsNotEmpty,
   IsNumber,
+  IsOptional,
   IsString,
   Min,
 } from 'class-validator';
@@ -31,43 +33,61 @@ export class CreatePaymentMethodDto {
   @IsNotEmpty()
   image: string;
 
-  @ApiProperty({ example: '687e4bff30550a0b4917bc77' })
-  @IsMongoId()
-  countryId: string;
+  @ApiProperty({ example: 'mobile', enum: ['mobile', 'card', 'bank'], required: false })
+  @IsOptional()
+  @IsIn(['mobile', 'card', 'bank'])
+  type?: string;
 
-  @ApiProperty({ example: 'FW_OM_CM' })
-  @IsMongoId()
-  code: string;
+  @ApiProperty({ example: 'ORANGEMONEY', required: false })
+  @IsOptional()
+  @IsString()
+  code?: string;
 
-  @ApiProperty({ example: 'XAF' })
+  @ApiProperty({ example: 'XAF', required: false })
+  @IsOptional()
+  @IsString()
+  currency?: string;
+
+  @ApiProperty({ example: 'Payment via Orange Money', required: false })
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiProperty({ example: '687e4bff30550a0b4917bc77', required: false })
+  @IsOptional()
   @IsMongoId()
-  currency: string;
+  countryId?: string;
 
   @ApiProperty({
     enum: PaymentMethodProvider,
     example: PaymentMethodProvider.FLUTTERWAVEXAF,
+    required: false,
   })
+  @IsOptional()
   @IsEnum(PaymentMethodProvider)
-  provider: PaymentMethodProvider;
+  provider?: PaymentMethodProvider;
 
-  @ApiProperty({ example: 3 })
+  @IsOptional()
   @IsNumber()
   @Min(0)
-  taxesPayment: number;
+  taxesPayment?: number;
 
-  @ApiProperty({ example: 2 })
+  @IsOptional()
   @IsNumber()
   @Min(0)
-  taxesTransfer: number;
+  taxesTransfer?: number;
 
-  @ApiProperty({ example: 100 })
+  @IsOptional()
   @IsNumber()
   @Min(0)
-  minAmount: number;
+  minAmount?: number;
 
-  @ApiProperty({ example: 1000000 })
+  @IsOptional()
   @IsNumber()
   @Min(0)
-  maxAmount: number;
+  maxAmount?: number;
+
+  @IsOptional()
+  @IsMongoId()
+  gatewayId?: string;
 }
-

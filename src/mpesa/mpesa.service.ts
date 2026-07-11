@@ -8,32 +8,48 @@ export class MpesaService {
   private readonly logger = new Logger(MpesaService.name);
   private cachedToken: { value: string; expiresAt: number } | null = null;
 
+  private _consumerKey: string | null = null;
+  private _consumerSecret: string | null = null;
+  private _passKey: string | null = null;
+  private _shortCode: string | null = null;
+  private _baseUrl: string | null = null;
+
   constructor(
     private readonly http: HttpService,
     private readonly config: ConfigService,
   ) {}
 
+  setCredentials(creds: Record<string, any>): void {
+    if (creds.consumerKey) this._consumerKey = creds.consumerKey;
+    if (creds.MPESA_CONSUMER_KEY) this._consumerKey = creds.MPESA_CONSUMER_KEY;
+    if (creds.consumerSecret) this._consumerSecret = creds.consumerSecret;
+    if (creds.MPESA_CONSUMER_SECRET) this._consumerSecret = creds.MPESA_CONSUMER_SECRET;
+    if (creds.passKey) this._passKey = creds.passKey;
+    if (creds.MPESA_PASSKEY) this._passKey = creds.MPESA_PASSKEY;
+    if (creds.shortCode) this._shortCode = creds.shortCode;
+    if (creds.MPESA_SHORTCODE) this._shortCode = creds.MPESA_SHORTCODE;
+    if (creds.baseUrl) this._baseUrl = creds.baseUrl;
+    if (creds.MPESA_BASE_URL) this._baseUrl = creds.MPESA_BASE_URL;
+  }
+
   private get baseUrl(): string {
-    return (
-      this.config.get<string>('MPESA_BASE_URL') ||
-      'https://api.safaricom.co.ke'
-    );
+    return this._baseUrl ?? this.config.get<string>('MPESA_BASE_URL') ?? 'https://api.safaricom.co.ke';
   }
 
   private get consumerKey(): string {
-    return this.config.get<string>('MPESA_CONSUMER_KEY') || '';
+    return this._consumerKey ?? this.config.get<string>('MPESA_CONSUMER_KEY') ?? '';
   }
 
   private get consumerSecret(): string {
-    return this.config.get<string>('MPESA_CONSUMER_SECRET') || '';
+    return this._consumerSecret ?? this.config.get<string>('MPESA_CONSUMER_SECRET') ?? '';
   }
 
   private get passKey(): string {
-    return this.config.get<string>('MPESA_PASSKEY') || '';
+    return this._passKey ?? this.config.get<string>('MPESA_PASSKEY') ?? '';
   }
 
   private get shortCode(): string {
-    return this.config.get<string>('MPESA_SHORTCODE') || '';
+    return this._shortCode ?? this.config.get<string>('MPESA_SHORTCODE') ?? '';
   }
 
   private get stkTransactionType():

@@ -37,6 +37,7 @@ import { PaymentRequestModule } from './payment-request/payment-request.module';
 import { PaymentMethodModule } from './payment-method/payment-method.module';
 import { TrackingModule } from './tracking/tracking.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
+import { GatewayModule } from './gateway/gateway.module';
 
 @Module({
   imports: [
@@ -105,6 +106,7 @@ import { AuditLogModule } from './audit-log/audit-log.module';
     TrackingModule,
     DevModule,
     AuditLogModule,
+    GatewayModule,
   ],
   controllers: [AppController],
   providers: [AppService],

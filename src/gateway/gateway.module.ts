@@ -1,17 +1,19 @@
 import { Module } from '@nestjs/common';
-import { EventsGateway } from './event.gateway';
 import { MongooseModule } from '@nestjs/mongoose';
-import { CitySchema } from 'src/city/city.schema';
-import { CountrySchema } from 'src/country/country.schema';
-import { UserSchema } from 'src/user/user.schema';
+import { Gateway, GatewaySchema } from './gateway.schema';
+import { GatewayController } from './gateway.controller';
+import { GatewayService } from './gateway.service';
+import { AuthModule } from '../auth/auth.module';
+import { DevModule } from '../dev/dev.module';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: 'User', schema: UserSchema }]),
-    MongooseModule.forFeature([{ name: 'Country', schema: CountrySchema }]),
-    MongooseModule.forFeature([{ name: 'City', schema: CitySchema }]),
+    AuthModule,
+    DevModule,
+    MongooseModule.forFeature([{ name: Gateway.name, schema: GatewaySchema }]),
   ],
-  providers: [EventsGateway], // Fournir EventsGateway et EventService
-  exports: [EventsGateway],
+  controllers: [GatewayController],
+  providers: [GatewayService],
+  exports: [GatewayService],
 })
 export class GatewayModule {}

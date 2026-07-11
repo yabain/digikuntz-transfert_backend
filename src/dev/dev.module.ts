@@ -11,6 +11,7 @@ import { UserModule } from 'src/user/user.module';
 import { CryptService } from './crypt.service';
 import { BalanceModule } from 'src/balance/balance.module';
 import { PayoutModule } from 'src/payout/payout.module';
+import { PaymentMethodModule } from 'src/payment-method/payment-method.module';
 
 @Module({
   imports: [
@@ -21,9 +22,11 @@ import { PayoutModule } from 'src/payout/payout.module';
     forwardRef(() => UserModule),
     forwardRef(() => BalanceModule),
     forwardRef(() => PayoutModule),
+    forwardRef(() => PaymentMethodModule),
     MongooseModule.forFeature([{ name: 'Dev', schema: DevSchema }]),
   ],
   providers: [DevService, CryptService],
   controllers: [DevController],
+  exports: [CryptService],
 })
 export class DevModule {}

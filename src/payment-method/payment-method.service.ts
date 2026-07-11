@@ -14,7 +14,7 @@ export class PaymentMethodService {
   ) {}
 
   async create(dto: CreatePaymentMethodDto): Promise<PaymentMethod> {
-    if (Number(dto.minAmount) > Number(dto.maxAmount)) {
+    if (dto.minAmount !== undefined && dto.maxAmount !== undefined && Number(dto.minAmount) > Number(dto.maxAmount)) {
       throw new NotFoundException('minAmount cannot be greater than maxAmount');
     }
     return this.paymentMethodModel.create(dto);
@@ -45,7 +45,8 @@ export class PaymentMethodService {
       .sort({ createdAt: -1 })
       .limit(resPerPage)
       .skip(skip)
-      .populate('countryId');
+      .populate('countryId')
+      .populate('gatewayId');
   }
 
   async findById(id: string): Promise<PaymentMethod> {
@@ -54,7 +55,8 @@ export class PaymentMethodService {
     }
     const paymentMethod = await this.paymentMethodModel
       .findById(id)
-      .populate('countryId');
+      .populate('countryId')
+      .populate('gatewayId');
     if (!paymentMethod) {
       throw new NotFoundException('Payment method not found');
     }
@@ -68,7 +70,8 @@ export class PaymentMethodService {
     return this.paymentMethodModel
       .find({ countryId, provider })
       .sort({ name: 1 })
-      .populate('countryId');
+      .populate('countryId')
+      .populate('gatewayId');
   }
 
   async findByCountry(
@@ -77,7 +80,15 @@ export class PaymentMethodService {
     return this.paymentMethodModel
       .find({ countryId })
       .sort({ name: 1 })
-      .populate('countryId');
+      .populate('countryId')
+      .populate('gatewayId');
+  }
+
+  async findByCode(code: string): Promise<PaymentMethod | null> {
+    return this.paymentMethodModel
+      .findOne({ code })
+      .populate('countryId')
+      .populate('gatewayId');
   }
 
   async update(id: string, dto: UpdatePaymentMethodDto): Promise<PaymentMethod> {
@@ -95,7 +106,7 @@ export class PaymentMethodService {
     const updated = await this.paymentMethodModel.findByIdAndUpdate(id, dto, {
       new: true,
       runValidators: true,
-    });
+    }).populate('gatewayId');
     if (!updated) {
       throw new NotFoundException('Payment method not found');
     }
@@ -113,4 +124,3 @@ export class PaymentMethodService {
     return deleted;
   }
 }
-

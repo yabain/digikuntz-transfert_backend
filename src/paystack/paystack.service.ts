@@ -6,27 +6,33 @@ import { firstValueFrom } from 'rxjs';
 @Injectable()
 export class PaystackService {
   private readonly baseUrl = 'https://api.paystack.co';
-  private readonly secretKey: string;
+  private _secretKey: string;
 
   constructor(
     private readonly http: HttpService,
     private readonly config: ConfigService,
   ) {
-    this.secretKey =
+    this._secretKey =
       this.config.get<string>('PAYSTACK_SECRET_KEY_KES') ??
       this.config.get<string>('PAYSTACK_SECRET_KEY') ??
       '';
   }
 
+  setCredentials(creds: Record<string, any>): void {
+    if (creds.secretKey) this._secretKey = creds.secretKey;
+    if (creds.PAYSTACK_SECRET_KEY) this._secretKey = creds.PAYSTACK_SECRET_KEY;
+    if (creds.PAYSTACK_SECRET_KEY_KES) this._secretKey = creds.PAYSTACK_SECRET_KEY_KES;
+  }
+
   private headers() {
-    if (!this.secretKey) {
+    if (!this._secretKey) {
       throw new HttpException(
         'Missing PAYSTACK_SECRET_KEY_KES',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
     return {
-      Authorization: `Bearer ${this.secretKey}`,
+      Authorization: `Bearer ${this._secretKey}`,
       'Content-Type': 'application/json',
     };
   }

@@ -402,7 +402,81 @@ export class DevController {
 
     return this.devService.createPayinTransaction(transactionData, userId);
   }
-  
+
+  @Post('direct-charge')
+  @ApiOperation({ summary: 'Initiate a direct mobile money charge via API key (no hosted checkout)' })
+  @ApiHeader({ name: 'x-user-id', required: true })
+  @ApiHeader({ name: 'x-secret-key', required: true })
+  @ApiBody({
+    schema: {
+      example: {
+        estimation: 1000,
+        currency: 'XAF',
+        phone: '237691224472',
+        email: 'customer@mail.com',
+        name: 'John Doe',
+        network: 'MTN',
+        paymentMethodCode: 'MOMO',
+        callbackUrl: 'https://your-server.com/webhook',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Direct charge initiated.',
+    schema: {
+      example: {
+        id: '664f1a2b3c4d5e6f7a8b9c0d',
+        status: 'payin_pending',
+        data: {
+          estimation: '1000',
+          transactionRef: 'IN123#250101120000',
+          invoiceTaxes: '50',
+          paymentWithTaxes: '1050',
+          currency: 'XAF',
+          transactionType: 'apiCall',
+          paymentMethodCode: 'MOMO',
+          appliedFeeRate: 5,
+          txRef: 'txDirect-...',
+          createdAt: '2025-01-01T12:00:00.000Z',
+          updatedAt: '2025-01-01T12:00:00.000Z',
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Invalid payload.' })
+  @ApiResponse({ status: 404, description: 'Missing/invalid credentials.' })
+  @UsePipes(ValidationPipe)
+  async createDirectCharge(
+    @Headers('x-user-id') userId: string,
+    @Headers('x-secret-key') secretKey: string,
+    @Body() data: {
+      estimation: number;
+      currency: string;
+      phone: string;
+      email: string;
+      name?: string;
+      network?: string;
+      paymentMethodCode?: string;
+      callbackUrl?: string;
+    },
+  ): Promise<any> {
+    if (!secretKey) throw new NotFoundException('secretKey is required');
+    if (!userId) throw new NotFoundException('userId is required');
+    const valid = await this.devService.authKey(userId, secretKey);
+    if (!valid) return 'invalid credentials';
+    const userData = await this.userService.getUserById(userId);
+    if (!userData) return 'user not found';
+
+    return this.devService.createDirectPayinTransaction(
+      {
+        ...data,
+        country: userData.countryId?.name || '',
+      },
+      userId,
+    );
+  }
+
   @Post('payout')
   @ApiOperation({ summary: 'Initiate a payout from account balance via API key' })
   @ApiHeader({ name: 'x-user-id', required: true })
