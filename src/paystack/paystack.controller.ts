@@ -19,24 +19,52 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { PaystackService } from './paystack.service';
+import { InjectModel } from '@nestjs/mongoose';
+import type mongoose from 'mongoose';
+import { Gateway } from 'src/gateway/gateway.schema';
+import { CryptService } from 'src/dev/crypt.service';
 
 @ApiTags('paystack')
 @Controller('paystack')
 export class PaystackController {
-  constructor(private readonly paystackService: PaystackService) {}
+  constructor(
+    private readonly paystackService: PaystackService,
+    private readonly cryptService: CryptService,
+    @InjectModel(Gateway.name) private readonly gatewayModel: mongoose.Model<Gateway>,
+  ) {}
+
+  private async loadCredentials(gatewayId?: string): Promise<void> {
+    let gateway;
+    if (gatewayId) {
+      gateway = await this.gatewayModel.findById(gatewayId).exec();
+    } else {
+      gateway = await this.gatewayModel.findOne({ type: 'paystack', isActive: true }).exec();
+    }
+    if (!gateway) throw new NotFoundException('Active Paystack gateway not found');
+
+    let creds: Record<string, any> = {};
+    try {
+      const decrypted = this.cryptService.decryptWithPassphrase(gateway.credentials);
+      creds = JSON.parse(decrypted);
+    } catch { creds = {}; }
+
+    this.paystackService.setCredentials(creds);
+  }
 
   @Get('balance')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get Paystack balance (KES/M-Pesa context)' })
+  @ApiQuery({ name: 'gatewayId', required: false, description: 'Optional gateway ID to use specific credentials' })
   @ApiResponse({ status: 200, description: 'Balance returned.' })
   @ApiResponse({ status: 401, description: 'Authentication required.' })
   @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  getBalance(@Req() req) {
+  async getBalance(@Req() req, @Query('gatewayId') gatewayId?: string) {
     if (!req.user.isAdmin) {
       throw new ForbiddenException('Unauthorised');
     }
+    await this.loadCredentials(gatewayId);
     return this.paystackService.getBalance();
   }
 
@@ -46,6 +74,7 @@ export class PaystackController {
     summary:
       'List Paystack payin transactions (default: page=1, limit=10, newest first)',
   })
+  @ApiQuery({ name: 'gatewayId', required: false, description: 'Optional gateway ID to use specific credentials' })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
   @ApiQuery({ name: 'status', required: false, type: String, example: 'success' })
@@ -58,10 +87,11 @@ export class PaystackController {
   @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  listPayinTransactions(@Req() req, @Query() query: any) {
+  async listPayinTransactions(@Req() req, @Query() query: any, @Query('gatewayId') gatewayId?: string) {
     if (!req.user.isAdmin) {
       throw new ForbiddenException('Unauthorised');
     }
+    await this.loadCredentials(gatewayId);
     return this.paystackService.listPayinTransactions(query);
   }
 
@@ -71,6 +101,7 @@ export class PaystackController {
     summary:
       'List Paystack payout transactions (default: page=1, limit=10, newest first)',
   })
+  @ApiQuery({ name: 'gatewayId', required: false, description: 'Optional gateway ID to use specific credentials' })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
   @ApiQuery({ name: 'status', required: false, type: String, example: 'success' })
@@ -81,10 +112,11 @@ export class PaystackController {
   @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  listPayoutTransactions(@Req() req, @Query() query: any) {
+  async listPayoutTransactions(@Req() req, @Query() query: any, @Query('gatewayId') gatewayId?: string) {
     if (!req.user.isAdmin) {
       throw new ForbiddenException('Unauthorised');
     }
+    await this.loadCredentials(gatewayId);
     return this.paystackService.listPayoutTransactions(query);
   }
 

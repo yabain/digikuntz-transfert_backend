@@ -1,22 +1,15 @@
 import { HttpService } from '@nestjs/axios';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 
 @Injectable()
 export class PaystackService {
   private readonly baseUrl = 'https://api.paystack.co';
-  private _secretKey: string;
+  private _secretKey = '';
 
   constructor(
     private readonly http: HttpService,
-    private readonly config: ConfigService,
-  ) {
-    this._secretKey =
-      this.config.get<string>('PAYSTACK_SECRET_KEY_KES') ??
-      this.config.get<string>('PAYSTACK_SECRET_KEY') ??
-      '';
-  }
+  ) {}
 
   setCredentials(creds: Record<string, any>): void {
     if (creds.secretKey) this._secretKey = creds.secretKey;

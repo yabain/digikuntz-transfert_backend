@@ -18,14 +18,18 @@ import type mongoose from 'mongoose';
 import { MpesaService } from './mpesa.service';
 import { Payin, PayinDocument, PayinProvider } from 'src/payin/payin.schema';
 import { Payout, PayoutDocument, PayoutProvider } from 'src/payout/payout.schema';
+import { Gateway, MpesaBalances } from 'src/gateway/gateway.schema';
+import { CryptService } from 'src/dev/crypt.service';
 
 @ApiTags('mpesa')
 @Controller('mpesa')
 export class MpesaController {
   constructor(
     private readonly mpesaService: MpesaService,
+    private readonly cryptService: CryptService,
     @InjectModel(Payin.name) private readonly payinModel: mongoose.Model<PayinDocument>,
     @InjectModel(Payout.name) private readonly payoutModel: mongoose.Model<PayoutDocument>,
+    @InjectModel(Gateway.name) private readonly gatewayModel: mongoose.Model<Gateway>,
   ) {}
 
   private buildDateFilter(from?: string, to?: string) {
@@ -110,11 +114,40 @@ export class MpesaController {
     };
   }
 
+  private parseMpesaBalance(balanceStr: string): MpesaBalances {
+    const balances: MpesaBalances = {};
+    if (!balanceStr) return balances;
+
+    const accounts = balanceStr.split('&');
+    for (const account of accounts) {
+      const parts = account.split('|');
+      if (parts.length < 6) continue;
+
+      const name = parts[0].trim().toLowerCase();
+      const currency = parts[1].trim();
+      const currentBalance = parseFloat(parts[2]) || 0;
+      const availableBalance = parseFloat(parts[3]) || 0;
+      const reservedBalance = parseFloat(parts[4]) || 0;
+      const unclearedBalance = parseFloat(parts[5]) || 0;
+
+      const entry = { currentBalance, availableBalance, reservedBalance, unclearedBalance, currency };
+
+      if (name.includes('working')) {
+        balances.workingAccount = entry;
+      } else if (name.includes('utility')) {
+        balances.utilityAccount = entry;
+      } else if (name.includes('merchant')) {
+        balances.merchantAccount = entry;
+      }
+    }
+    return balances;
+  }
+
   @Get('balance')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Query M-Pesa account balance (admin only)' })
+  @ApiOperation({ summary: 'Get M-Pesa stored balance & trigger async refresh (admin only)' })
   @ApiQuery({ name: 'remarks', required: false, type: String, example: 'Balance check' })
-  @ApiResponse({ status: 200, description: 'Balance query request sent to M-Pesa.' })
+  @ApiResponse({ status: 200, description: 'Stored M-Pesa balance returned.' })
   @ApiResponse({ status: 401, description: 'Authentication required.' })
   @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
@@ -123,7 +156,38 @@ export class MpesaController {
     if (!req.user?.isAdmin) {
       throw new ForbiddenException('Unauthorised');
     }
-    return this.mpesaService.queryAccountBalance({ remarks });
+
+    const gateway = await this.gatewayModel.findOne({ type: 'mpesa', isActive: true }).exec();
+
+    if (!gateway) {
+      return { balance: null, currency: 'KES', message: 'No active M-Pesa gateway found' };
+    }
+
+    this.triggerBalanceRefresh(gateway, remarks).catch((err) =>
+      console.error('[M-Pesa] Background balance refresh failed:', err.message),
+    );
+
+    return {
+      balance: gateway.balance || null,
+      currency: gateway.currency || 'KES',
+    };
+  }
+
+  private async triggerBalanceRefresh(gateway: Gateway, remarks?: string): Promise<void> {
+    let creds: Record<string, any> = {};
+    try {
+      const decrypted = this.cryptService.decryptWithPassphrase(gateway.credentials);
+      creds = JSON.parse(decrypted);
+    } catch {
+      creds = {};
+    }
+
+    this.mpesaService.setCredentials(creds);
+    await this.mpesaService.queryAccountBalance({
+      remarks,
+      resultUrl: creds.MPESA_BALANCE_RESULT_URL || creds.MPESA_B2C_RESULT_URL,
+      timeoutUrl: creds.MPESA_BALANCE_TIMEOUT_URL || creds.MPESA_B2C_TIMEOUT_URL,
+    });
   }
 
   @Get('incoming-transactions')
@@ -230,11 +294,26 @@ export class MpesaController {
   @ApiOperation({ summary: 'M-Pesa account balance result callback endpoint' })
   @ApiResponse({ status: 200, description: 'Callback accepted.' })
   @UsePipes(ValidationPipe)
-  balanceResultCallback(@Body() payload: any) {
-    // Callback from Safaricom; no auth guard here.
-    // Keep full payload in logs for reconciliation/support tracing.
-    // eslint-disable-next-line no-console
+  async balanceResultCallback(@Body() payload: any) {
     console.log('[M-Pesa balance result callback]:', JSON.stringify(payload || {}));
+
+    const result = payload?.Result || payload?.result || payload;
+    const balanceStr: string =
+      result?.Balance || result?.balance || result?.DebitAccountBalance || '';
+
+    if (balanceStr) {
+      const parsed = this.parseMpesaBalance(balanceStr);
+      if (parsed.workingAccount || parsed.utilityAccount || parsed.merchantAccount) {
+        await this.gatewayModel
+          .findOneAndUpdate(
+            { type: 'mpesa', isActive: true },
+            { $set: { balance: parsed } },
+          )
+          .exec();
+        console.log('[M-Pesa] Balance stored in gateway:', JSON.stringify(parsed));
+      }
+    }
+
     return {
       ResultCode: 0,
       ResultDesc: 'Accepted',

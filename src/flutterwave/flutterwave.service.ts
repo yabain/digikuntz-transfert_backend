@@ -17,7 +17,6 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
-import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -61,7 +60,6 @@ export class FlutterwaveService {
 
   constructor(
     private readonly http: HttpService,
-    private readonly config: ConfigService,
     @InjectModel(Payout.name) private payoutModel: Model<PayoutDocument>,
     private payinService: PayinService,
     private payoutService: PayoutService,
@@ -76,24 +74,19 @@ export class FlutterwaveService {
     private paymentRequestService: PaymentRequestService,
     @Inject(forwardRef(() => WhatsappService))
     private whatsappService: WhatsappService,
-  ) {
-    this.loadFromEnv();
-  }
-
-  private loadFromEnv(): void {
-    this.secretHash = this.config.get<string>('FLUTTERWAVE_SECRET_HASH');
-    this.fwSecret = this.config.get<string>('FLUTTERWAVE_SECRET_KEY');
-    this.fwPublic = this.config.get<string>('FLUTTERWAVE_PUBLIC_KEY');
-    this.fwSecretNGN = this.config.get<string>('FLUTTERWAVE_SECRET_KEY_NGN');
-    this.fwPublicNGN = this.config.get<string>('FLUTTERWAVE_PUBLIC_KEY_NGN');
-  }
+  ) {}
 
   setCredentials(creds: Record<string, any>): void {
-    if (creds.secretKey) this.fwSecret = creds.secretKey;
-    if (creds.publicKey) this.fwPublic = creds.publicKey;
-    if (creds.secretHash) this.secretHash = creds.secretHash;
+    const secret = creds.secretKey || creds.FLUTTERWAVE_SECRET_KEY;
+    const pubKey = creds.publicKey || creds.FLUTTERWAVE_PUBLIC_KEY;
+    const hash = creds.secretHash || creds.FLUTTERWAVE_SECRET_HASH;
+    if (secret) this.fwSecret = secret;
+    if (pubKey) this.fwPublic = pubKey;
+    if (hash) this.secretHash = hash;
     if (creds.FLUTTERWAVE_SECRET_KEY_NGN) this.fwSecretNGN = creds.FLUTTERWAVE_SECRET_KEY_NGN;
     if (creds.FLUTTERWAVE_PUBLIC_KEY_NGN) this.fwPublicNGN = creds.FLUTTERWAVE_PUBLIC_KEY_NGN;
+    if (!creds.FLUTTERWAVE_SECRET_KEY_NGN && secret) this.fwSecretNGN = secret;
+    if (!creds.FLUTTERWAVE_PUBLIC_KEY_NGN && pubKey) this.fwPublicNGN = pubKey;
   }
 
   private isInsufficientPayoutBalance(details: any): boolean {
@@ -121,8 +114,13 @@ export class FlutterwaveService {
   }
 
   private sanitizeFlutterwaveError(error: any, fallbackMessage: string) {
-    const statusCode = Number(error?.response?.status) || HttpStatus.BAD_GATEWAY;
+    let statusCode = Number(error?.response?.status) || HttpStatus.BAD_GATEWAY;
     const upstreamPayload = error?.response?.data;
+
+    // Never propagate 401 from Flutterwave API (invalid key) to avoid frontend auth clear
+    if (statusCode === 401) {
+      statusCode = HttpStatus.BAD_GATEWAY;
+    }
 
     if (this.isHtmlUpstreamPayload(upstreamPayload)) {
       const message = 'Flutterwave temporary unavailable';
@@ -197,8 +195,6 @@ export class FlutterwaveService {
 
   // ---------- Balance ----------
   async getBalance(countryWallet) {
-    // console.log('Getting balance for wallet:', countryWallet);
-    // Wallet balances
     const url = `${this.fwBaseUrlV3}/balances`;
     let headers;
     if (countryWallet == 'CM') {
@@ -208,12 +204,15 @@ export class FlutterwaveService {
     } else {
       headers = this.authHeaderNGN();
     }
-    const res = await firstValueFrom(
-      this.http.get(url, {
-        headers,
-      }),
-    );
-    return res.data; // include available balances per currency
+    try {
+      const res = await firstValueFrom(
+        this.http.get(url, { headers }),
+      );
+      return res.data;
+    } catch (err: any) {
+      const parsed = this.sanitizeFlutterwaveError(err, 'Failed to fetch Flutterwave balance');
+      throw new HttpException(parsed.payload, parsed.statusCode);
+    }
   }
 
   // ---------- Transactions list (incoming payments) ----------

@@ -3,6 +3,20 @@ import { Document } from 'mongoose';
 
 export type GatewayType = 'flutterwave' | 'paystack' | 'mpesa';
 
+export interface MpesaSubAccountBalance {
+  currentBalance: number;
+  availableBalance: number;
+  reservedBalance: number;
+  unclearedBalance: number;
+  currency: string;
+}
+
+export interface MpesaBalances {
+  workingAccount?: MpesaSubAccountBalance;
+  utilityAccount?: MpesaSubAccountBalance;
+  merchantAccount?: MpesaSubAccountBalance;
+}
+
 @Schema({ timestamps: true })
 export class Gateway extends Document {
   @Prop({ required: true, trim: true })
@@ -25,6 +39,9 @@ export class Gateway extends Document {
 
   @Prop({ default: true })
   isActive: boolean;
+
+  @Prop({ type: Object, default: {} })
+  balance: Record<string, any>;
 }
 
 export const GatewaySchema = SchemaFactory.createForClass(Gateway);

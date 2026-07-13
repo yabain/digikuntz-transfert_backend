@@ -44,6 +44,8 @@ import { PaystackModule } from 'src/paystack/paystack.module';
 import { PaymentRequestModule } from 'src/payment-request/payment-request.module';
 import { MpesaModule } from 'src/mpesa/mpesa.module';
 import { PaymentMethodModule } from 'src/payment-method/payment-method.module';
+import { Gateway, GatewaySchema } from 'src/gateway/gateway.schema';
+import { CryptService } from 'src/dev/crypt.service';
 
 @Module({
   imports: [
@@ -71,10 +73,12 @@ import { PaymentMethodModule } from 'src/payment-method/payment-method.module';
       { name: Email.name, schema: EmailSchema },
       { name: Smtp.name, schema: SmtpSchema },
       { name: ServicePayment.name, schema: ServicePaymentSchema },
+      { name: Gateway.name, schema: GatewaySchema },
     ]),
   ],
   controllers: [FlutterwaveController],
   providers: [
+    CryptService,
     FlutterwaveService,
     PayinService,
     PayoutService,

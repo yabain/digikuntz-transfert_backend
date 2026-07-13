@@ -30,6 +30,10 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { PaymentMethodService } from 'src/payment-method/payment-method.service';
+import { InjectModel } from '@nestjs/mongoose';
+import type mongoose from 'mongoose';
+import { Gateway } from 'src/gateway/gateway.schema';
+import { CryptService } from 'src/dev/crypt.service';
 
 @ApiTags('flutterwave')
 @Controller('fw')
@@ -37,21 +41,50 @@ export class FlutterwaveController {
   constructor(
     private readonly fw: FlutterwaveService,
     private readonly paymentMethodService: PaymentMethodService,
+    private readonly cryptService: CryptService,
+    @InjectModel(Gateway.name) private readonly gatewayModel: mongoose.Model<Gateway>,
   ) {}
+
+  private async loadFwCredentials(gatewayId?: string, countryWallet?: string): Promise<void> {
+    let gateway;
+    if (gatewayId) {
+      gateway = await this.gatewayModel.findById(gatewayId).exec();
+    } else if (countryWallet) {
+      const currency = countryWallet === 'NG' ? 'NGN' : 'XAF';
+      gateway = await this.gatewayModel.findOne({ type: 'flutterwave', currency, isActive: true }).exec();
+    } else {
+      throw new BadRequestException('gatewayId or countryWallet required');
+    }
+    if (!gateway) throw new NotFoundException('Active Flutterwave gateway not found');
+
+    let creds: Record<string, any> = {};
+    try {
+      const decrypted = this.cryptService.decryptWithPassphrase(gateway.credentials);
+      creds = JSON.parse(decrypted);
+    } catch { creds = {}; }
+
+    this.fw.setCredentials(creds);
+  }
 
   @Get('balance/:countryWallet')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get Flutterwave wallet balance by country wallet' })
   @ApiParam({ name: 'countryWallet', example: 'CM', description: 'Wallet country code (CM, NG, ...)' })
+  @ApiQuery({ name: 'gatewayId', required: false, description: 'Optional gateway ID to use specific credentials' })
   @ApiResponse({ status: 200, description: 'Wallet balance returned.' })
   @ApiResponse({ status: 401, description: 'Authentication required.' })
   @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  getBalance(@Param('countryWallet') countryWallet, @Req() req) {
+  async getBalance(
+    @Param('countryWallet') countryWallet,
+    @Query('gatewayId') gatewayId: string | undefined,
+    @Req() req,
+  ) {
     if (!req.user.isAdmin) {
       throw new ForbiddenException('Unauthorised');
     }
+    await this.loadFwCredentials(gatewayId, countryWallet);
     return this.fw.getBalance(countryWallet);
   }
 
@@ -59,6 +92,7 @@ export class FlutterwaveController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List Flutterwave payin transactions by wallet' })
   @ApiParam({ name: 'countryWallet', example: 'CM' })
+  @ApiQuery({ name: 'gatewayId', required: false, description: 'Optional gateway ID to use specific credentials' })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'status', required: false, type: String, example: 'successful' })
   @ApiQuery({ name: 'from', required: false, type: String, example: '2026-01-01' })
@@ -69,14 +103,16 @@ export class FlutterwaveController {
   @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  listPayinTransactions(
+  async listPayinTransactions(
     @Query() query: ExpressQuery,
     @Param('countryWallet') countryWallet,
+    @Query('gatewayId') gatewayId: string | undefined,
     @Req() req,
   ) {
     if (!req.user.isAdmin) {
       throw new ForbiddenException('Unauthorised');
     }
+    await this.loadFwCredentials(gatewayId, countryWallet);
     return this.fw.listPayinTransactions(countryWallet, query);
   }
 
@@ -84,6 +120,7 @@ export class FlutterwaveController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List Flutterwave payout transactions by wallet' })
   @ApiParam({ name: 'countryWallet', example: 'CM' })
+  @ApiQuery({ name: 'gatewayId', required: false, description: 'Optional gateway ID to use specific credentials' })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'status', required: false, type: String, example: 'SUCCESSFUL' })
   @ApiQuery({ name: 'from', required: false, type: String, example: '2026-01-01' })
@@ -94,14 +131,16 @@ export class FlutterwaveController {
   @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  listPayoutTransactions(
+  async listPayoutTransactions(
     @Param('countryWallet') countryWallet,
     @Query() query: ExpressQuery,
+    @Query('gatewayId') gatewayId: string | undefined,
     @Req() req,
   ) {
     if (!req.user.isAdmin) {
       throw new ForbiddenException('Unauthorised');
     }
+    await this.loadFwCredentials(gatewayId, countryWallet);
     return this.fw.listPayoutTransactions(countryWallet, query);
   }
 
