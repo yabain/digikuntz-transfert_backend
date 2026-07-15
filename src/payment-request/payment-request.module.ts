@@ -14,7 +14,7 @@ import { Transaction, TransactionSchema } from 'src/transaction/transaction.sche
 
 @Module({
   imports: [
-    UserModule,
+    forwardRef(() => UserModule),
     BalanceModule,
     forwardRef(() => FlutterwaveModule),
     MongooseModule.forFeature([

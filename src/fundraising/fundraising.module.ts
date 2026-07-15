@@ -18,7 +18,7 @@ import { FundraisingService } from './fundraising.service';
 
 @Module({
   imports: [
-    UserModule,
+    forwardRef(() => UserModule),
     BalanceModule,
     forwardRef(() => FlutterwaveModule),
     forwardRef(() => WhatsappModule),

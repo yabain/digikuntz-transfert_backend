@@ -34,6 +34,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import type mongoose from 'mongoose';
 import { Gateway } from 'src/gateway/gateway.schema';
 import { CryptService } from 'src/dev/crypt.service';
+import { PaymentRouterService } from 'src/payment/payment-router.service';
+import { TransactionService } from 'src/transaction/transaction.service';
 
 @ApiTags('flutterwave')
 @Controller('fw')
@@ -43,17 +45,22 @@ export class FlutterwaveController {
     private readonly paymentMethodService: PaymentMethodService,
     private readonly cryptService: CryptService,
     @InjectModel(Gateway.name) private readonly gatewayModel: mongoose.Model<Gateway>,
+    private readonly paymentRouter: PaymentRouterService,
+    private readonly transactionService: TransactionService,
   ) {}
 
-  private async loadFwCredentials(gatewayId?: string, countryWallet?: string): Promise<void> {
+  private async loadFwCredentials(opts?: { gatewayId?: string; countryWallet?: string; currency?: string }): Promise<void> {
+    const { gatewayId, countryWallet, currency } = opts || {};
     let gateway;
     if (gatewayId) {
       gateway = await this.gatewayModel.findById(gatewayId).exec();
-    } else if (countryWallet) {
-      const currency = countryWallet === 'NG' ? 'NGN' : 'XAF';
+    } else if (currency) {
       gateway = await this.gatewayModel.findOne({ type: 'flutterwave', currency, isActive: true }).exec();
+    } else if (countryWallet) {
+      const cur = countryWallet === 'NG' ? 'NGN' : 'XAF';
+      gateway = await this.gatewayModel.findOne({ type: 'flutterwave', currency: cur, isActive: true }).exec();
     } else {
-      throw new BadRequestException('gatewayId or countryWallet required');
+      throw new BadRequestException('gatewayId, currency, or countryWallet required');
     }
     if (!gateway) throw new NotFoundException('Active Flutterwave gateway not found');
 
@@ -84,7 +91,7 @@ export class FlutterwaveController {
     if (!req.user.isAdmin) {
       throw new ForbiddenException('Unauthorised');
     }
-    await this.loadFwCredentials(gatewayId, countryWallet);
+    await this.loadFwCredentials({ gatewayId, countryWallet });
     return this.fw.getBalance(countryWallet);
   }
 
@@ -112,7 +119,7 @@ export class FlutterwaveController {
     if (!req.user.isAdmin) {
       throw new ForbiddenException('Unauthorised');
     }
-    await this.loadFwCredentials(gatewayId, countryWallet);
+    await this.loadFwCredentials({ gatewayId, countryWallet });
     return this.fw.listPayinTransactions(countryWallet, query);
   }
 
@@ -140,7 +147,7 @@ export class FlutterwaveController {
     if (!req.user.isAdmin) {
       throw new ForbiddenException('Unauthorised');
     }
-    await this.loadFwCredentials(gatewayId, countryWallet);
+    await this.loadFwCredentials({ gatewayId, countryWallet });
     return this.fw.listPayoutTransactions(countryWallet, query);
   }
 
@@ -327,11 +334,15 @@ export class FlutterwaveController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get banks/operator list by country code' })
   @ApiParam({ name: 'code', example: 'CM', description: 'Country code' })
+  @ApiQuery({ name: 'gatewayId', required: false, description: 'Optional gateway ID to load credentials from a specific gateway' })
   @ApiResponse({ status: 200, description: 'Bank/operator list returned.' })
   @ApiResponse({ status: 401, description: 'Authentication required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  getBanksList(@Param('code') countryCode: string) {
+  async getBanksList(@Param('code') countryCode: string, @Query('gatewayId') gatewayId?: string) {
+    if (gatewayId) {
+      await this.loadFwCredentials({ gatewayId });
+    }
     return this.fw.getBanksList(countryCode);
   }
 
@@ -355,11 +366,13 @@ export class FlutterwaveController {
   @ApiResponse({ status: 404, description: 'Transaction not found or invalid status.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  createPayout(@Req() req, @Param('transactionId') transactionId) {
+  async createPayout(@Req() req, @Param('transactionId') transactionId) {
     if (!req.user.isAdmin) {
       throw new ForbiddenException('Unauthorised');
     }
-    return this.fw.payout(transactionId, req.user._id);
+    const tx = await this.transactionService.findById(transactionId).catch(() => null);
+    const currency = tx?.receiverCurrency || tx?.senderCurrency || 'XAF';
+    return this.paymentRouter.payout(transactionId, req.user._id, false, currency);
   }
 
   // init payout transaction
@@ -373,11 +386,13 @@ export class FlutterwaveController {
   @ApiResponse({ status: 404, description: 'Transaction not found or not eligible for retry.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  retryPayout(@Req() req, @Param('transactionId') transactionId) {
+  async retryPayout(@Req() req, @Param('transactionId') transactionId) {
     if (!req.user.isAdmin) {
       throw new ForbiddenException('Unauthorised');
     }
-    return this.fw.retryPayout(transactionId, req.user._id);
+    const tx = await this.transactionService.findById(transactionId).catch(() => null);
+    const currency = tx?.receiverCurrency || tx?.senderCurrency || 'XAF';
+    return this.paymentRouter.payout(transactionId, req.user._id, true, currency);
   }
 
   // Webhook: this route must be PUBLIC (override guard upstream if needed)

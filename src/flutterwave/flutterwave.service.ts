@@ -26,7 +26,11 @@ import { CreatePayinDto, VerifyPayinDto } from 'src/payin/payin.dto';
 import { Payout, PayoutDocument } from 'src/payout/payout.schema';
 import { CreatePayoutDto } from 'src/payout/payout.dto';
 import { PayinService } from 'src/payin/payin.service';
+import { PayinProvider } from 'src/payin/payin.schema';
 import { PayoutService } from 'src/payout/payout.service';
+import { PaystackService } from 'src/paystack/paystack.service';
+import { MpesaService } from 'src/mpesa/mpesa.service';
+import { ConfigService } from '@nestjs/config';
 import { TransactionService } from 'src/transaction/transaction.service';
 import { ExceptionsHandler } from '@nestjs/core/exceptions/exceptions-handler';
 import {
@@ -43,14 +47,15 @@ import { FundraisingService } from 'src/fundraising/fundraising.service';
 import { CreatePaymentRequestDto } from 'src/payment-request/create-payment-request.dto';
 import { PaymentRequestService } from 'src/payment-request/payment-request.service';
 import { PaymentRequestStatus } from 'src/payment-request/payment-request.schema';
+import { Gateway } from 'src/gateway/gateway.schema';
+import { CryptService } from 'src/dev/crypt.service';
+import { PaymentMethodService } from 'src/payment-method/payment-method.service';
 
 @Injectable()
 export class FlutterwaveService {
   private readonly logger = new Logger(FlutterwaveService.name);
   private fwSecret: any;
   private fwPublic: any;
-  private fwSecretNGN: any;
-  private fwPublicNGN: any;
   private fwBaseUrlV3 = 'https://api.flutterwave.com/v3';
   // Some V4 payout endpoints (subject to account enablement)
   private fwBaseUrlV4 = 'https://api.flutterwave.cloud';
@@ -74,6 +79,13 @@ export class FlutterwaveService {
     private paymentRequestService: PaymentRequestService,
     @Inject(forwardRef(() => WhatsappService))
     private whatsappService: WhatsappService,
+    @InjectModel(Gateway.name) private gatewayModel: Model<Gateway>,
+    private cryptService: CryptService,
+    @Inject(forwardRef(() => PaymentMethodService))
+    private paymentMethodService: PaymentMethodService,
+    private config: ConfigService,
+    private paystackService: PaystackService,
+    private mpesaService: MpesaService,
   ) {}
 
   setCredentials(creds: Record<string, any>): void {
@@ -83,10 +95,36 @@ export class FlutterwaveService {
     if (secret) this.fwSecret = secret;
     if (pubKey) this.fwPublic = pubKey;
     if (hash) this.secretHash = hash;
-    if (creds.FLUTTERWAVE_SECRET_KEY_NGN) this.fwSecretNGN = creds.FLUTTERWAVE_SECRET_KEY_NGN;
-    if (creds.FLUTTERWAVE_PUBLIC_KEY_NGN) this.fwPublicNGN = creds.FLUTTERWAVE_PUBLIC_KEY_NGN;
-    if (!creds.FLUTTERWAVE_SECRET_KEY_NGN && secret) this.fwSecretNGN = secret;
-    if (!creds.FLUTTERWAVE_PUBLIC_KEY_NGN && pubKey) this.fwPublicNGN = pubKey;
+  }
+
+  async loadDbCredentials(currency?: string, gatewayId?: string): Promise<void> {
+    let gateway;
+    if (gatewayId) {
+      this.logger.log(`loadDbCredentials: loading gateway by id=${gatewayId}`);
+      gateway = await this.gatewayModel.findById(gatewayId).exec();
+    } else {
+      const cur = currency || 'XAF';
+      this.logger.log(`loadDbCredentials: loading gateway by currency=${cur}`);
+      gateway = await this.gatewayModel.findOne({ type: 'flutterwave', currency: cur, isActive: true }).exec();
+      if (!gateway) {
+        this.logger.log(`loadDbCredentials: no flutterwave gateway for ${cur}, trying any active gateway`);
+        gateway = await this.gatewayModel.findOne({ currency: cur, isActive: true }).exec();
+      }
+    }
+    if (!gateway) {
+      this.logger.warn(`loadDbCredentials: no gateway found (gatewayId=${gatewayId}, currency=${currency})`);
+      return;
+    }
+    try {
+      const decrypted = this.cryptService.decryptWithPassphrase(gateway.credentials);
+      const creds = JSON.parse(decrypted);
+      this.logger.log(`loadDbCredentials: gateway type=${gateway.type}, credentials loaded`);
+      this.setCredentials(creds);
+      this.payinService.setCredentials(creds);
+      this.mpesaService.setCredentials(creds);
+    } catch (e) {
+      this.logger.error(`loadDbCredentials: failed to decrypt/set credentials: ${e.message}`);
+    }
   }
 
   private isInsufficientPayoutBalance(details: any): boolean {
@@ -158,7 +196,7 @@ export class FlutterwaveService {
   }
 
   private authHeaderNGN() {
-    return { Authorization: `Bearer ${this.fwSecretNGN}` };
+    return this.authHeader();
   }
 
   private buildKesCustomerPhone(
@@ -417,6 +455,25 @@ export class FlutterwaveService {
       paymentRequestInput?: CreatePaymentRequestDto;
     },
   ) {
+    let selectedGatewayType: string | undefined;
+    if (transactionData.gatewayId) {
+      const gw = await this.gatewayModel.findById(transactionData.gatewayId).lean().exec();
+      if (gw) selectedGatewayType = gw.type;
+    }
+
+    await this.loadDbCredentials(
+      transactionData.senderCurrency || transactionData.receiverCurrency || 'XAF',
+      transactionData.gatewayId,
+    );
+
+    // Router par type de gateway (pas par devise)
+    if (selectedGatewayType === 'paystack') {
+      return this.createPaystackPayin(transactionData, userId, options);
+    }
+    if (selectedGatewayType === 'mpesa') {
+      return this.createMpesaPayin(transactionData, userId, options);
+    }
+
     // Vérifier les limites d'encaissement pour la devise
     const depositAmount = Number(transactionData.estimation);
     if (Number.isFinite(depositAmount) && depositAmount > 0) {
@@ -452,20 +509,13 @@ export class FlutterwaveService {
       }
 
       const payinResult = await this.payinService.createPayin({
-        // KES flow goes to M-Pesa; pre-normalize phone for internal transfer payloads.
         amount,
         txRef,
         transactionId: savedTransaction._id,
         currency: savedTransaction.senderCurrency,
         customerEmail: savedTransaction.senderEmail,
         customerName: savedTransaction.senderName,
-        customerPhone:
-          String(savedTransaction.senderCurrency || '').toUpperCase() === 'KES'
-            ? this.buildKesCustomerPhone(
-                String(savedTransaction.senderContact || ''),
-                String(savedTransaction.senderCountryCode || ''),
-              )
-            : savedTransaction.senderContact,
+        customerPhone: savedTransaction.senderContact,
         redirectUrl: transactionData?.redirectUrl,
         status: 'pending',
         userId,
@@ -496,12 +546,167 @@ export class FlutterwaveService {
     }
   }
 
-  private authHeaderByCurrency(currency?: string): Record<string, string> {
-    const normalized = String(currency || '').toUpperCase();
-    if (normalized === 'NGN' && this.fwSecretNGN) {
-      return { Authorization: `Bearer ${this.fwSecretNGN}` };
+  private async createPaystackPayin(
+    transactionData: any,
+    userId,
+    options?: {
+      paymentRequestMode?: boolean;
+      paymentRequestInput?: CreatePaymentRequestDto;
+    },
+  ) {
+    const txRef = this.payinService.generateTxRef('txPayin');
+
+    // Load Paystack credentials from the selected gateway
+    const gateway = await this.gatewayModel.findById(transactionData.gatewayId).exec();
+    if (!gateway) {
+      throw new NotFoundException('Gateway not found');
     }
-    return this.authHeader();
+    try {
+      const decrypted = this.cryptService.decryptWithPassphrase(gateway.credentials);
+      const creds = JSON.parse(decrypted);
+      this.paystackService.setCredentials(creds);
+    } catch {
+      throw new HttpException('Invalid gateway credentials', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    // Validate deposit limits
+    const depositAmount = Number(transactionData.estimation);
+    if (Number.isFinite(depositAmount) && depositAmount > 0) {
+      await this.transactionService.validateTransactionLimit(
+        depositAmount,
+        transactionData.senderCurrency || 'KES',
+        'deposit',
+      );
+    }
+
+    const raw = {
+      ...transactionData,
+      userId,
+      txRef,
+      status: TStatus.PAYINPENDING,
+    };
+
+    const savedTransaction = await this.transactionService.createTransaction(raw);
+    if (!savedTransaction) {
+      throw new NotFoundException('Error to save transaction details');
+    }
+
+    const amount = Number(savedTransaction.paymentWithTaxes);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new HttpException(
+        { status: HttpStatus.BAD_REQUEST, error: 'Invalid payment amount' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const backendUrl = this.config.get<string>('BACK_URL') ?? 'https://api.digikuntz.com';
+    const callbackUrl = `${backendUrl}/paystack/payin-callback?txRef=${txRef}`;
+
+    const paystackResp = await this.paystackService.initializeKesMpesaPayment({
+      email: savedTransaction.senderEmail,
+      amountKobo: Math.round(amount * 100),
+      reference: txRef,
+      callbackUrl,
+      metadata: {
+        transactionId: String(savedTransaction._id),
+        userId,
+      },
+    });
+
+    const authorizationUrl = paystackResp?.authorization_url;
+    if (!authorizationUrl) {
+      throw new HttpException(
+        { message: 'Failed to get Paystack checkout URL' },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
+    // Create payin record
+    await this.payinService.createPaystackPayin({
+      userId,
+      transactionId: String(savedTransaction._id),
+      txRef,
+      amount,
+      currency: savedTransaction.senderCurrency || 'KES',
+      customerEmail: savedTransaction.senderEmail,
+      customerName: savedTransaction.senderName,
+      raw: {
+        ...paystackResp,
+        authorizationUrl,
+        gatewayId: String(gateway._id),
+      },
+    });
+
+    return {
+      status: 'pending',
+      transactionId: savedTransaction._id,
+      txRef,
+      amount,
+      currency: savedTransaction.senderCurrency || 'KES',
+      customerEmail: savedTransaction.senderEmail,
+      redirect_url: authorizationUrl,
+      provider: 'paystack',
+    };
+  }
+
+  private async createMpesaPayin(
+    transactionData: any,
+    userId,
+    options?: {
+      paymentRequestMode?: boolean;
+      paymentRequestInput?: CreatePaymentRequestDto;
+    },
+  ) {
+    const txRef = this.payinService.generateTxRef('txPayin');
+
+    const depositAmount = Number(transactionData.estimation);
+    if (Number.isFinite(depositAmount) && depositAmount > 0) {
+      await this.transactionService.validateTransactionLimit(
+        depositAmount,
+        transactionData.senderCurrency || 'KES',
+        'deposit',
+      );
+    }
+
+    const raw = {
+      ...transactionData,
+      userId,
+      txRef,
+      status: TStatus.PAYINPENDING,
+    };
+
+    const savedTransaction = await this.transactionService.createTransaction(raw);
+    if (!savedTransaction) {
+      throw new NotFoundException('Error to save transaction details');
+    }
+
+    const amount = Number(savedTransaction.paymentWithTaxes);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new HttpException(
+        { status: HttpStatus.BAD_REQUEST, error: 'Invalid payment amount' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const customerPhone = this.buildKesCustomerPhone(
+      String(savedTransaction.senderContact || ''),
+      String(savedTransaction.senderCountryCode || ''),
+    );
+
+    const payinResult = await this.payinService.createMpesaPayin({
+      amount,
+      txRef,
+      transactionId: savedTransaction._id,
+      currency: savedTransaction.senderCurrency,
+      customerEmail: savedTransaction.senderEmail,
+      customerName: savedTransaction.senderName,
+      customerPhone,
+      redirectUrl: transactionData?.redirectUrl,
+      status: 'pending',
+      userId,
+    });
+
+    return payinResult;
   }
 
   private getCountryForCurrency(currency: string): string | undefined {
@@ -643,7 +848,7 @@ export class FlutterwaveService {
         `${this.fwBaseUrlV3}/charges?type=${chargeType}`,
         payload,
         {
-          headers: this.authHeaderByCurrency(currency),
+          headers: this.authHeader(),
           timeout: 30000,
         },
       ),
@@ -1229,6 +1434,18 @@ export class FlutterwaveService {
 
   // ---------- Payouts ----------
   async payout(transactionId: string, userId: any, retrying: boolean = false) {
+    const tx = await this.transactionService.findById(transactionId).catch(() => null);
+    const currency = tx?.receiverCurrency || tx?.senderCurrency || 'XAF';
+
+    let methodGwId: string | undefined;
+    if (tx?.paymentMethod) {
+      const method = await this.paymentMethodService.findByCode(tx.paymentMethod).catch(() => null);
+      const gw = method?.gatewayId as any;
+      methodGwId = gw?._id ? String(gw._id) : gw ? String(gw) : undefined;
+    }
+
+    await this.loadDbCredentials(currency, methodGwId);
+
     // Retraits initiés via /dev/payout : pas de retry direct sur la même
     // transaction. Le compte API doit créer une nouvelle requête (qui
     // re-débitera son solde) pour relancer le paiement Flutterwave.
@@ -1689,9 +1906,7 @@ export class FlutterwaveService {
       if (planDto.duration != null) payload.duration = planDto.duration;
       if (planDto.description) payload.description = planDto.description;
 
-      // Choose the correct key depending on currency/wallet
-      const headers =
-        currency.toUpperCase() === 'NGN' ? this.authHeaderNGN() : this.authHeader();
+      const headers = this.authHeader();
 
       const res = await firstValueFrom(
         this.http.post(`${this.fwBaseUrlV3}/payment-plans`, payload, {

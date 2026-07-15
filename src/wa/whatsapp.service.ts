@@ -61,7 +61,7 @@ export class WhatsappService implements OnModuleInit {
     private planService: PlansService,
   ) {
     this.frontUrl =
-      this.config.get<string>('FRONT_URL') || 'https://example.com';
+      this.config.get<string>('FRONT_URL') || 'https://payments.digikuntz.com';
     this.alertEmail = this.config.get<string>('ALERT_EMAIL') || this.alertEmail;
     this.alertPhoneNumber =
       this.config.get<string>('ALERT_PHONE') || this.alertPhoneNumber;

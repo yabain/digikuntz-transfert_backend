@@ -2,10 +2,13 @@ import {
   Controller,
   Get,ForbiddenException,
   NotFoundException,
+  HttpException,
+  HttpStatus,
   Param,
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
   UsePipes,
   ValidationPipe,
@@ -21,8 +24,10 @@ import {
 import { PaystackService } from './paystack.service';
 import { InjectModel } from '@nestjs/mongoose';
 import type mongoose from 'mongoose';
+import { Response } from 'express';
 import { Gateway } from 'src/gateway/gateway.schema';
 import { CryptService } from 'src/dev/crypt.service';
+import { Payin, PayinStatus } from 'src/payin/payin.schema';
 
 @ApiTags('paystack')
 @Controller('paystack')
@@ -31,6 +36,7 @@ export class PaystackController {
     private readonly paystackService: PaystackService,
     private readonly cryptService: CryptService,
     @InjectModel(Gateway.name) private readonly gatewayModel: mongoose.Model<Gateway>,
+    @InjectModel(Payin.name) private readonly payinModel: mongoose.Model<Payin>,
   ) {}
 
   private async loadCredentials(gatewayId?: string): Promise<void> {
@@ -49,6 +55,45 @@ export class PaystackController {
     } catch { creds = {}; }
 
     this.paystackService.setCredentials(creds);
+  }
+
+  @Get('payin-callback')
+  @ApiOperation({ summary: 'Paystack payin redirect callback (public)' })
+  @ApiQuery({ name: 'txRef', required: true, description: 'Local transaction reference' })
+  @ApiQuery({ name: 'reference', required: false, description: 'Paystack reference' })
+  @ApiQuery({ name: 'trxref', required: false, description: 'Paystack trxref' })
+  async handlePayinCallback(
+    @Query('txRef') txRef: string,
+    @Query('reference') reference: string,
+    @Query('trxref') trxref: string,
+    @Res() res: Response,
+  ) {
+    const frontUrl = process.env.FRONT_URL || 'https://payments.digikuntz.com';
+    if (!txRef) {
+      return res.redirect(`${frontUrl}/dashboard`);
+    }
+
+    const paystackRef = reference || trxref;
+    if (!paystackRef) {
+      return res.redirect(`${frontUrl}/dashboard`);
+    }
+
+    try {
+      await this.loadCredentials();
+      const verifyResp = await this.paystackService.verifyTransaction(paystackRef);
+      const paystackStatus = String(verifyResp?.data?.status || '').toLowerCase();
+
+      let newStatus = PayinStatus.PENDING;
+      if (paystackStatus === 'success') newStatus = PayinStatus.SUCCESSFUL;
+      else if (paystackStatus === 'failed') newStatus = PayinStatus.FAILED;
+      else if (paystackStatus === 'abandoned') newStatus = PayinStatus.CANCELLED;
+
+      await this.payinModel.findOneAndUpdate({ txRef }, { status: newStatus }).exec();
+    } catch (e: any) {
+      // Silently ignore - user will see pending status and can retry
+    }
+
+    return res.redirect(`${frontUrl}/dashboard`);
   }
 
   @Get('balance')

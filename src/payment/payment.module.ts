@@ -12,7 +12,7 @@ import { MpesaModule } from '../mpesa/mpesa.module';
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Gateway.name, schema: GatewaySchema }]),
-    DevModule,
+    forwardRef(() => DevModule),
     forwardRef(() => FlutterwaveModule),
     forwardRef(() => PaystackModule),
     forwardRef(() => MpesaModule),

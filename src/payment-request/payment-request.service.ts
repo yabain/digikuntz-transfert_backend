@@ -107,6 +107,7 @@ export class PaymentRequestService {
       receiverMobileAccountNumber: senderPhone,
       bankAccountNumber: senderPhone,
       bankCode: (data.mobile_money?.provider || '').toUpperCase(),
+      gatewayId: data.gatewayId || undefined,
       transactionType: TransactionType.PAYMENTREQUEST,
       status: 'transaction_payin_pending',
       userId,

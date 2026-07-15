@@ -44,6 +44,7 @@ import { PaystackModule } from 'src/paystack/paystack.module';
 import { PaymentRequestModule } from 'src/payment-request/payment-request.module';
 import { MpesaModule } from 'src/mpesa/mpesa.module';
 import { PaymentMethodModule } from 'src/payment-method/payment-method.module';
+import { PaymentModule } from 'src/payment/payment.module';
 import { Gateway, GatewaySchema } from 'src/gateway/gateway.schema';
 import { CryptService } from 'src/dev/crypt.service';
 
@@ -54,6 +55,7 @@ import { CryptService } from 'src/dev/crypt.service';
     PaystackModule,
     MpesaModule,
     forwardRef(() => PaymentMethodModule),
+    forwardRef(() => PaymentModule),
     forwardRef(() => WhatsappModule),
     forwardRef(() => PlansModule),
     forwardRef(() => FundraisingModule),

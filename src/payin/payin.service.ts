@@ -21,6 +21,7 @@ import { CreatePayinDto } from './payin.dto';
 import { ConfigService } from '@nestjs/config';
 import { Query } from 'express-serve-static-core';
 import { MpesaService } from 'src/mpesa/mpesa.service';
+import { PaystackService } from 'src/paystack/paystack.service';
 
 type InitPayinPayload = {
   amount: number;
@@ -72,6 +73,7 @@ export class PayinService {
     private readonly http: HttpService,
     private readonly config: ConfigService,
     private readonly mpesaService: MpesaService,
+    private readonly paystackService: PaystackService,
     @InjectModel(Payin.name)
     private readonly payinModel: mongoose.Model<PayinDocument>,
   ) {
@@ -91,26 +93,18 @@ export class PayinService {
   }
 
   setCredentials(creds: Record<string, any>): void {
-    if (creds.secretKey) this.fwSecret = creds.secretKey;
-    if (creds.publicKey) this.fwPublic = creds.publicKey;
-    if (creds.secretHash) this.secretHash = creds.secretHash;
+    const secret = creds.secretKey || creds.FLUTTERWAVE_SECRET_KEY;
+    const pubKey = creds.publicKey || creds.FLUTTERWAVE_PUBLIC_KEY;
+    const hash = creds.secretHash || creds.FLUTTERWAVE_SECRET_HASH;
+    if (secret) this.fwSecret = secret;
+    if (pubKey) this.fwPublic = pubKey;
+    if (hash) this.secretHash = hash;
   }
 
   /* ========================= Helpers ========================= */
 
   private authHeader(): Record<string, string> {
     return { Authorization: `Bearer ${this.fwSecret}` };
-  }
-
-  private authHeaderByCurrency(currency?: string): Record<string, string> {
-    const normalized = String(currency || '').toUpperCase();
-    if (normalized === 'NGN') {
-      const ngnSecret = this.config.get<string>('FLUTTERWAVE_SECRET_KEY_NGN');
-      if (ngnSecret) {
-        return { Authorization: `Bearer ${ngnSecret}` };
-      }
-    }
-    return this.authHeader();
   }
 
   generateTxRef(prefix = 'tx'): string {
@@ -261,14 +255,9 @@ export class PayinService {
     };
   }
 
-  // Hosted Payment (V3)
+  // Hosted Payment (V3) — Flutterwave only
   async createPayin(dto: CreatePayinDto) {
     const txRef = dto.txRef ?? this.generateTxRef('txPayin');
-
-    // KES payments are processed directly with M-Pesa (Daraja API).
-    if (String(dto.currency).toUpperCase() === 'KES') {
-      return this.createKesMpesaPayin({ ...dto, txRef });
-    }
 
     const payload = {
       tx_ref: txRef,
@@ -380,7 +369,7 @@ export class PayinService {
 
     const res = await firstValueFrom(
       this.http.post(`${this.fwBaseUrlV3}/charges?type=${flutterwaveChargeType}`, payload, {
-        headers: this.authHeaderByCurrency(dto.currency),
+        headers: this.authHeader(),
         timeout: PayinService.HTTP_TIMEOUT_MS,
       }),
     );
@@ -493,7 +482,7 @@ export class PayinService {
     return PayinStatus.PENDING;
   }
 
-  private async createKesMpesaPayin(dto: CreatePayinDto & { txRef: string }) {
+  async createMpesaPayin(dto: CreatePayinDto & { txRef: string }) {
     const amount = Math.round(Number(dto.amount));
     if (!Number.isFinite(amount) || amount <= 0) {
       throw new HttpException(
@@ -564,6 +553,31 @@ export class PayinService {
       redirect_url: null,
       details: resData?.data ?? resData,
     };
+  }
+
+  async createPaystackPayin(data: {
+    userId: any;
+    transactionId: string;
+    txRef: string;
+    amount: number;
+    currency: string;
+    customerEmail: string;
+    customerName?: string;
+    raw?: any;
+  }) {
+    return this.payinModel.create({
+      userId: data.userId,
+      transactionId: data.transactionId,
+      txRef: data.txRef,
+      amount: data.amount,
+      currency: data.currency,
+      customerEmail: data.customerEmail,
+      customerName: data.customerName,
+      channel: 'mobile_money',
+      status: PayinStatus.PENDING,
+      provider: PayinProvider.PAYSTACK,
+      raw: data.raw,
+    });
   }
 
   private async verifyMpesaByReference(reference: string, closeMode = false) {
@@ -666,6 +680,55 @@ export class PayinService {
       .exec();
 
     return updated;
+  }
+
+  private async verifyPaystackByReference(reference: string, closeMode = false) {
+    const local = await this.payinModel.findOne({ txRef: reference }).lean().exec();
+    if (!local) {
+      throw new HttpException(
+        { message: `Local transaction ${reference} not found` },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    if (
+      local.status === PayinStatus.SUCCESSFUL ||
+      local.status === PayinStatus.FAILED ||
+      local.status === PayinStatus.CANCELLED
+    ) {
+      return local;
+    }
+
+    const paystackRef = local?.raw?.reference || local?.raw?.data?.reference || reference;
+    let verifyResp: any;
+    try {
+      verifyResp = await this.paystackService.verifyTransaction(paystackRef);
+    } catch {
+      const fallbackStatus = closeMode ? PayinStatus.CANCELLED : PayinStatus.PENDING;
+      return this.payinModel
+        .findOneAndUpdate(
+          { txRef: reference },
+          { status: fallbackStatus },
+          { new: true },
+        )
+        .lean()
+        .exec();
+    }
+
+    const paystackStatus = String(verifyResp?.data?.status || '').toLowerCase();
+    let newStatus = PayinStatus.PENDING;
+    if (paystackStatus === 'success') newStatus = PayinStatus.SUCCESSFUL;
+    else if (paystackStatus === 'failed') newStatus = PayinStatus.FAILED;
+    else if (paystackStatus === 'abandoned') newStatus = PayinStatus.CANCELLED;
+
+    return this.payinModel
+      .findOneAndUpdate(
+        { txRef: reference },
+        { status: newStatus, raw: { ...(local?.raw || {}), verifyResp } },
+        { new: true },
+      )
+      .lean()
+      .exec();
   }
 
   /**
@@ -856,7 +919,7 @@ export class PayinService {
       .exec();
 
     if (localAnyRef?.provider === PayinProvider.PAYSTACK) {
-      return this.verifyMpesaByReference(String(localAnyRef.txRef), saveLocal);
+      return this.verifyPaystackByReference(String(localAnyRef.txRef), saveLocal);
     }
     if (localAnyRef?.provider === PayinProvider.MPESA) {
       return this.verifyMpesaByReference(String(localAnyRef.txRef), saveLocal);

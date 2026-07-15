@@ -16,7 +16,7 @@ export class MobileMoneyPaymentRequestDto {
     example: '254790749940',
     description: 'Payer mobile money phone number in local or intl format',
   })
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
   phone: string;
 
@@ -54,5 +54,13 @@ export class CreatePaymentRequestDto {
   @IsOptional()
   @IsString()
   reason?: string;
+
+  @ApiPropertyOptional({
+    example: '67d8b1f2e4b0a1c2d3e4f5a6',
+    description: 'Optional gateway ID to use for payment processing',
+  })
+  @IsOptional()
+  @IsString()
+  gatewayId?: string;
 }
 

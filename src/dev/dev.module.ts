@@ -15,7 +15,7 @@ import { PaymentMethodModule } from 'src/payment-method/payment-method.module';
 
 @Module({
   imports: [
-    AuthModule,
+    forwardRef(() => AuthModule),
     forwardRef(() => TransactionModule),
     forwardRef(() => PayinModule),
     forwardRef(() => FlutterwaveModule),

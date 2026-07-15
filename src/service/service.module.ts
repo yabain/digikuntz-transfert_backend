@@ -54,8 +54,8 @@ import { MpesaModule } from 'src/mpesa/mpesa.module';
 
 @Module({
   imports: [
-    AuthModule,
-    WhatsappModule,
+    forwardRef(() => AuthModule),
+    forwardRef(() => WhatsappModule),
     forwardRef(() => FlutterwaveModule),
     forwardRef(() => PaymentRequestModule),
     PaystackModule,

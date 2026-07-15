@@ -6,7 +6,7 @@ import { Payin, PayinSchema } from './payin.schema';
 import { PayinCron } from './payin.cron';
 import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
-import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
+import { FlutterwaveModule } from 'src/flutterwave/flutterwave.module';
 import { Payout, PayoutSchema } from 'src/payout/payout.schema';
 import { TransactionService } from 'src/transaction/transaction.service';
 import {
@@ -48,7 +48,8 @@ import { MpesaModule } from 'src/mpesa/mpesa.module';
     PaystackModule,
     MpesaModule,
     forwardRef(() => PaymentRequestModule),
-    WhatsappModule,
+    forwardRef(() => FlutterwaveModule),
+    forwardRef(() => WhatsappModule),
     forwardRef(() => FundraisingModule),
     forwardRef(() => PlansModule),
     forwardRef(() => SubscriptionModule),
@@ -71,7 +72,6 @@ import { MpesaModule } from 'src/mpesa/mpesa.module';
   providers: [
     PayinService,
     PayinCron,
-    FlutterwaveService,
     TransactionService,
     PayoutService,
     BalanceService,

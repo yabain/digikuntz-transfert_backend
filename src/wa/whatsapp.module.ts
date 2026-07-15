@@ -20,7 +20,7 @@ import { PlansModule } from 'src/plans/plans.module';
 @Module({
   imports: [
     HttpModule,
-    UserModule,
+    forwardRef(() => UserModule),
     forwardRef(() => PlansModule),
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },

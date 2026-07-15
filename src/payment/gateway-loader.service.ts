@@ -42,13 +42,20 @@ export class GatewayLoaderService {
   }
 
   async loadAllConfigs(): Promise<Map<string, GatewayConfig>> {
-    const gateways = await this.gatewayModel.find({ isActive: true }).exec();
+    const gateways = await this.gatewayModel.find().exec();
+    const byCurrency = new Map<string, Gateway[]>();
     for (const gw of gateways) {
+      const arr = byCurrency.get(gw.currency) || [];
+      arr.push(gw);
+      byCurrency.set(gw.currency, arr);
+    }
+    for (const [currency, gws] of byCurrency) {
       try {
-        const config = this.toConfig(gw);
-        this.cache.set(gw.currency, config);
+        const picked = gws.find(g => g.isActive) || gws[0];
+        const config = this.toConfig(picked);
+        this.cache.set(currency, config);
       } catch (err) {
-        this.logger.warn(`Failed to load gateway config for ${gw.currency}: ${err.message}`);
+        this.logger.warn(`Failed to load gateway config for ${currency}: ${err.message}`);
       }
     }
     this.logger.log(`Loaded ${this.cache.size} gateway configs from DB`);
@@ -56,11 +63,12 @@ export class GatewayLoaderService {
   }
 
   private async loadAndCache(currency: string): Promise<GatewayConfig> {
-    const gateway = await this.gatewayModel.findOne({ currency, isActive: true }).exec();
-    if (!gateway) {
-      throw new NotFoundException(`No active gateway found for currency "${currency}"`);
+    const gateways = await this.gatewayModel.find({ currency }).exec();
+    const picked = gateways.find(g => g.isActive) || gateways[0];
+    if (!picked) {
+      throw new NotFoundException(`No gateway found for currency "${currency}"`);
     }
-    const config = this.toConfig(gateway);
+    const config = this.toConfig(picked);
     this.cache.set(currency, config);
     return config;
   }

@@ -146,18 +146,24 @@ export class MpesaController {
   @Get('balance')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get M-Pesa stored balance & trigger async refresh (admin only)' })
+  @ApiQuery({ name: 'gatewayId', required: false, description: 'Optional gateway ID to use specific credentials' })
   @ApiQuery({ name: 'remarks', required: false, type: String, example: 'Balance check' })
   @ApiResponse({ status: 200, description: 'Stored M-Pesa balance returned.' })
   @ApiResponse({ status: 401, description: 'Authentication required.' })
   @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  async queryBalance(@Req() req, @Query('remarks') remarks?: string) {
+  async queryBalance(@Req() req, @Query('gatewayId') gatewayId?: string, @Query('remarks') remarks?: string) {
     if (!req.user?.isAdmin) {
       throw new ForbiddenException('Unauthorised');
     }
 
-    const gateway = await this.gatewayModel.findOne({ type: 'mpesa', isActive: true }).exec();
+    let gateway;
+    if (gatewayId) {
+      gateway = await this.gatewayModel.findById(gatewayId).exec();
+    } else {
+      gateway = await this.gatewayModel.findOne({ type: 'mpesa', isActive: true }).exec();
+    }
 
     if (!gateway) {
       return { balance: null, currency: 'KES', message: 'No active M-Pesa gateway found' };
@@ -298,8 +304,17 @@ export class MpesaController {
     console.log('[M-Pesa balance result callback]:', JSON.stringify(payload || {}));
 
     const result = payload?.Result || payload?.result || payload;
-    const balanceStr: string =
-      result?.Balance || result?.balance || result?.DebitAccountBalance || '';
+    const resultParams = result?.ResultParameters?.ResultParameter || [];
+
+    let balanceStr = '';
+    if (Array.isArray(resultParams)) {
+      const accountParam = resultParams.find(
+        (p: any) => p?.Key === 'AccountBalance' || p?.key === 'accountBalance',
+      );
+      balanceStr = accountParam?.Value || accountParam?.value || '';
+    }
+
+    balanceStr = balanceStr || result?.Balance || result?.balance || result?.DebitAccountBalance || '';
 
     if (balanceStr) {
       const parsed = this.parseMpesaBalance(balanceStr);
@@ -311,7 +326,11 @@ export class MpesaController {
           )
           .exec();
         console.log('[M-Pesa] Balance stored in gateway:', JSON.stringify(parsed));
+      } else {
+        console.log('[M-Pesa] No sub-accounts parsed from balance string:', balanceStr);
       }
+    } else {
+      console.log('[M-Pesa] No balance string found in callback payload');
     }
 
     return {

@@ -15,7 +15,7 @@ import { OptionsService } from './options/options.service';
 import { EmailSchema, Email } from 'src/email/email.schema';
 import { SmtpService } from 'src/email/smtp/smtp.service';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
-import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
+import { FlutterwaveModule } from 'src/flutterwave/flutterwave.module';
 import { HttpModule } from '@nestjs/axios';
 import { Payout, PayoutSchema } from 'src/payout/payout.schema';
 import { Payin, PayinSchema } from 'src/payin/payin.schema';
@@ -55,6 +55,7 @@ import { MpesaModule } from 'src/mpesa/mpesa.module';
 
 @Module({
   imports: [
+    forwardRef(() => FlutterwaveModule),
     forwardRef(() => AuthModule),
     forwardRef(() => WhatsappModule),
     forwardRef(() => SubscriptionModule),
@@ -100,7 +101,6 @@ import { MpesaModule } from 'src/mpesa/mpesa.module';
     EmailService,
     DateService,
     SmtpService,
-    FlutterwaveService,
     PayinService,
     PayoutService,
     TransactionService,

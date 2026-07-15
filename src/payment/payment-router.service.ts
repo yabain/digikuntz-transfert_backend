@@ -43,8 +43,8 @@ export class PaymentRouterService {
     return (await this.resolve(currency)).withdrawal(transactionData, userId);
   }
 
-  async payout(transactionId: string, userId: string, retrying?: boolean): Promise<any> {
-    return (await this.resolve('XAF')).payout(transactionId, userId, retrying);
+  async payout(transactionId: string, userId: string, retrying?: boolean, currency?: string): Promise<any> {
+    return (await this.resolve(currency || 'XAF')).payout(transactionId, userId, retrying);
   }
 
   async verifyPayout(reference: string, verifyPayout?: boolean, flwTxId?: string): Promise<any> {
@@ -73,7 +73,6 @@ export class PaymentRouterService {
       CM: 'XAF',
       NG: 'NGN',
       KE: 'KES',
-      GH: 'GHS',
     };
     return map[countryWallet?.toUpperCase()] || 'XAF';
   }

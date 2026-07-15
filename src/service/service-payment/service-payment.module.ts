@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ServicePaymentService } from './service-payment.service';
 import { ServicePaymentController } from './service-payment.controller';
 import { AuthModule } from 'src/auth/auth.module';
@@ -19,8 +19,8 @@ import { AppCacheModule } from '../../cache/cache.module';
 
 @Module({
   imports: [
-    AuthModule,
-    WhatsappModule,
+    forwardRef(() => AuthModule),
+    forwardRef(() => WhatsappModule),
     AppCacheModule,
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
