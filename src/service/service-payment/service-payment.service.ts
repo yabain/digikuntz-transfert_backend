@@ -160,7 +160,7 @@ export class ServicePaymentService {
       },
       { $sort: { serviceId: 1 } },
     ]);
-    console.log('resp: ', res)
+    // console.log('resp: ', res)
 
     return res;
   }

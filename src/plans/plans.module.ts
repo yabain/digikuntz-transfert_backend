@@ -52,6 +52,7 @@ import { FundraisingModule } from 'src/fundraising/fundraising.module';
 import { PaystackModule } from 'src/paystack/paystack.module';
 import { PaymentRequestModule } from 'src/payment-request/payment-request.module';
 import { MpesaModule } from 'src/mpesa/mpesa.module';
+import { PaymentModule } from 'src/payment/payment.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { MpesaModule } from 'src/mpesa/mpesa.module';
     forwardRef(() => SystemModule),
     PaystackModule,
     MpesaModule,
+    forwardRef(() => PaymentModule),
     AppCacheModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({

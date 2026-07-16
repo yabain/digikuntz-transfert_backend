@@ -51,6 +51,7 @@ import { OperationNotificationService } from 'src/notification/operation-notific
 import { PaystackModule } from 'src/paystack/paystack.module';
 import { PaymentRequestModule } from 'src/payment-request/payment-request.module';
 import { MpesaModule } from 'src/mpesa/mpesa.module';
+import { PaymentModule } from 'src/payment/payment.module';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { MpesaModule } from 'src/mpesa/mpesa.module';
     AppCacheModule,
     forwardRef(() => SubscriptionModule),
     forwardRef(() => SystemModule),
+    forwardRef(() => PaymentModule),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       inject: [ConfigService],

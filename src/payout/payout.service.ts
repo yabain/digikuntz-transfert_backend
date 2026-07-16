@@ -21,7 +21,6 @@ import {
   PayoutProvider,
   PayoutStatus,
 } from './payout.schema';
-import { ConfigService } from '@nestjs/config';
 import { TStatus } from 'src/transaction/transaction.schema';
 import { TransactionService } from 'src/transaction/transaction.service';
 import { randomBytes } from 'crypto';
@@ -34,8 +33,7 @@ import { GatewayLoaderService } from 'src/payment/gateway-loader.service';
 @Injectable()
 export class PayoutService {
   private readonly logger = new Logger(PayoutService.name);
-  private fwSecret: any;
-  private fwSecretNGN: any;
+  private fwSecret = '';
   private fwBaseUrlV3 = 'https://api.flutterwave.com/v3';
 
   private normalizeKenyanMsisdn(input?: string): string {
@@ -46,7 +44,6 @@ export class PayoutService {
 
   constructor(
     private readonly http: HttpService,
-    private readonly config: ConfigService,
     private readonly mpesaService: MpesaService,
     @InjectModel(Payout.name)
     private readonly payoutModel: mongoose.Model<PayoutDocument>,
@@ -56,9 +53,11 @@ export class PayoutService {
     private operationNotificationService: OperationNotificationService,
     private readonly paystackService: PaystackService,
     private readonly gatewayLoader: GatewayLoaderService,
-  ) {
-    this.fwSecret = this.config.get<string>('FLUTTERWAVE_SECRET_KEY');
-    this.fwSecretNGN = this.config.get<string>('FLUTTERWAVE_SECRET_KEY_NGN');
+  ) {}
+
+  setCredentials(creds: Record<string, any>): void {
+    const secret = creds.secretKey || creds.FLUTTERWAVE_SECRET_KEY;
+    if (secret) this.fwSecret = secret;
   }
 
   private normalizeMpesaPayoutStatus(raw?: any): string {
@@ -301,17 +300,11 @@ export class PayoutService {
     const oldStatus = localPayout.status;
     const effectiveFlwTxId = flwTxId || localPayout.flwTxId || localPayout?.raw?.data?.id;
 
-    // Load correct Flutterwave credentials based on the payout's transaction currency
-    let secretKey = this.fwSecret;
-    try {
-      const tx = await this.transactionService.findById(String(localPayout.transactionId));
-      const currency = tx?.receiverCurrency || tx?.senderCurrency || 'XAF';
-      const gwConfig = await this.gatewayLoader.getConfig(currency);
-      const key = gwConfig?.credentials?.FLUTTERWAVE_SECRET_KEY || gwConfig?.credentials?.secretKey;
-      if (key) secretKey = key;
-    } catch {
-      // Fallback to default fwSecret from config
-    }
+    // Load correct Flutterwave credentials from the database
+    const txVerify = await this.transactionService.findById(String(localPayout.transactionId));
+    const currency = txVerify?.receiverCurrency || txVerify?.senderCurrency || 'XAF';
+    const gwConfig = await this.gatewayLoader.getConfig(currency);
+    const secretKey = gwConfig?.credentials?.FLUTTERWAVE_SECRET_KEY || gwConfig?.credentials?.secretKey || '';
 
     let res: any;
     if (effectiveFlwTxId) {
@@ -824,11 +817,15 @@ export class PayoutService {
       ],
     };
 
-    // 4) Call Flutterwave transfers endpoint
+    // 4) Load Flutterwave credentials from database
+    const currency = payloadPayout.destinationCurrency || 'XAF';
+    const gwConfig = await this.gatewayLoader.getConfig(currency);
+    const secretKey = gwConfig?.credentials?.FLUTTERWAVE_SECRET_KEY || gwConfig?.credentials?.secretKey || '';
+
     const url = `${this.fwBaseUrlV3}/transfers`;
     const res: any = await this.http
       .post(url, fwPayload, {
-        headers: { Authorization: `Bearer ${this.fwSecret}` },
+        headers: { Authorization: `Bearer ${secretKey}` },
       })
       .toPromise();
 

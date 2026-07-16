@@ -209,7 +209,7 @@ export class MpesaService {
           timeout: 25_000,
         }),
       );
-      console.log('res balance: ', res)
+      // console.log('res balance: ', res)
       return res.data as T;
     } catch (error: any) {
       const details = error?.response?.data || error?.message || error;

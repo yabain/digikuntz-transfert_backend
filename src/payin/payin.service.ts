@@ -57,14 +57,14 @@ type FWErrorPayload = {
 export class PayinService {
   private readonly logger = new Logger(PayinService.name);
 
-  private fwSecret: string;
-  private fwPublic: string;
-  private readonly fwBaseUrlV3: string;
-  private readonly fwBaseUrlV4: string; // conservé (non utilisé ici)
-  private secretHash: string;
+  private fwSecret = '';
+  private fwPublic = '';
+  private readonly fwBaseUrlV3 = 'https://api.flutterwave.com/v3';
+  private readonly fwBaseUrlV4 = 'https://api.flutterwave.cloud';
+  private secretHash = '';
   private readonly redirectDefault?: string;
-  private readonly mpesaCallbackBase: string;
-  private readonly mpesaBaseUrl: string;
+  private mpesaBaseUrl = 'https://api.safaricom.co.ke';
+  private mpesaCallbackBase = '';
 
   private static readonly DEFAULT_CURRENCY = 'XAF';
   private static readonly HTTP_TIMEOUT_MS = 10_000;
@@ -77,17 +77,6 @@ export class PayinService {
     @InjectModel(Payin.name)
     private readonly payinModel: mongoose.Model<PayinDocument>,
   ) {
-    this.mpesaBaseUrl = this.config.get<string>('MPESA_BASE_URL') ?? 'https://api.safaricom.co.ke';
-    this.mpesaCallbackBase = this.config.get<string>('MPESA_STK_CALLBACK_URL') ?? 'https://app.digikuntz.com/payin/mpesa/callback';
-    this.fwSecret = this.config.get<string>('FLUTTERWAVE_SECRET_KEY') ?? '';
-    this.fwPublic = this.config.get<string>('FLUTTERWAVE_PUBLIC_KEY') ?? '';
-    this.fwBaseUrlV3 =
-      this.config.get<string>('FLUTTERWAVE_BASE_URL_V3') ??
-      'https://api.flutterwave.com/v3';
-    this.fwBaseUrlV4 =
-      this.config.get<string>('FLUTTERWAVE_BASE_URL_V4') ??
-      'https://api.flutterwave.cloud';
-    this.secretHash = this.config.get<string>('FLUTTERWAVE_SECRET_HASH') ?? '';
     const frontUrl = this.config.get<string>('FRONT_URL')?.replace(/\/+$/, '');
     this.redirectDefault = frontUrl ? `${frontUrl}/dashboard` : undefined;
   }
@@ -99,6 +88,8 @@ export class PayinService {
     if (secret) this.fwSecret = secret;
     if (pubKey) this.fwPublic = pubKey;
     if (hash) this.secretHash = hash;
+    if (creds.MPESA_BASE_URL) this.mpesaBaseUrl = creds.MPESA_BASE_URL;
+    if (creds.MPESA_STK_CALLBACK_URL) this.mpesaCallbackBase = creds.MPESA_STK_CALLBACK_URL;
   }
 
   /* ========================= Helpers ========================= */

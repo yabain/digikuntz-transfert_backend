@@ -40,6 +40,7 @@ import { FundraisingModule } from 'src/fundraising/fundraising.module';
 import { PaystackModule } from 'src/paystack/paystack.module';
 import { PaymentRequestModule } from 'src/payment-request/payment-request.module';
 import { MpesaModule } from 'src/mpesa/mpesa.module';
+import { PaymentModule } from 'src/payment/payment.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { MpesaModule } from 'src/mpesa/mpesa.module';
     forwardRef(() => PlansModule),
     forwardRef(() => SubscriptionModule),
     forwardRef(() => SystemModule),
+    forwardRef(() => PaymentModule),
     AppCacheModule,
     MongooseModule.forFeature([
       { name: Payin.name, schema: PayinSchema },

@@ -21,7 +21,6 @@ import {
   HttpStatus,
   // UnauthorizedException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { TStatus } from './transaction.schema';
 import { InjectModel } from '@nestjs/mongoose';
 import { Transaction } from './transaction.schema';
@@ -36,7 +35,7 @@ import { PaymentRequestService } from 'src/payment-request/payment-request.servi
 import { PaymentRequestStatus } from 'src/payment-request/payment-request.schema';
 import { ServicePaymentService } from 'src/service/service-payment/service-payment.service';
 import { BalanceService } from 'src/balance/balance.service';
-// import { CreateTransactionDto } from './create-transaction.dto';
+import { GatewayLoaderService } from 'src/payment/gateway-loader.service';
 
 @Injectable()
 export class TransactionService {
@@ -50,7 +49,6 @@ export class TransactionService {
     @InjectModel(Payout.name)
     private payoutModel: mongoose.Model<Payout>,
     private httpService: HttpService,
-    private configService: ConfigService,
     private payinService: PayinService,
     private systemService: SystemService,
     private operationNotificationService: OperationNotificationService,
@@ -58,7 +56,19 @@ export class TransactionService {
     private paymentRequestService: PaymentRequestService,
     private servicePaymentService: ServicePaymentService,
     private balanceService: BalanceService,
+    private gatewayLoader: GatewayLoaderService,
   ) { }
+
+  private async loadFwSecret(currency = 'XAF'): Promise<string> {
+    try {
+      const gwConfig = await this.gatewayLoader.getConfig(currency);
+      const secret = gwConfig?.credentials?.FLUTTERWAVE_SECRET_KEY || gwConfig?.credentials?.secretKey || '';
+      if (secret) return secret;
+    } catch {
+      this.logger.warn(`loadFwSecret: failed to load credentials for ${currency}`);
+    }
+    return '';
+  }
 
   async findAll(query: Query): Promise<Transaction[]> {
     const requestedLimit = Number((query as any)?.limit || (query as any)?.resPerPage);
@@ -790,7 +800,11 @@ export class TransactionService {
     // Statut non terminal : vérifier directement chez Flutterwave
     console.log(`[TransactionCron] → statut local "${payout.status}" non terminal, vérification FW...`);
     const fwFlwTxId = payout.flwTxId || payout.raw?.data?.id || payout.raw?.id;
-    const fwSecret = this.configService.get<string>('FLUTTERWAVE_SECRET_KEY');
+    const fwSecret = await this.loadFwSecret(transactionData?.receiverCurrency || transactionData?.senderCurrency || 'XAF');
+    if (!fwSecret) {
+      console.log(`[TransactionCron] → aucune clé FW trouvée en base`);
+      return false;
+    }
     const authHeader = { Authorization: `Bearer ${fwSecret}` };
     const fwBaseUrl = 'https://api.flutterwave.com/v3';
     let fwStatus: string | null = null;
@@ -1766,7 +1780,10 @@ export class TransactionService {
       throw new NotFoundException('Invalid user ID');
     }
 
-    const fwSecret = this.configService.get<string>('FLUTTERWAVE_SECRET_KEY');
+    const fwSecret = await this.loadFwSecret();
+    if (!fwSecret) {
+      throw new NotFoundException('No Flutterwave gateway credentials found in database');
+    }
     const authHeader = { Authorization: `Bearer ${fwSecret}` };
     const fwBaseUrl = 'https://api.flutterwave.com/v3';
 
