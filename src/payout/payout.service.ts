@@ -28,6 +28,8 @@ import { randomBytes } from 'crypto';
 import { EmailService } from 'src/email/email.service';
 import { OperationNotificationService } from 'src/notification/operation-notification.service';
 import { MpesaService } from 'src/mpesa/mpesa.service';
+import { PaystackService } from 'src/paystack/paystack.service';
+import { GatewayLoaderService } from 'src/payment/gateway-loader.service';
 
 @Injectable()
 export class PayoutService {
@@ -52,6 +54,8 @@ export class PayoutService {
     private transactionService: TransactionService,
     private emailService: EmailService,
     private operationNotificationService: OperationNotificationService,
+    private readonly paystackService: PaystackService,
+    private readonly gatewayLoader: GatewayLoaderService,
   ) {
     this.fwSecret = this.config.get<string>('FLUTTERWAVE_SECRET_KEY');
     this.fwSecretNGN = this.config.get<string>('FLUTTERWAVE_SECRET_KEY_NGN');
@@ -272,46 +276,68 @@ export class PayoutService {
       throw new NotFoundException('Payout not found');
     }
 
-    if (
-      localPayout.provider === PayoutProvider.PAYSTACK ||
-      localPayout.provider === PayoutProvider.MPESA
-    ) {
-      return this.verifyPaystackPayout(reference, updateOnPending);
+    if (localPayout.provider === PayoutProvider.PAYSTACK) {
+      return this.verifyPayoutForPaystack(reference, updateOnPending);
+    }
+
+    if (localPayout.provider === PayoutProvider.MPESA) {
+      return this.verifyPayoutForMpesa(reference, updateOnPending);
+    }
+
+    return this.verifyPayoutForFlutterwave(reference, updateOnPending, flwTxId, localPayout);
+  }
+
+  private async verifyPayoutForFlutterwave(
+    reference: string,
+    updateOnPending: boolean,
+    flwTxId?: string,
+    localPayout?: any,
+  ) {
+    if (!localPayout) {
+      localPayout = await this.payoutModel.findOne({ reference }).lean().exec();
+      if (!localPayout) throw new NotFoundException('Payout not found');
     }
 
     const oldStatus = localPayout.status;
-    // Support backward-compat : extraire flwTxId du raw si le champ n'existe pas encore
     const effectiveFlwTxId = flwTxId || localPayout.flwTxId || localPayout?.raw?.data?.id;
-    console.log(`[PayoutCron] reference=${reference} oldStatus=${oldStatus} flwTxId(argument)=${flwTxId} localPayout.flwTxId=${localPayout.flwTxId} raw.id=${localPayout?.raw?.data?.id} → effectiveFlwTxId=${effectiveFlwTxId}`);
 
-    // Try numeric transfer ID endpoint first (most reliable)
+    // Load correct Flutterwave credentials based on the payout's transaction currency
+    let secretKey = this.fwSecret;
+    try {
+      const tx = await this.transactionService.findById(String(localPayout.transactionId));
+      const currency = tx?.receiverCurrency || tx?.senderCurrency || 'XAF';
+      const gwConfig = await this.gatewayLoader.getConfig(currency);
+      const key = gwConfig?.credentials?.FLUTTERWAVE_SECRET_KEY || gwConfig?.credentials?.secretKey;
+      if (key) secretKey = key;
+    } catch {
+      // Fallback to default fwSecret from config
+    }
+
     let res: any;
     if (effectiveFlwTxId) {
       try {
         const url = `${this.fwBaseUrlV3}/transfers/${effectiveFlwTxId}`;
-        console.log(`[PayoutCron] → GET ${url}`);
         res = await this.http
           .get(url, {
-            headers: { Authorization: `Bearer ${this.fwSecret}` },
+            headers: { Authorization: `Bearer ${secretKey}` },
           })
           .toPromise();
-        console.log(`[PayoutCron] → réponse numeric ID:`, JSON.stringify(res?.data));
       } catch {
-        console.log(`[PayoutCron] → numeric ID endpoint a échoué`);
         res = null;
       }
     }
 
-    // Fallback: filter by reference
     if (!res?.data?.data) {
-      const url = `${this.fwBaseUrlV3}/transfers?reference=${reference}`;
-      console.log(`[PayoutCron] → fallback GET ${url}`);
-      res = await this.http
-        .get(url, {
-          headers: { Authorization: `Bearer ${this.fwSecret}` },
-        })
-        .toPromise();
-      console.log(`[PayoutCron] → réponse fallback:`, JSON.stringify(res?.data));
+      try {
+        const url = `${this.fwBaseUrlV3}/transfers?reference=${reference}`;
+        res = await this.http
+          .get(url, {
+            headers: { Authorization: `Bearer ${secretKey}` },
+          })
+          .toPromise();
+      } catch {
+        throw new NotFoundException('Payout not found on Flutterwave');
+      }
     }
 
     if (res.data && res.data.data) {
@@ -319,49 +345,39 @@ export class PayoutService {
       if (!payout) {
         throw new NotFoundException('Payout not found on Flutterwave');
       }
-      console.log('payout from FW', payout);
 
       if (oldStatus !== payout.status) {
         const updatedPayout = await this.updatePayout(payout);
-
         if (!updatedPayout) {
           throw new NotFoundException('payout not found');
         }
 
         if (payout.status === 'SUCCESSFUL') {
-          console.log('updating transaction: ', updatedPayout.transactionId.toString());
-          const transaction =
-            await this.transactionService.updateTransactionStatus(
-              updatedPayout.transactionId.toString(),
-              TStatus.PAYOUTSUCCESS,
-              payout,
-            );
-          console.log('transaction SUCCESSFUL', transaction);
-          // send Email payment success
+          const transaction = await this.transactionService.updateTransactionStatus(
+            updatedPayout.transactionId.toString(),
+            TStatus.PAYOUTSUCCESS,
+            payout,
+          );
           if (transaction.transactionType === 'transfer') {
             void this.operationNotificationService.notifyTransferSuccess(transaction);
           } else if (transaction.transactionType === 'withdrawal') {
             void this.operationNotificationService.notifyWithdrawalSuccess(transaction);
           }
-          console.log('verify payout and update SUCCESS')
         }
         if (payout.status === 'FAILED') {
-          const transaction =
-            await this.transactionService.updateTransactionStatus(
-              updatedPayout.transactionId.toString(),
-              TStatus.PAYOUTERROR,
-              payout
-            );
-          console.log('transaction FAILED', transaction);
+          const transaction = await this.transactionService.updateTransactionStatus(
+            updatedPayout.transactionId.toString(),
+            TStatus.PAYOUTERROR,
+            payout,
+          );
           void this.operationNotificationService.notifyAdminPayoutFailed(transaction);
         }
         if (payout.status === 'PENDING' && updateOnPending === true) {
-          const transaction =
-            await this.transactionService.updateTransactionStatus(
-              reference,
-              TStatus.PAYOUTPENDING,
-              payout
-            );
+          const transaction = await this.transactionService.updateTransactionStatus(
+            updatedPayout.transactionId.toString(),
+            TStatus.PAYOUTPENDING,
+            payout,
+          );
           if (
             transaction &&
             (transaction.transactionType === 'transfer' ||
@@ -375,6 +391,99 @@ export class PayoutService {
       return payout;
     }
     throw new NotFoundException('Payout not found on Flutterwave');
+  }
+
+  private async verifyPayoutForPaystack(reference: string, updateOnPending: boolean = false) {
+    const existing: any = await this.payoutModel.findOne({ reference }).lean().exec();
+    if (!existing) {
+      throw new NotFoundException('Payout not found');
+    }
+
+    const transfer = await this.paystackService.fetchTransferByReference(reference);
+    if (!transfer) {
+      this.logger.warn(`[verifyPayoutForPaystack] transfer not found on Paystack: ${reference}`);
+      return existing;
+    }
+
+    const paystackStatus = String(transfer.status || '').toLowerCase();
+    let newStatus = PayoutStatus.PROCESSING;
+    if (paystackStatus === 'success') newStatus = PayoutStatus.SUCCESSFUL;
+    else if (paystackStatus === 'failed' || paystackStatus === 'reversed') newStatus = PayoutStatus.FAILED;
+
+    if (existing.status !== newStatus) {
+      await this.updatePayout({ reference, status: newStatus, ...transfer });
+
+      if (newStatus === PayoutStatus.SUCCESSFUL) {
+        const transaction = await this.transactionService.updateTransactionStatus(
+          String(existing.transactionId),
+          TStatus.PAYOUTSUCCESS,
+          transfer,
+        );
+        if (transaction.transactionType === 'transfer') {
+          void this.operationNotificationService.notifyTransferSuccess(transaction);
+        } else if (transaction.transactionType === 'withdrawal') {
+          void this.operationNotificationService.notifyWithdrawalSuccess(transaction);
+        }
+      } else if (newStatus === PayoutStatus.FAILED) {
+        const transaction = await this.transactionService.updateTransactionStatus(
+          String(existing.transactionId),
+          TStatus.PAYOUTERROR,
+          transfer,
+        );
+        void this.operationNotificationService.notifyAdminPayoutFailed(transaction);
+      } else if (updateOnPending) {
+        await this.transactionService.updateTransactionStatus(
+          String(existing.transactionId),
+          TStatus.PAYOUTPENDING,
+          transfer,
+        );
+      }
+    }
+
+    return transfer;
+  }
+
+  private async verifyPayoutForMpesa(reference: string, updateOnPending: boolean = false) {
+    const existing: any = await this.payoutModel.findOne({ reference }).lean().exec();
+    if (!existing) {
+      throw new NotFoundException('Payout not found');
+    }
+
+    const providerPayload = existing?.raw || {};
+    const nextStatus = this.normalizeMpesaPayoutStatus(providerPayload);
+    const oldStatus = existing.status;
+
+    if (oldStatus !== nextStatus) {
+      await this.updatePayout({ reference, status: nextStatus, ...providerPayload });
+    }
+
+    if (nextStatus === PayoutStatus.SUCCESSFUL && oldStatus !== PayoutStatus.SUCCESSFUL) {
+      const transaction = await this.transactionService.updateTransactionStatus(
+        String(existing.transactionId),
+        TStatus.PAYOUTSUCCESS,
+        providerPayload,
+      );
+      if (transaction.transactionType === 'transfer') {
+        void this.operationNotificationService.notifyTransferSuccess(transaction);
+      } else if (transaction.transactionType === 'withdrawal') {
+        void this.operationNotificationService.notifyWithdrawalSuccess(transaction);
+      }
+    } else if (nextStatus === PayoutStatus.FAILED && oldStatus !== PayoutStatus.FAILED) {
+      const transaction = await this.transactionService.updateTransactionStatus(
+        String(existing.transactionId),
+        TStatus.PAYOUTERROR,
+        providerPayload,
+      );
+      void this.operationNotificationService.notifyAdminPayoutFailed(transaction);
+    } else if (nextStatus === PayoutStatus.PROCESSING && updateOnPending) {
+      await this.transactionService.updateTransactionStatus(
+        String(existing.transactionId),
+        TStatus.PAYOUTPENDING,
+        providerPayload,
+      );
+    }
+
+    return providerPayload;
   }
 
   async initiateMpesaPayout(

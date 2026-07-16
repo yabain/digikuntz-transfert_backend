@@ -24,6 +24,7 @@ import { PaymentRequestModule } from 'src/payment-request/payment-request.module
 import { MpesaModule } from 'src/mpesa/mpesa.module';
 import { BalanceModule } from 'src/balance/balance.module';
 import { ServicePaymentModule } from 'src/service/service-payment/service-payment.module';
+import { PaymentModule } from 'src/payment/payment.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { ServicePaymentModule } from 'src/service/service-payment/service-paymen
     forwardRef(() => PaymentRequestModule),
     forwardRef(() => BalanceModule),
     forwardRef(() => ServicePaymentModule),
+    forwardRef(() => PaymentModule),
     MongooseModule.forFeature([
       { name: Payin.name, schema: PayinSchema },
       { name: Payout.name, schema: PayoutSchema },

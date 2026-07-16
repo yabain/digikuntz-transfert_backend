@@ -30,11 +30,17 @@ export class PayoutCron {
     const processings: any = await this.payoutService.findPending(1000);
     // console.log(`[PayoutCron] ${processings.length} payout(s) en attente de vérification`);
       for (const p of processings) {
-        // console.log(`[PayoutCron] → vérification: reference=${p.reference} flwTxId=${p.flwTxId} transactionId=${p.transactionId} updatedAt=${p.updatedAt}`);
         try {
             await this.payoutService.verifyPayout(p.reference, false, p.flwTxId);
+            // For M-Pesa payouts stuck more than 8 hours (no query API), force-fail
+            if (
+              p.provider === 'mpesa' &&
+              this.payoutService.isMoreThan8HoursAhead(p.updatedAt)
+            ) {
+              this.logger.warn(`(payout cron) M-Pesa payout ${p.reference} stuck for 8+ hours, force-failing`);
+              await this.payoutService.forceFailStuckPayout(p.reference, String(p.transactionId));
+            }
         } catch (err) {
-          // console.log(`[PayoutCron] ERREUR verifyPayout ${p.reference}: ${err.message}`);
           if(this.payoutService.isMoreThan8HoursAhead(p.updatedAt)){
             this.payoutService.forceFailStuckPayout(p.reference, String(p.transactionId));
           }

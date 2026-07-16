@@ -780,6 +780,13 @@ export class TransactionService {
       return this.updateTransactionStatus(transactionData._id, TStatus.PAYOUTERROR);
     }
 
+    // Paiements non-Flutterwave (Paystack/M-Pesa) : pas de vérification FW possible
+    const provider = String(payout?.provider || 'flutterwave').toLowerCase();
+    if (provider !== 'flutterwave') {
+      console.log(`[TransactionCron] → provider="${provider}" non pris en charge par la vérification FW`);
+      return false;
+    }
+
     // Statut non terminal : vérifier directement chez Flutterwave
     console.log(`[TransactionCron] → statut local "${payout.status}" non terminal, vérification FW...`);
     const fwFlwTxId = payout.flwTxId || payout.raw?.data?.id || payout.raw?.id;
