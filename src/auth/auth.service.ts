@@ -24,6 +24,13 @@ import { RevokedToken } from 'src/revoked-token/revoked-token.schema';
 import { EmailService } from 'src/email/email.service';
 import { WhatsappService } from 'src/wa/whatsapp.service';
 import { AuditLogService } from 'src/audit-log/audit-log.service';
+import { ConfigService } from '@nestjs/config';
+import { Request } from 'express';
+import { parseUserAgent } from 'src/common/user-agent.util';
+import { lookupIpLocation } from 'src/common/geoip.util';
+
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
 
 @Injectable()
 export class AuthService {
@@ -99,6 +106,15 @@ export class AuthService {
 
       sendWelcomeWhatsapp ? this.whatsappService.sendWelcomeMessage(user, user.countryId.code) : null;
 
+      if (sendWelcomeEmail || sendWelcomeWhatsapp) {
+        void this.auditLogService.record({
+          actorId: String(user._id),
+          action: 'notification.welcome_sent',
+          resourceType: 'user',
+          resourceId: String(user._id),
+          metadata: { email: sendWelcomeEmail, whatsapp: sendWelcomeWhatsapp },
+        });
+      }
 
       // Return the user data and a JWT token for authentication
       return { userData: user, token: this.jwtService.sign({ id: user._id }) };
@@ -123,7 +139,15 @@ export class AuthService {
    * @returns An object containing the authenticated user and a JWT token.
    * @throws UnauthorizedException if email or password is invalid.
    */
-  async signIn(authData: any): Promise<any> {
+  private extractRequestMeta(req?: Request): { ip?: string; userAgent?: string } {
+    if (!req) return {};
+    const xff = req.headers?.['x-forwarded-for'];
+    const ip = (typeof xff === 'string' && xff.length) ? xff.split(',')[0].trim() : (req.ip || req.connection?.remoteAddress);
+    return { ip, userAgent: req.headers?.['user-agent'] };
+  }
+
+  async signIn(authData: any, req?: Request): Promise<any> {
+    const { ip, userAgent } = this.extractRequestMeta(req);
     // Find the user by email and populate cityId and countryId
     let user: any;
     const loginType = String(authData?.type || 'email').toLowerCase();
@@ -151,18 +175,139 @@ export class AuthService {
     }
 
     if (!user) {
+      this.auditLogService.record({
+        action: 'auth.login_failed',
+        resourceType: 'user',
+        metadata: { reason: 'user_not_found', loginType, email: authData?.email, whatsapp: authData?.whatsapp ? '[REDACTED]' : undefined },
+        method: 'POST',
+        path: '/auth/signin',
+        statusCode: 401,
+      });
       throw new UnauthorizedException('Email or password invalid'); // Handle case where user is not found
     }
 
     if (user.isActive === false) {
+      this.auditLogService.record({
+        actorId: String(user._id),
+        actorEmail: user.email,
+        action: 'auth.login_failed',
+        resourceType: 'user',
+        resourceId: String(user._id),
+        metadata: { reason: 'account_disabled' },
+        method: 'POST',
+        path: '/auth/signin',
+        statusCode: 401,
+      });
       throw new UnauthorizedException('Your account is disabled. Please contact technical support.'); // Handle case where user is not found
+    }
+
+    // Bruteforce: check if account is temporarily locked
+    if (user.lockoutUntil && new Date(user.lockoutUntil) > new Date()) {
+      this.auditLogService.record({
+        actorId: String(user._id),
+        actorEmail: user.email,
+        action: 'auth.login_blocked',
+        resourceType: 'user',
+        resourceId: String(user._id),
+        metadata: { reason: 'temporary_lockout', lockoutUntil: user.lockoutUntil },
+        method: 'POST',
+        path: '/auth/signin',
+        statusCode: 429,
+      });
+      throw new UnauthorizedException('Account temporarily locked due to too many failed attempts. Please try again later.');
     }
 
     // Compare the provided password with the hashed password in the database
     const isPwdMatched = await bcrypt.compare(authData.password, user.password);
     if (!isPwdMatched) {
+      const attempts = (user.loginAttempts || 0) + 1;
+      const lockoutUntil = attempts >= MAX_LOGIN_ATTEMPTS ? new Date(Date.now() + LOCKOUT_DURATION_MS) : null;
+
+      await this.userModel.findByIdAndUpdate(user._id, { loginAttempts: attempts, lockoutUntil });
+
+      const ua = parseUserAgent(userAgent);
+      const geo = lookupIpLocation(ip);
+      this.auditLogService.record({
+        actorId: String(user._id),
+        actorEmail: user.email,
+        action: 'auth.login_failed',
+        resourceType: 'user',
+        resourceId: String(user._id),
+        metadata: {
+          reason: 'wrong_password',
+          attempt: attempts,
+          maxAttempts: MAX_LOGIN_ATTEMPTS,
+          ip,
+          userAgent,
+          browser: ua.browser,
+          os: ua.os,
+          device: ua.device,
+          location: geo?.location,
+        },
+        method: 'POST',
+        path: '/auth/signin',
+        statusCode: 401,
+        ip,
+        userAgent,
+      });
+
+      if (lockoutUntil) {
+        const attemptDate = new Date().toISOString();
+        const userName = user.name ? user.name : `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email;
+
+        // Email détaillé à l'admin
+        const adminDetails = [
+          `User: ${userName}`,
+          `Email: ${user.email}`,
+          `User ID: ${String(user._id)}`,
+          `Account type: ${user.accountType || 'user'}`,
+          `Role: ${user.isAdmin ? 'admin' : user.accountType || 'user'}`,
+          ``,
+          `Attempt date: ${attemptDate}`,
+          `IP address: ${ip || 'Unknown'}`,
+          `Location: ${geo?.location || 'Unknown'}`,
+          `Browser: ${ua.browser}`,
+          `Operating system: ${ua.os}`,
+          `Device: ${ua.device}`,
+          `User-Agent: ${userAgent || 'Unknown'}`,
+          ``,
+          `Failed attempts: ${attempts}/${MAX_LOGIN_ATTEMPTS}`,
+          `Locked until: ${lockoutUntil.toISOString()}`,
+          `Duration: ${LOCKOUT_DURATION_MS / 60000} minutes`,
+        ].join('\n');
+
+        void this.emailService.sendAlertEmail(
+          `🔒 Brute-force detected: ${user.email}`,
+          adminDetails,
+        );
+
+        // Email à l'utilisateur
+        void this.emailService
+          .sendEmail(
+            user.email,
+            '🔒 Compte temporairement verrouillé — DigiKuntz Payments',
+            `Bonjour ${userName},\n\nNous avons détecté ${MAX_LOGIN_ATTEMPTS} tentatives de connexion échouées sur votre compte.\n\n` +
+              `Pour votre sécurité, votre compte a été temporairement verrouillé jusqu'au ${lockoutUntil.toLocaleString()} ` +
+              `(${LOCKOUT_DURATION_MS / 60000} minutes).\n\n` +
+              `Si vous n'êtes pas à l'origine de ces tentatives, nous vous recommandons de changer votre mot de passe dès que le délai est écoulé.\n\n` +
+              `Détails de la tentative :\n` +
+              `- Date : ${attemptDate}\n` +
+              `- IP : ${ip || 'Unknown'}\n` +
+              `- Localisation : ${geo?.location || 'Unknown'}\n` +
+              `- Navigateur : ${ua.browser}\n` +
+              `- Système : ${ua.os}\n\n` +
+              `L'équipe DigiKuntz Payments`,
+          )
+          .catch((error) =>
+            console.warn('sendLockoutUserEmail failed:', error),
+          );
+      }
+
       throw new UnauthorizedException('Email or password invalid'); // Handle incorrect password
     }
+
+    // Success — reset brute-force counter
+    await this.userModel.findByIdAndUpdate(user._id, { loginAttempts: 0, lockoutUntil: null });
 
     user.password = ''; // Remove the password from the response for security
     user.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
@@ -242,8 +387,16 @@ export class AuthService {
     void this.whatsappService
       .sendPasswordResetMessage(user, resetPwdUrl)
       .catch((error) =>
-        console.error('sendPasswordResetMessage failed:', error),
+        console.warn('sendPasswordResetMessage failed:', error),
       );
+
+    void this.auditLogService.record({
+      actorId: String(user._id),
+      action: 'notification.password_reset_sent',
+      resourceType: 'user',
+      resourceId: String(user._id),
+      metadata: { emailSent: true, whatsappSent: true },
+    });
 
     return true;
   }
@@ -272,11 +425,20 @@ export class AuthService {
     await user.save();
     await this.revokedTokenModel.create({ token });
     void this.emailService.sendPasswordUpdatedEmail(user).catch((error) =>
-      console.error('sendPasswordUpdatedEmail failed:', error),
+      console.warn('sendPasswordUpdatedEmail failed:', error),
     );
     void this.whatsappService.sendPasswordUpdatedMessage(user).catch((error) =>
-      console.error('sendPasswordUpdatedMessage failed:', error),
+      console.warn('sendPasswordUpdatedMessage failed:', error),
     );
+
+    void this.auditLogService.record({
+      actorId: String(user._id),
+      action: 'notification.password_updated_sent',
+      resourceType: 'user',
+      resourceId: String(user._id),
+      metadata: { emailSent: true, whatsappSent: true, via: 'reset' },
+    });
+
     return true;
   }
 
@@ -300,11 +462,19 @@ export class AuthService {
     await user.save();
 
     void this.emailService.sendPasswordUpdatedEmail(user).catch((error) =>
-      console.error('sendPasswordUpdatedEmail failed:', error),
+      console.warn('sendPasswordUpdatedEmail failed:', error),
     );
     void this.whatsappService.sendPasswordUpdatedMessage(user).catch((error) =>
-      console.error('sendPasswordUpdatedMessage failed:', error),
+      console.warn('sendPasswordUpdatedMessage failed:', error),
     );
+
+    void this.auditLogService.record({
+      actorId: String(userId),
+      action: 'notification.password_updated_sent',
+      resourceType: 'user',
+      resourceId: String(userId),
+      metadata: { emailSent: true, whatsappSent: true, via: 'change' },
+    });
 
     return true;
   }

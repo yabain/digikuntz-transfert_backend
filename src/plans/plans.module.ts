@@ -26,6 +26,10 @@ import { BalanceService } from 'src/balance/balance.service';
 import { SubscriptionService } from './subscription/subscription.service';
 import { Balance, BalanceSchema } from 'src/balance/balance.schema';
 import {
+  BalanceMovement,
+  BalanceMovementSchema,
+} from 'src/balance/balance-movement.schema';
+import {
   Transaction,
   TransactionSchema,
 } from 'src/transaction/transaction.schema';
@@ -89,6 +93,7 @@ import { PaymentModule } from 'src/payment/payment.module';
       { name: Payin.name, schema: PayinSchema },
       { name: Transaction.name, schema: TransactionSchema },
       { name: Balance.name, schema: BalanceSchema },
+      { name: BalanceMovement.name, schema: BalanceMovementSchema },
       { name: Subscription.name, schema: SubscriptionSchema },
       { name: RevokedToken.name, schema: RevokedTokenSchema },
       { name: ServicePayment.name, schema: ServicePaymentSchema },

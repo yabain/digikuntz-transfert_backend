@@ -16,6 +16,11 @@ import {
 import { PayoutService } from 'src/payout/payout.service';
 import { BalanceService } from 'src/balance/balance.service';
 import { Balance, BalanceSchema } from 'src/balance/balance.schema';
+import {
+  BalanceMovement,
+  BalanceMovementSchema,
+} from 'src/balance/balance-movement.schema';
+import { DistributedLockModule } from 'src/distributed-lock/distributed-lock.module';
 import { UserService } from 'src/user/user.service';
 import { User, UserSchema } from 'src/user/user.schema';
 import { ItemService } from 'src/plans/item/item.service';
@@ -57,11 +62,13 @@ import { PaymentModule } from 'src/payment/payment.module';
     forwardRef(() => SystemModule),
     forwardRef(() => PaymentModule),
     AppCacheModule,
+    DistributedLockModule,
     MongooseModule.forFeature([
       { name: Payin.name, schema: PayinSchema },
       { name: Payout.name, schema: PayoutSchema },
       { name: Transaction.name, schema: TransactionSchema },
       { name: Balance.name, schema: BalanceSchema },
+      { name: BalanceMovement.name, schema: BalanceMovementSchema },
       { name: User.name, schema: UserSchema },
       { name: Item.name, schema: ItemSchema },
       { name: Plans.name, schema: PlansSchema },

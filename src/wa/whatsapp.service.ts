@@ -213,13 +213,6 @@ export class WhatsappService implements OnModuleInit {
   }
 
   async sendPasswordResetMessage(user: any, token: string) {
-    console.log('In sendPasswordResetMessage');
-    console.log(
-      'Sending reset password message to: ',
-      user?.whatsapp || user?.phone,
-      ' with token: ',
-      token,
-    );
     if (!user) return;
     const countryCode = user.countryId?.code || user.countryId;
     const tokenString = String(token || '');
@@ -232,8 +225,7 @@ export class WhatsappService implements OnModuleInit {
         const lang = this.resolveTemplateLang(user.language);
         const templateName = 'dk_reset_password';
         console.log(
-          `Sending ${templateName} to ${user.whatsapp || user.phone} with userName: ${this.showName(user)} and token: `,
-          resetToken,
+          `Sending ${templateName} to ${user.whatsapp || user.phone} with userName: ${this.showName(user)}`,
         );
         await this.sendMetaTemplateMessage(
           user.whatsapp || user.phone,

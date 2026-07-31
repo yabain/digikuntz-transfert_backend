@@ -122,6 +122,12 @@ export class User extends Document {
 
   @Prop()
   address: string;
+
+  @Prop({ default: 0 })
+  loginAttempts?: number;
+
+  @Prop({ type: Date, default: null })
+  lockoutUntil?: Date | null;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

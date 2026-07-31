@@ -221,6 +221,13 @@ export class Transaction {
 
   @Prop()
   flwTxId?: string;
+
+  @Prop({ type: [{ from: String, to: String, timestamp: Date, triggeredBy: String }], default: [] })
+  statusChanges?: Array<{ from: TStatus; to: TStatus; timestamp: Date; triggeredBy?: string }>;
+
+  /** Last merchant callback status successfully claimed (dedupes multi-instance sends). */
+  @Prop()
+  lastCallbackStatus?: string;
 }
 
 export const TransactionSchema = SchemaFactory.createForClass(Transaction);

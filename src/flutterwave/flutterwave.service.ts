@@ -50,6 +50,7 @@ import { PaymentRequestStatus } from 'src/payment-request/payment-request.schema
 import { Gateway } from 'src/gateway/gateway.schema';
 import { CryptService } from 'src/dev/crypt.service';
 import { PaymentMethodService } from 'src/payment-method/payment-method.service';
+import { AuditLogService } from 'src/audit-log/audit-log.service';
 
 @Injectable()
 export class FlutterwaveService {
@@ -86,6 +87,7 @@ export class FlutterwaveService {
     private config: ConfigService,
     private paystackService: PaystackService,
     private mpesaService: MpesaService,
+    private auditLogService: AuditLogService,
   ) {}
 
   setCredentials(creds: Record<string, any>): void {
@@ -974,8 +976,9 @@ export class FlutterwaveService {
       senderCurrency,
     );
 
+    let savedTransaction: any;
     try {
-      const savedTransaction = await this.transactionService.createTransaction(raw);
+      savedTransaction = await this.transactionService.createTransaction(raw);
       if (!savedTransaction) {
         throw new NotFoundException('Error to save transaction details');
       }
@@ -984,14 +987,25 @@ export class FlutterwaveService {
         .notifyAdminPayoutPending(savedTransaction)
         .catch(() => undefined);
 
+      void this.auditLogService.record({
+        actorId: String(userId),
+        action: 'transfer.from_balance',
+        resourceType: 'transaction',
+        resourceId: String(savedTransaction._id),
+        metadata: { amount: totalToDebit, currency: senderCurrency, txRef: raw.txRef },
+      });
+
       return {
         status: 'pending',
         transactionId: savedTransaction._id,
         transaction: savedTransaction,
       };
     } catch (error) {
+      const rollbackKey = savedTransaction
+        ? `transfer-rollback:${String(savedTransaction._id)}`
+        : undefined;
       await this.balanceService
-        .creditBalance(String(userId), totalToDebit, senderCurrency)
+        .creditBalance(String(userId), totalToDebit, senderCurrency, rollbackKey)
         .catch((rollbackError) => {
           this.logger.error(
             `Balance transfer rollback failed: ${rollbackError?.message || rollbackError}`,
@@ -1211,6 +1225,7 @@ export class FlutterwaveService {
         transaction.receiverId,
         Number(transaction.estimation),
         transaction.senderCurrency,
+        `payin-credit:${transactionId}`,
       );
     }
 
@@ -1365,10 +1380,12 @@ export class FlutterwaveService {
   }
 
   async creditBalanceForPaymentRequest(transaction: any) {
+    const txId = String(transaction._id || '');
     return this.balanceService.creditBalance(
       transaction.receiverId || transaction.userId,
       Number(transaction.estimation),
       transaction.senderCurrency || transaction.receiverCurrency,
+      `payment-request-credit:${txId}`,
     );
   }
 
@@ -1695,9 +1712,29 @@ export class FlutterwaveService {
   }
 
   async verifyWebhookPayin(req) {
-    const result = await this.payinService.verifyWebhook(req);
+    const body = req.body ?? {};
+    const event = body?.event;
+    const txRef = body?.data?.tx_ref;
+    const flwStatus = body?.data?.status;
+    const signature = (req.headers as any)['verif-hash'] as string | undefined;
 
-    if (result?.payin?.status === 'successful' && result.payin.transactionId) {
+    let result: any;
+    try {
+      result = await this.payinService.verifyWebhook(req);
+    } catch (err: any) {
+      void this.auditLogService.record({
+        action: 'webhook.flutterwave.rejected',
+        resourceType: 'webhook',
+        metadata: { event, txRef, flwStatus, reason: err?.message || 'invalid_signature', signaturePresent: !!signature },
+        method: 'POST',
+        path: '/fw/webhook',
+        statusCode: err?.status || 401,
+      });
+      throw err;
+    }
+
+    const payinSuccess = result?.payin?.status === 'successful' && result.payin.transactionId;
+    if (payinSuccess) {
       try {
         const transaction = await this.transactionService.findById(
           String(result.payin.transactionId),
@@ -1707,8 +1744,27 @@ export class FlutterwaveService {
         }
       } catch (err) {
         this.logger.error('Webhook processSuccessfulPayin failed', err);
+        void this.auditLogService.record({
+          action: 'webhook.flutterwave.process_error',
+          resourceType: 'webhook',
+          resourceId: String(result.payin.transactionId),
+          metadata: { event, txRef, flwStatus, error: err?.message },
+          method: 'POST',
+          path: '/fw/webhook',
+          statusCode: 500,
+        });
       }
     }
+
+    void this.auditLogService.record({
+      action: payinSuccess ? 'webhook.flutterwave.processed' : 'webhook.flutterwave.ignored',
+      resourceType: 'webhook',
+      resourceId: result?.payin?.transactionId ? String(result.payin.transactionId) : undefined,
+      metadata: { event, txRef, flwStatus, txId: result?.payin?.transactionId },
+      method: 'POST',
+      path: '/fw/webhook',
+      statusCode: 200,
+    });
 
     return result;
   }

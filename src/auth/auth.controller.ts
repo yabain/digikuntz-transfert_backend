@@ -4,6 +4,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
+import { Request } from 'express';
 import { ApiBody, ApiOperation, ApiTags, ApiResponse } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { CreateUserDto } from 'src/user/create-user.dto';
@@ -86,8 +87,8 @@ export class AuthController {
   })
   @ApiResponse({ status: 400, description: 'Invalid request body.' })
   @ApiResponse({ status: 401, description: 'Invalid credentials.' })
-  signIn(@Body() authData: any): Promise<{ token: string }> {
-    return this.authService.signIn(authData);
+  signIn(@Body() authData: any, @Req() req: Request): Promise<{ token: string }> {
+    return this.authService.signIn(authData, req);
   }
 
   /**

@@ -14,6 +14,10 @@ import {
   TransactionSchema,
 } from 'src/transaction/transaction.schema';
 import { Balance, BalanceSchema } from 'src/balance/balance.schema';
+import {
+  BalanceMovement,
+  BalanceMovementSchema,
+} from 'src/balance/balance-movement.schema';
 import { BalanceService } from 'src/balance/balance.service';
 import { UserService } from 'src/user/user.service';
 import { User, UserSchema } from 'src/user/user.schema';
@@ -67,6 +71,7 @@ import { CryptService } from 'src/dev/crypt.service';
       { name: Payout.name, schema: PayoutSchema },
       { name: Transaction.name, schema: TransactionSchema },
       { name: Balance.name, schema: BalanceSchema },
+      { name: BalanceMovement.name, schema: BalanceMovementSchema },
       { name: User.name, schema: UserSchema },
       { name: Subscription.name, schema: SubscriptionSchema },
       { name: Item.name, schema: ItemSchema },

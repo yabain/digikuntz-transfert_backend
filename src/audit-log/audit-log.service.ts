@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { AppLogger } from '../common/logger';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { AuditLog, AuditLogDocument } from './audit-log.schema';
@@ -22,11 +23,13 @@ export interface RecordAuditInput {
 
 @Injectable()
 export class AuditLogService {
-  private readonly logger = new Logger(AuditLogService.name);
+  private readonly logger = new AppLogger();
 
   constructor(
     @InjectModel(AuditLog.name) private readonly auditLogModel: Model<AuditLogDocument>,
-  ) {}
+  ) {
+    this.logger.setContext(AuditLogService.name);
+  }
 
   async record(input: RecordAuditInput): Promise<void> {
     try {
@@ -54,7 +57,21 @@ export class AuditLogService {
   async list(
     page?: number,
     limit?: number,
-    filters?: { q?: string; action?: string; resourceType?: string; actorId?: string; from?: string; to?: string },
+    filters?: {
+      q?: string;
+      action?: string;
+      actionPrefix?: string;
+      resourceType?: string;
+      resourceId?: string;
+      actorId?: string;
+      actorRole?: string;
+      statusCode?: string;
+      method?: string;
+      ip?: string;
+      from?: string;
+      to?: string;
+      sort?: string;
+    },
   ) {
     const safePage = Number.isFinite(page) ? Math.max(1, Number(page)) : 1;
     const safeLimit = Number.isFinite(limit) ? Math.min(100, Math.max(1, Number(limit))) : 20;
@@ -63,8 +80,21 @@ export class AuditLogService {
     const filter: any = {};
 
     if (filters?.action) filter.action = filters.action;
+    if (filters?.actionPrefix) {
+      filter.action = new RegExp(
+        `^${filters.actionPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+        'i',
+      );
+    }
     if (filters?.resourceType) filter.resourceType = filters.resourceType;
+    if (filters?.resourceId) filter.resourceId = filters.resourceId;
     if (filters?.actorId) filter.actorId = filters.actorId;
+    if (filters?.actorRole) filter.actorRole = filters.actorRole;
+    if (filters?.statusCode) filter.statusCode = Number(filters.statusCode);
+    if (filters?.method) filter.method = String(filters.method).toUpperCase();
+    if (filters?.ip) {
+      filter.ip = new RegExp(filters.ip.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    }
 
     if (filters?.q) {
       const qRegex = new RegExp(filters.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
@@ -90,10 +120,12 @@ export class AuditLogService {
       if (Object.keys(createdAt).length) filter.createdAt = createdAt;
     }
 
+    const sortDir = filters?.sort === 'asc' ? 1 : -1;
+
     const [data, total] = await Promise.all([
       this.auditLogModel
         .find(filter)
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: sortDir })
         .skip(skip)
         .limit(safeLimit),
       this.auditLogModel.countDocuments(filter),
@@ -111,5 +143,31 @@ export class AuditLogService {
         hasNextPage: totalPages > 0 && safePage < totalPages,
       },
     };
+  }
+
+  async distinctActions(prefix?: string, limit = 50): Promise<string[]> {
+    const match: any = {};
+    if (prefix) {
+      match.action = new RegExp(
+        `^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+        'i',
+      );
+    }
+    const result = await this.auditLogModel.aggregate([
+      { $match: match },
+      { $group: { _id: '$action' } },
+      { $sort: { _id: 1 } },
+      { $limit: Math.min(limit, 200) },
+    ]);
+    return result.map((r) => r._id);
+  }
+
+  async distinctResourceTypes(): Promise<string[]> {
+    const result = await this.auditLogModel.aggregate([
+      { $match: { resourceType: { $exists: true, $ne: '' } } },
+      { $group: { _id: '$resourceType' } },
+      { $sort: { _id: 1 } },
+    ]);
+    return result.map((r) => r._id);
   }
 }

@@ -33,7 +33,7 @@ export class Payout extends Document  {
   @Prop({ default: 'INITIATED' })
   status: PayoutStatus;
 
-  @Prop({ required: true })
+  @Prop({ required: true, unique: true })
   reference: string;
 
   @Prop({ required: true })
@@ -72,3 +72,6 @@ export class Payout extends Document  {
 }
 
 export const PayoutSchema = SchemaFactory.createForClass(Payout);
+PayoutSchema.index({ status: 1, updatedAt: -1 });
+PayoutSchema.index({ transactionId: 1 });
+PayoutSchema.index({ txRef: 1 });

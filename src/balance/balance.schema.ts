@@ -8,10 +8,10 @@ import { Document } from 'mongoose';
   timestamps: true,
 })
 export class Balance extends Document {
-  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true })
   userId: User;
 
-  @Prop()
+  @Prop({ default: 0 })
   balance: number;
 }
 

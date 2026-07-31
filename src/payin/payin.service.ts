@@ -226,24 +226,39 @@ export class PayinService {
   /* ========================= Public API ========================= */
 
   async initPayin(payload: InitPayinPayload) {
-    // const txRef = this.generateTxRef();
-    const doc = await this.payinModel.create({
-      txRef: payload.txRef,
-      amount: payload.amount,
-      currency: payload.currency ?? PayinService.DEFAULT_CURRENCY,
-      customerEmail: payload.customerEmail,
-      transactionId: payload.transactionId,
-      status: PayinStatus.PENDING,
-      meta: payload.meta ?? {},
-    });
+    try {
+      const doc = await this.payinModel.create({
+        txRef: payload.txRef,
+        amount: payload.amount,
+        currency: payload.currency ?? PayinService.DEFAULT_CURRENCY,
+        customerEmail: payload.customerEmail,
+        transactionId: payload.transactionId,
+        status: PayinStatus.PENDING,
+        meta: payload.meta ?? {},
+      });
 
-    return {
-      txRef: doc.txRef,
-      amount: doc.amount,
-      currency: doc.currency,
-      customerEmail: doc.customerEmail,
-      publicKey: this.fwPublic,
-    };
+      return {
+        txRef: doc.txRef,
+        amount: doc.amount,
+        currency: doc.currency,
+        customerEmail: doc.customerEmail,
+        publicKey: this.fwPublic,
+      };
+    } catch (error: any) {
+      if (error?.code === 11000) {
+        const existing = await this.payinModel.findOne({ txRef: payload.txRef }).lean().exec();
+        if (existing) {
+          return {
+            txRef: existing.txRef,
+            amount: existing.amount,
+            currency: existing.currency,
+            customerEmail: existing.customerEmail,
+            publicKey: this.fwPublic,
+          };
+        }
+      }
+      throw error;
+    }
   }
 
   // Hosted Payment (V3) — Flutterwave only
@@ -750,7 +765,7 @@ export class PayinService {
 
     const updated = await this.payinModel
       .findOneAndUpdate(
-        { txRef },
+        { txRef, status: { $nin: ['successful', 'failed', 'cancelled'] } },
         {
           status,
           flwTxId: String(flwId ?? ''),
@@ -760,7 +775,7 @@ export class PayinService {
       )
       .exec();
 
-    return updated;
+    return updated || local;
   }
 
   /**
@@ -791,7 +806,7 @@ export class PayinService {
 
       const updated = await this.payinModel
         .findOneAndUpdate(
-          { txRef },
+          { txRef, status: { $nin: ['successful', 'failed', 'cancelled'] } },
           {
             status,
             raw: data,
@@ -801,17 +816,19 @@ export class PayinService {
         )
         .exec();
 
-      this.logger.log(
-        `Payin ${txRef} updated to status=${status} (flwId=${(data?.data as FWVerifyByRefData)?.id})`,
-      );
-      return updated;
+      if (updated) {
+        this.logger.log(
+          `Payin ${txRef} updated to status=${status} (flwId=${(data?.data as FWVerifyByRefData)?.id})`,
+        );
+      }
+      return updated || local;
     } catch (error: unknown) {
       const { fwData, message } = this.unwrapAxiosError(error);
 
       this.logger.error(`Error verifying tx ${txRef}: ${message}`, fwData ?? '');
       await this.payinModel
         .findOneAndUpdate(
-          { txRef },
+          { txRef, status: { $nin: ['successful', 'failed', 'cancelled'] } },
           { status: PayinStatus.FAILED, error: fwData ?? message },
           { new: true },
         )
@@ -1108,6 +1125,7 @@ export class PayinService {
               { flwTxId },
               { txRef },
             ],
+            status: { $nin: ['successful', 'failed', 'cancelled'] },
           },
           { status: PayinStatus.SUCCESSFUL, flwTxId },
           { new: true },

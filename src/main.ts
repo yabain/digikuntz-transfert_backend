@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
+import './common/logger/console-patch';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
@@ -9,6 +10,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { AppLogger } from './common/logger';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import * as crypto from 'crypto';
 
@@ -177,22 +179,19 @@ async function bootstrap() {
     '/app/assets',
   ];
   const uniqueAssetsPaths = [...new Set(candidateAssetsPaths)];
-
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const appLogger = new AppLogger();
+  appLogger.setContext('Bootstrap');
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    logger: appLogger,
+  });
 
   // --- Handlers globaux pour éviter que le backend tombe ---
   process.on('uncaughtException', (err) => {
-    console.error('🚨 Uncaught Exception:', err);
+    appLogger.error(`Uncaught Exception: ${err.message}`, err.stack);
   });
 
   process.on('unhandledRejection', (reason, promise) => {
-    console.error('🚨 Unhandled Rejection at:', promise, 'reason:', reason);
-  });
-
-  // Middleware de logging (optionnel)
-  app.use((req, res, next) => {
-    // console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-    next();
+    appLogger.error(`Unhandled Rejection at: ${String(promise)} reason: ${String(reason)}`);
   });
 
   const allowedCorsOrigins = getAllowedCorsOrigins();
@@ -299,7 +298,7 @@ async function bootstrap() {
   const port = Number(process.env.PORT) || 3002;
   await app.listen(port, '127.0.0.1');
 
-  console.log(
+  appLogger.info(
     `digiKUNTZ Payments backend Application is running on: ${await app.getUrl()}`,
   );
 }

@@ -18,6 +18,12 @@ import { SmtpService } from 'src/email/smtp/smtp.service';
 import { TransactionCron } from './transaction.cron';
 import { BalanceService } from 'src/balance/balance.service';
 import { Balance, BalanceSchema } from 'src/balance/balance.schema';
+import {
+  BalanceMovement,
+  BalanceMovementSchema,
+} from 'src/balance/balance-movement.schema';
+import { DistributedLockModule } from 'src/distributed-lock/distributed-lock.module';
+import { FlutterwaveModule } from 'src/flutterwave/flutterwave.module';
 import { UserService } from 'src/user/user.service';
 import { User, UserSchema } from 'src/user/user.schema';
 import {
@@ -52,6 +58,8 @@ import { PaymentModule } from 'src/payment/payment.module';
     forwardRef(() => SubscriptionModule),
     forwardRef(() => SystemModule),
     forwardRef(() => PaymentModule),
+    forwardRef(() => FlutterwaveModule),
+    DistributedLockModule,
     MongooseModule.forFeature([
       { name: Transaction.name, schema: TransactionSchema },
       { name: City.name, schema: CitySchema },
@@ -61,6 +69,7 @@ import { PaymentModule } from 'src/payment/payment.module';
       { name: Email.name, schema: EmailSchema },
       { name: Smtp.name, schema: SmtpSchema },
       { name: Balance.name, schema: BalanceSchema },
+      { name: BalanceMovement.name, schema: BalanceMovementSchema },
       { name: User.name, schema: UserSchema },
       { name: Subscription.name, schema: SubscriptionSchema },
       { name: ServicePayment.name, schema: ServicePaymentSchema },

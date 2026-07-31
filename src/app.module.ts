@@ -38,6 +38,10 @@ import { PaymentMethodModule } from './payment-method/payment-method.module';
 import { TrackingModule } from './tracking/tracking.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
 import { GatewayModule } from './gateway/gateway.module';
+import { DistributedLockModule } from './distributed-lock/distributed-lock.module';
+import { LoggerModule } from './common/logger';
+import { TraceModule } from './common/trace';
+import { IdempotencyModule } from './common/idempotency/idempotency.module';
 
 @Module({
   imports: [
@@ -46,6 +50,7 @@ import { GatewayModule } from './gateway/gateway.module';
       isGlobal: true,
     }),
     ScheduleModule.forRoot(),
+    DistributedLockModule,
     MongooseModule.forRootAsync({
       inject: [ConfigService],
       useFactory: async (configService: ConfigService) => {
@@ -107,6 +112,9 @@ import { GatewayModule } from './gateway/gateway.module';
     DevModule,
     AuditLogModule,
     GatewayModule,
+    LoggerModule,
+    TraceModule,
+    IdempotencyModule,
   ],
   controllers: [AppController],
   providers: [AppService],

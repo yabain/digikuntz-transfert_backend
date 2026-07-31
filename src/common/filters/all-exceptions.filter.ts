@@ -4,13 +4,16 @@ import {
   ArgumentsHost,
   HttpException,
   HttpStatus,
-  Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { AppLogger } from '../logger';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
-  private readonly logger = new Logger(AllExceptionsFilter.name);
+  private readonly logger = new AppLogger();
+  constructor() {
+    this.logger.setContext(AllExceptionsFilter.name);
+  }
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
@@ -35,8 +38,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
       }
     }
 
-    // Evite de loguer les 404 comme des erreurs serveur
-    if (status === HttpStatus.NOT_FOUND) {
+    // Les erreurs 4xx (mauvais identifiants, 404, 400, etc.) et les erreurs de
+    // connectivité DB sont des cas attendus, pas des erreurs système : on les
+    // logue en warn. Seules les vraies erreurs serveur restent en error.
+    const isExpected = status < HttpStatus.INTERNAL_SERVER_ERROR || this.isDatabaseConnectionError(exception);
+
+    if (isExpected) {
       this.logger.warn(`${request.method} ${request.url} - ${status} - ${message}`);
     } else {
       this.logger.error(
@@ -52,5 +59,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
       message,
       ...errorPayload,
     });
+  }
+
+  private isDatabaseConnectionError(exception: unknown): boolean {
+    if (!(exception instanceof Error)) return false;
+    if (exception.name === 'MongoServerSelectionError') return true;
+    if (exception.name === 'MongoNetworkError') return true;
+    return /(ENOTFOUND|ECONNREFUSED|ETIMEDOUT|getaddrinfo|MongoServerSelectionError|MongoNetworkError)/.test(
+      exception.message,
+    );
   }
 }

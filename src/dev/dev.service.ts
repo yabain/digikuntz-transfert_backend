@@ -13,6 +13,7 @@ import { BalanceService } from 'src/balance/balance.service';
 import { PayoutService } from 'src/payout/payout.service';
 import { PaymentMethodService } from 'src/payment-method/payment-method.service';
 import { TStatus } from 'src/transaction/transaction.schema';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 @Injectable()
 export class DevService {
@@ -28,6 +29,7 @@ export class DevService {
     private balanceService: BalanceService,
     private payoutService: PayoutService,
     private paymentMethodService: PaymentMethodService,
+    private auditLog: AuditLogService,
   ) { }
 
   async getDevDataById(devId): Promise<any> {
@@ -109,6 +111,13 @@ export class DevService {
         publicKey: this.cryptService.encryptWithPassphrase(pKey),
       };
       const res = await this.devModel.create(devData);
+      void this.auditLog.record({
+        actorId: userId,
+        action: 'api_key_generated',
+        resourceType: 'dev',
+        resourceId: String(res._id),
+        metadata: { status },
+      });
       return {
         id: res._id,
         status: res.status,
@@ -135,6 +144,12 @@ export class DevService {
       if (data) {
         const res = await this.devModel.findOneAndUpdate({ userId }, { ...data });
         if(!res) return null;
+        void this.auditLog.record({
+          actorId: userId,
+          action: 'api_key_reset',
+          resourceType: 'dev',
+          resourceId: String(res._id),
+        });
         return {
           id: res._id,
           status: res.status,
@@ -181,6 +196,13 @@ export class DevService {
     try {
       const res = await this.devModel.findByIdAndUpdate(devData.id, { status }, { new: true });
       if (!res) return 'error updating data';
+      void this.auditLog.record({
+        actorId: userId,
+        action: 'api_key_status_updated',
+        resourceType: 'dev',
+        resourceId: devData.id,
+        metadata: { status },
+      });
       return {
         id: res.id,
         userId: res.userId.toString(),
@@ -217,6 +239,13 @@ export class DevService {
         { new: true },
       );
       if (!res) return 'error updating data';
+      void this.auditLog.record({
+        actorId: userId,
+        action: 'webhook_url_updated',
+        resourceType: 'dev',
+        resourceId: devData.id,
+        metadata: { webhookUrl: normalizedWebhookUrl },
+      });
       return {
         id: res.id,
         userId: res.userId.toString(),
@@ -408,6 +437,14 @@ export class DevService {
       console.error('API payout admin notification failed:', error?.message || error);
     });
 
+    void this.auditLog.record({
+      actorId: userId,
+      action: 'api_payout_created',
+      resourceType: 'transaction',
+      resourceId: String(savedTransaction._id),
+      metadata: { amount: payoutAmount, currency: payoutCurrency, txRef },
+    });
+
     return {
       id: savedTransaction._id,
       status: 'payout_pending',
@@ -485,6 +522,14 @@ export class DevService {
       transaction_payout_closed: 'payout_closed',
       transaction_payout_rejected: 'payout_rejected',
     };
+
+    void this.auditLog.record({
+      actorId: userId,
+      action: 'api_payin_created',
+      resourceType: 'transaction',
+      resourceId: String(transaction._id),
+      metadata: { amount: depositAmount, currency: transactionData.senderCurrency || 'XAF' },
+    });
 
     return {
       id: transaction._id,
@@ -635,6 +680,14 @@ export class DevService {
       transaction_payin_error: 'payin_error',
       transaction_payin_closed: 'payin_closed',
     };
+
+    void this.auditLog.record({
+      actorId: userId,
+      action: 'api_direct_payin_created',
+      resourceType: 'transaction',
+      resourceId: String(savedTransaction._id),
+      metadata: { amount: depositAmount, currency: data.currency, txRef, network: network || null },
+    });
 
     return {
       id: savedTransaction._id,

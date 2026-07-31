@@ -29,6 +29,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { UserService } from 'src/user/user.service';
 import { TransactionService } from 'src/transaction/transaction.service';
+import { IdempotencyService } from 'src/common/idempotency/idempotency.service';
 
 @ApiTags('dev')
 @Controller('dev')
@@ -37,6 +38,7 @@ export class DevController {
     private devService: DevService,
     private userService: UserService,
     private transactionService: TransactionService,
+    private idempotencyService: IdempotencyService,
   ) { }
 
   @Get('api-keys/:userId')
@@ -356,6 +358,7 @@ export class DevController {
   async createPayinTransaction(
     @Headers('x-user-id') userId: string,
     @Headers('x-secret-key') secretKey: string,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Body() data: {
       estimation: number,
       raisonForTransfer: string,
@@ -372,35 +375,37 @@ export class DevController {
     if (!userId) {
       throw new NotFoundException('userId is required');
     }
-    const valid = await this.devService.authKey(userId, secretKey);
-    if (!valid) return 'invalid credentials';
-    const userData = await this.userService.getUserById(userId);
-    if (!userData) return 'user not found';
-    const transactionData = {
-      transactionRef: this.transactionService.generateInRef(),
-      estimation: data.estimation,
-      transactionType: 'apiCall',
-      receiverId: userData._id.toString(),
-      raisonForTransfer: data.raisonForTransfer,
+    return this.idempotencyService.processKey(idempotencyKey, async () => {
+      const valid = await this.devService.authKey(userId, secretKey);
+      if (!valid) return 'invalid credentials';
+      const userData = await this.userService.getUserById(userId);
+      if (!userData) return 'user not found';
+      const transactionData = {
+        transactionRef: this.transactionService.generateInRef(),
+        estimation: data.estimation,
+        transactionType: 'apiCall',
+        receiverId: userData._id.toString(),
+        raisonForTransfer: data.raisonForTransfer,
 
-      senderId: userData._id.toString(),
-      senderName: 'API Call: ' + data.senderName,
-      senderEmail: data.userEmail,
-      senderContact: data.userPhone,
-      senderCountry: data.userCountry,
-      senderCurrency: userData.countryId.currency,
+        senderId: userData._id.toString(),
+        senderName: 'API Call: ' + data.senderName,
+        senderEmail: data.userEmail,
+        senderContact: data.userPhone,
+        senderCountry: data.userCountry,
+        senderCurrency: userData.countryId.currency,
 
-      receiverName: this.userService.showName(userData),
-      receiverEmail: userData.email,
-      receiverContact: userData.phone,
-      receiverCountry: userData.countryId.name,
-      receiverCurrency: userData.countryId.currency,
+        receiverName: this.userService.showName(userData),
+        receiverEmail: userData.email,
+        receiverContact: userData.phone,
+        receiverCountry: userData.countryId.name,
+        receiverCurrency: userData.countryId.currency,
 
-      status: 'transaction_payin_pending',
-      ...(data.callbackUrl && { callbackUrl: data.callbackUrl }),
-    }
+        status: 'transaction_payin_pending',
+        ...(data.callbackUrl && { callbackUrl: data.callbackUrl }),
+      }
 
-    return this.devService.createPayinTransaction(transactionData, userId);
+      return this.devService.createPayinTransaction(transactionData, userId);
+    });
   }
 
   @Post('direct-charge')
@@ -450,6 +455,7 @@ export class DevController {
   async createDirectCharge(
     @Headers('x-user-id') userId: string,
     @Headers('x-secret-key') secretKey: string,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Body() data: {
       estimation: number;
       currency: string;
@@ -463,18 +469,20 @@ export class DevController {
   ): Promise<any> {
     if (!secretKey) throw new NotFoundException('secretKey is required');
     if (!userId) throw new NotFoundException('userId is required');
-    const valid = await this.devService.authKey(userId, secretKey);
-    if (!valid) return 'invalid credentials';
-    const userData = await this.userService.getUserById(userId);
-    if (!userData) return 'user not found';
+    return this.idempotencyService.processKey(idempotencyKey, async () => {
+      const valid = await this.devService.authKey(userId, secretKey);
+      if (!valid) return 'invalid credentials';
+      const userData = await this.userService.getUserById(userId);
+      if (!userData) return 'user not found';
 
-    return this.devService.createDirectPayinTransaction(
-      {
-        ...data,
-        country: userData.countryId?.name || '',
-      },
-      userId,
-    );
+      return this.devService.createDirectPayinTransaction(
+        {
+          ...data,
+          country: userData.countryId?.name || '',
+        },
+        userId,
+      );
+    });
   }
 
   @Post('payout')
@@ -521,6 +529,7 @@ export class DevController {
   async createPayoutTransaction(
     @Headers('x-user-id') userId: string,
     @Headers('x-secret-key') secretKey: string,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Body() data: {
       amount: number;
       accountBankCode: string;
@@ -533,9 +542,11 @@ export class DevController {
   ): Promise<any> {
     if (!secretKey) throw new NotFoundException('secretKey is required');
     if (!userId) throw new NotFoundException('userId is required');
-    const valid = await this.devService.authKey(userId, secretKey);
-    if (!valid) return 'invalid credentials';
-    return this.devService.createPayoutTransaction(data, userId);
+    return this.idempotencyService.processKey(idempotencyKey, async () => {
+      const valid = await this.devService.authKey(userId, secretKey);
+      if (!valid) return 'invalid credentials';
+      return this.devService.createPayoutTransaction(data, userId);
+    });
   }
 
   @Get('api-transactions')

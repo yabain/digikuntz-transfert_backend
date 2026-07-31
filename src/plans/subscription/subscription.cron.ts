@@ -8,6 +8,7 @@ import { Plans } from '../plans.schema';
 import * as mongoose from 'mongoose';
 import { EmailService } from '../../email/email.service';
 import { SubscriptionService } from './subscription.service';
+import { DistributedLockService } from 'src/distributed-lock/distributed-lock.service';
 
 @Injectable()
 export class SubscriptionCronService {
@@ -22,6 +23,7 @@ export class SubscriptionCronService {
     private plansModel: mongoose.Model<Plans>,
     private emailService: EmailService,
     private subscriptionService: SubscriptionService,
+    private readonly lockService: DistributedLockService,
   ) {}
 
   /**
@@ -30,32 +32,33 @@ export class SubscriptionCronService {
    */
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async handleExpiredSubscriptions() {
-    this.logger.log('🔄 Début de la vérification des abonnements - expirés...');
-    // this.subscriptionService.updateItemList();
+    await this.lockService.withLock('cron:subscription:expire', 300_000, async () => {
+    this.logger.log('Début de la vérification des abonnements - expirés...');
 
     try {
       const expiredSubscriptions = await this.getExpiredSubscriptions();
 
       if (expiredSubscriptions.length === 0) {
-        this.logger.log('✅ Aucun abonnement expiré trouvé');
+        this.logger.log('Aucun abonnement expiré trouvé');
         return;
       }
 
       this.logger.log(
-        `📊 ${expiredSubscriptions.length} abonnement(s) expiré(s) trouvé(s)`,
+        `${expiredSubscriptions.length} abonnement(s) expiré(s) trouvé(s)`,
       );
 
       for (const subscription of expiredSubscriptions) {
         await this.processExpiredSubscription(subscription);
       }
 
-      this.logger.log('✅ Traitement des abonnements expirés terminé');
+      this.logger.log('Traitement des abonnements expirés terminé');
     } catch (error) {
       this.logger.error(
-        '❌ Erreur lors du traitement des abonnements expirés:',
+        'Erreur lors du traitement des abonnements expirés:',
         error,
       );
     }
+  });
   }
 
   /**

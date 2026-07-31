@@ -138,26 +138,37 @@ export class PayoutService {
         ? this.normalizeMpesaPayoutStatus(providerData)
         : this.normalizeStatus(providerData?.data?.status);
 
-    const created = await this.payoutModel.create({
-      reference: payloadPayout.reference,
-      txRef: payloadPayout.txRef,
-      transactionId: payloadPayout.transactionId,
-      userId: payloadPayout.userId,
-      provider,
-      type: payloadPayout.type, // 'bank' | 'mobile_money' | 'wallet'
-      amount: payloadPayout.amount,
-      sourceCurrency: payloadPayout.sourceCurrency,
-      destinationCurrency: payloadPayout.destinationCurrency,
-      accountBankCode: payloadPayout.accountBankCode,
-      accountNumber: payloadPayout.accountNumber,
-      narration: this.toAlphanumeric(payloadPayout.narration),
-      status,
-      raw: providerData,
-      flwTxId: String(providerData?.data?.id ?? ''),
-    });
+    try {
+      const created = await this.payoutModel.create({
+        reference: payloadPayout.reference,
+        txRef: payloadPayout.txRef,
+        transactionId: payloadPayout.transactionId,
+        userId: payloadPayout.userId,
+        provider,
+        type: payloadPayout.type, // 'bank' | 'mobile_money' | 'wallet'
+        amount: payloadPayout.amount,
+        sourceCurrency: payloadPayout.sourceCurrency,
+        destinationCurrency: payloadPayout.destinationCurrency,
+        accountBankCode: payloadPayout.accountBankCode,
+        accountNumber: payloadPayout.accountNumber,
+        narration: this.toAlphanumeric(payloadPayout.narration),
+        status,
+        raw: providerData,
+        flwTxId: String(providerData?.data?.id ?? ''),
+      });
 
-    // Always return a plain JSON object (avoid circular Mongoose internals in downstream raw saves)
-    return created?.toObject?.() ?? created;
+      // Always return a plain JSON object (avoid circular Mongoose internals in downstream raw saves)
+      return created?.toObject?.() ?? created;
+    } catch (error: any) {
+      if (error?.code === 11000) {
+        this.logger.warn(`Duplicate payout reference: ${payloadPayout.reference}`);
+        return this.payoutModel
+          .findOne({ reference: payloadPayout.reference })
+          .lean()
+          .exec();
+      }
+      throw error;
+    }
   }
 
   /**
@@ -259,7 +270,7 @@ export class PayoutService {
       );
     return this.payoutModel
       .findOneAndUpdate(
-        { reference },
+        { reference, status: { $nin: ['SUCCESSFUL', 'FAILED'] } },
         { status: data.status, raw: data, updatedAt: new Date() },
         { new: true },
       )
@@ -684,11 +695,19 @@ export class PayoutService {
     }
 
     const nextStatus = this.normalizeMpesaPayoutStatus(result);
-    await this.updatePayout({
+    const updated = await this.updatePayout({
       reference: payout.reference,
       status: nextStatus,
       ...result,
     });
+    if (!updated) {
+      return {
+        success: true,
+        reference: payout.reference,
+        status: payout.status,
+        message: 'Already in terminal state, skipped',
+      };
+    }
 
     if (nextStatus === PayoutStatus.SUCCESSFUL) {
       const transaction = await this.transactionService.updateTransactionStatus(
@@ -742,11 +761,19 @@ export class PayoutService {
       return { success: false, message: 'Payout not found for timeout' };
     }
 
-    await this.updatePayout({
+    const updatedPayout = await this.updatePayout({
       reference: payout.reference,
       status: PayoutStatus.FAILED,
       ...result,
     });
+    if (!updatedPayout) {
+      return {
+        success: true,
+        reference: payout.reference,
+        status: payout.status,
+        message: 'Already in terminal state, skipped',
+      };
+    }
     const transaction = await this.transactionService.updateTransactionStatus(
       String(payout.transactionId),
       TStatus.PAYOUTERROR,

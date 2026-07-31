@@ -25,6 +25,8 @@ import { MpesaModule } from 'src/mpesa/mpesa.module';
 import { BalanceModule } from 'src/balance/balance.module';
 import { ServicePaymentModule } from 'src/service/service-payment/service-payment.module';
 import { PaymentModule } from 'src/payment/payment.module';
+import { FlutterwaveModule } from 'src/flutterwave/flutterwave.module';
+import { DistributedLockModule } from 'src/distributed-lock/distributed-lock.module';
 
 @Module({
   imports: [
@@ -41,6 +43,8 @@ import { PaymentModule } from 'src/payment/payment.module';
     forwardRef(() => BalanceModule),
     forwardRef(() => ServicePaymentModule),
     forwardRef(() => PaymentModule),
+    forwardRef(() => FlutterwaveModule),
+    DistributedLockModule,
     MongooseModule.forFeature([
       { name: Payin.name, schema: PayinSchema },
       { name: Payout.name, schema: PayoutSchema },

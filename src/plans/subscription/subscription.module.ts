@@ -21,6 +21,7 @@ import { AppCacheModule } from '../../cache/cache.module';
 import { PlansModule } from '../plans.module';
 import { TransactionModule } from 'src/transaction/transaction.module';
 import { OperationNotificationService } from 'src/notification/operation-notification.service';
+import { DistributedLockModule } from 'src/distributed-lock/distributed-lock.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { OperationNotificationService } from 'src/notification/operation-notific
     AppCacheModule,
     forwardRef(() => PlansModule),
     forwardRef(() => TransactionModule),
+    DistributedLockModule,
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: Options.name, schema: OptionsSchema },

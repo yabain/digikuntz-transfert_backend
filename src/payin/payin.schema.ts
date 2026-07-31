@@ -31,7 +31,7 @@ export class Payin extends Document {
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
   userId: User;
 
-  @Prop({ required: true })
+  @Prop({ required: true, unique: true })
   txRef: string; // your reference
 
   @Prop({ required: false })
@@ -66,3 +66,5 @@ export class Payin extends Document {
 }
 
 export const PayinSchema = SchemaFactory.createForClass(Payin);
+PayinSchema.index({ status: 1, createdAt: -1 });
+PayinSchema.index({ transactionId: 1 });

@@ -20,6 +20,7 @@ import * as bcrypt from 'bcryptjs';
 import { ConfigService } from '@nestjs/config';
 import { buildAssetImageUrl } from 'src/common/asset-url.util';
 import { CacheService } from '../cache/cache.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 @Injectable()
 export class UserService {
@@ -28,6 +29,7 @@ export class UserService {
     private userModel: mongoose.Model<User>,
     private readonly configService: ConfigService,
     private cacheService: CacheService,
+    private auditLogService: AuditLogService,
   ) { }
 
   private handleDuplicateUserError(error: any): never {
@@ -551,7 +553,8 @@ export class UserService {
       throw new NotFoundException('User not found');
     }
 
-    const status = user.isActive === true ? false : true
+    const oldValue = user.isActive;
+    const status = oldValue === true ? false : true;
     const updatedUser = await this.userModel
       .findByIdAndUpdate(
         userId,
@@ -562,6 +565,14 @@ export class UserService {
     if (!updatedUser) {
       throw new NotFoundException('User not found');
     }
+
+    void this.auditLogService.record({
+      actorId: String(userId),
+      action: 'user.status_updated',
+      resourceType: 'user',
+      resourceId: String(userId),
+      metadata: { field: 'isActive', from: oldValue, to: status },
+    });
 
     // Invalider le cache
     await this.cacheService.invalidateUserCache(userId);
@@ -578,7 +589,8 @@ export class UserService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    const status = user.isAdmin === true ? false : true
+    const oldValue = user.isAdmin;
+    const status = oldValue === true ? false : true;
     const updatedUser = await this.userModel
       .findByIdAndUpdate(
         userId,
@@ -589,6 +601,14 @@ export class UserService {
     if (!updatedUser) {
       throw new NotFoundException('User not found');
     }
+
+    void this.auditLogService.record({
+      actorId: String(userId),
+      action: 'user.admin_status_updated',
+      resourceType: 'user',
+      resourceId: String(userId),
+      metadata: { field: 'isAdmin', from: oldValue, to: status },
+    });
 
     // Invalider le cache
     await this.cacheService.invalidateUserCache(userId);
@@ -605,7 +625,8 @@ export class UserService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    const status = user.verified === true ? false : true
+    const oldValue = user.verified;
+    const status = oldValue === true ? false : true;
     const updatedUser = await this.userModel
       .findByIdAndUpdate(
         userId,
@@ -616,6 +637,14 @@ export class UserService {
     if (!updatedUser) {
       throw new NotFoundException('User not found');
     }
+
+    void this.auditLogService.record({
+      actorId: String(userId),
+      action: 'user.verified_status_updated',
+      resourceType: 'user',
+      resourceId: String(userId),
+      metadata: { field: 'verified', from: oldValue, to: status },
+    });
 
     // Invalider le cache
     await this.cacheService.invalidateUserCache(userId);

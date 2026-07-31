@@ -36,6 +36,41 @@ import { PaymentRequestStatus } from 'src/payment-request/payment-request.schema
 import { ServicePaymentService } from 'src/service/service-payment/service-payment.service';
 import { BalanceService } from 'src/balance/balance.service';
 import { GatewayLoaderService } from 'src/payment/gateway-loader.service';
+import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
+import { AuditLogService } from 'src/audit-log/audit-log.service';
+
+/** Allowed previous statuses for each target status (empty = terminal / no overwrite). */
+const TRANSACTION_STATUS_FROM: Record<TStatus, TStatus[]> = {
+  [TStatus.INITIALIZED]: [TStatus.INITIALIZED],
+  [TStatus.PAYINPENDING]: [TStatus.INITIALIZED, TStatus.PAYINPENDING],
+  [TStatus.PAYINSUCCESS]: [
+    TStatus.INITIALIZED,
+    TStatus.PAYINPENDING,
+    TStatus.PAYINERROR,
+    TStatus.PAYINCLOSED,
+  ],
+  [TStatus.PAYINERROR]: [
+    TStatus.INITIALIZED,
+    TStatus.PAYINPENDING,
+    TStatus.PAYINERROR,
+  ],
+  [TStatus.PAYINCLOSED]: [
+    TStatus.INITIALIZED,
+    TStatus.PAYINPENDING,
+    TStatus.PAYINCLOSED,
+  ],
+  [TStatus.PAYOUTPENDING]: [
+    TStatus.PAYINSUCCESS,
+    TStatus.PAYOUTPENDING,
+    TStatus.PAYOUTERROR,
+  ],
+  [TStatus.PAYOUTSUCCESS]: [TStatus.PAYOUTPENDING],
+  [TStatus.PAYOUTERROR]: [TStatus.PAYOUTPENDING],
+  [TStatus.PAYOUTCLOSED]: [TStatus.PAYOUTPENDING, TStatus.PAYOUTERROR],
+  [TStatus.PAYOUTREJECTED]: [TStatus.PAYINSUCCESS],
+  [TStatus.ERROR]: [TStatus.INITIALIZED, TStatus.PAYINPENDING],
+  [TStatus.SUCCESS]: [TStatus.PAYINSUCCESS, TStatus.PAYOUTSUCCESS],
+};
 
 @Injectable()
 export class TransactionService {
@@ -57,6 +92,9 @@ export class TransactionService {
     private servicePaymentService: ServicePaymentService,
     private balanceService: BalanceService,
     private gatewayLoader: GatewayLoaderService,
+    @Inject(forwardRef(() => FlutterwaveService))
+    private flutterwaveService: FlutterwaveService,
+    private auditLogService: AuditLogService,
   ) { }
 
   private async loadFwSecret(currency = 'XAF'): Promise<string> {
@@ -641,35 +679,14 @@ export class TransactionService {
         );
       }
     }
-    if (payin.status === 'successful') {
-      if (transactionData?.transactionType === 'service') {
-        try {
-          const txId = String(transactionData?._id || '');
-          const existing =
-            await this.servicePaymentService.findByTransactionId(txId);
-          if (!existing) {
-            const payload =
-              this.servicePaymentService.parseTransactionToServicePayment(
-                transactionData,
-              );
-            await this.servicePaymentService.createServicePayment(payload);
-          }
-        } catch (error) {
-          this.logger.error(
-            `verifyTransactionPayinStatus: failed to create servicePayment for tx=${String(
-              transactionData?._id || '',
-            )} | ${(error as any)?.message || error}`,
-          );
-        }
-      }
-      if (transactionData?.transactionType === 'paymentRequest') {
-        await this.paymentRequestService.handlePaymentRequest(transactionData);
-      }
-      return this.updateTransactionStatus(
-        transactionData._id,
-        TStatus.PAYINSUCCESS,
+    if (payin.status === 'successful' || payin.status === 'SUCCESSFUL') {
+      // Full finalize path (claim + credit + handlers) — multi-instance safe
+      await this.flutterwaveService.processSuccessfulPayin(
+        transactionData,
+        String(transactionData._id),
       );
-    } else if (payin.status === 'cancelled') {
+      return this.transactionModel.findById(transactionData._id);
+    } else if (payin.status === 'cancelled' || payin.status === 'CANCELLED') {
       if (transactionData?.transactionType === 'paymentRequest') {
         await this.paymentRequestService.updatePaymentRequestStatusByTransaction(
           String(transactionData._id),
@@ -680,7 +697,7 @@ export class TransactionService {
         transactionData._id,
         TStatus.PAYINCLOSED,
       );
-    } else if (payin.status === 'failed') {
+    } else if (payin.status === 'failed' || payin.status === 'FAILED') {
       if (transactionData?.transactionType === 'paymentRequest') {
         await this.paymentRequestService.updatePaymentRequestStatusByTransaction(
           String(transactionData._id),
@@ -842,12 +859,28 @@ export class TransactionService {
 
     if (fwStatus === 'SUCCESSFUL') {
       console.log(`[TransactionCron] → FW dit SUCCESSFUL, mise à jour payout + transaction`);
-      await this.payoutModel.findOneAndUpdate({ _id: payout._id }, { status: 'SUCCESSFUL' }).exec();
+      await this.payoutModel
+        .findOneAndUpdate(
+          {
+            _id: payout._id,
+            status: { $nin: ['SUCCESSFUL'] },
+          },
+          { status: 'SUCCESSFUL' },
+        )
+        .exec();
       return this.updateTransactionStatus(transactionData._id, TStatus.PAYOUTSUCCESS);
     }
     if (fwStatus === 'FAILED') {
       console.log(`[TransactionCron] → FW dit FAILED, mise à jour payout + transaction`);
-      await this.payoutModel.findOneAndUpdate({ _id: payout._id }, { status: 'FAILED' }).exec();
+      await this.payoutModel
+        .findOneAndUpdate(
+          {
+            _id: payout._id,
+            status: { $nin: ['SUCCESSFUL', 'FAILED'] },
+          },
+          { status: 'FAILED' },
+        )
+        .exec();
       return this.updateTransactionStatus(transactionData._id, TStatus.PAYOUTERROR);
     }
 
@@ -864,21 +897,40 @@ export class TransactionService {
     if (!mongoose.Types.ObjectId.isValid(transactionId)) {
       throw new NotFoundException('Invalid transaction ID');
     }
-    let transaction: any;
-    if (raw) {
-      transaction = await this.transactionModel.findByIdAndUpdate(
-        transactionId,
-        { status: status, raw },
-        { new: true },
-      );
-    } else {
-      transaction = await this.transactionModel.findByIdAndUpdate(
-        transactionId,
-        { status: status },
-        { new: true },
-      );
+
+    const allowedFrom = TRANSACTION_STATUS_FROM[status] || [];
+    // Only transition from allowed prior statuses (and never rewrite same status)
+    const statusFilter =
+      allowedFrom.length > 0
+        ? { status: { $in: allowedFrom.filter((s) => s !== status) } }
+        : { status: { $ne: status } };
+
+    const transactionBefore = await this.transactionModel.findById(transactionId).lean();
+    const previousStatus: TStatus | undefined = transactionBefore?.status;
+
+    const update: Record<string, any> = raw
+      ? { status, raw, $push: { statusChanges: { from: previousStatus, to: status, timestamp: new Date(), triggeredBy: 'system' } } }
+      : { status, $push: { statusChanges: { from: previousStatus, to: status, timestamp: new Date(), triggeredBy: 'system' } } };
+    let transaction: any = await this.transactionModel.findOneAndUpdate(
+      { _id: transactionId, ...statusFilter },
+      update,
+      { new: true },
+    );
+
+    if (!transaction) {
+      const existing = await this.transactionModel.findById(transactionId);
+      if (!existing) throw new NotFoundException('Transaction not found');
+      // Already at target status or illegal transition — idempotent no-op
+      return existing;
     }
-    if (!transaction) throw new NotFoundException('Transaction not found');
+
+    void this.auditLogService.record({
+      action: `transaction.status.${status}`,
+      resourceType: 'transaction',
+      resourceId: transactionId,
+      metadata: { from: previousStatus, to: status, raw: raw ? 'present' : undefined },
+    });
+
     if (status === TStatus.PAYOUTERROR) {
       await this.refundFailedOutgoingPayoutIfNeeded(transaction);
       transaction = await this.transactionModel.findById(transactionId);
@@ -937,6 +989,7 @@ export class TransactionService {
         refund.userId,
         refund.amount,
         refund.currency,
+        `payout-failure-refund:${String(transaction._id)}`,
       );
     } catch (error) {
       await this.transactionModel.updateOne(
@@ -1015,7 +1068,12 @@ export class TransactionService {
       throw new NotFoundException('Invalid payout failure refund data');
     }
 
-    await this.balanceService.debitBalance(refundUserId, refundAmount, refundCurrency);
+    await this.balanceService.debitBalance(
+      refundUserId,
+      refundAmount,
+      refundCurrency,
+      `payout-failure-reclaim:${String(transactionId)}:${Date.now()}`,
+    );
     await this.transactionModel.updateOne(
       { _id: transactionId },
       {
@@ -1032,6 +1090,8 @@ export class TransactionService {
   }
 
   private async sendCallback(transaction: any): Promise<void> {
+    if (!transaction?.callbackUrl) return;
+
     const statusMap: Record<string, string> = {
       transaction_payin_pending: 'payin_pending',
       transaction_payin_success: 'payin_success',
@@ -1044,9 +1104,31 @@ export class TransactionService {
       transaction_payout_closed: 'payout_closed',
       transaction_payout_rejected: 'payout_rejected',
     };
+    const mappedStatus = statusMap[transaction.status] ?? transaction.status;
+
+    // Claim callback for this status once across instances
+    const claimed = await this.transactionModel
+      .findOneAndUpdate(
+        {
+          _id: transaction._id,
+          $or: [
+            { lastCallbackStatus: { $exists: false } },
+            { lastCallbackStatus: null },
+            { lastCallbackStatus: { $ne: mappedStatus } },
+          ],
+        },
+        { $set: { lastCallbackStatus: mappedStatus } },
+        { new: true },
+      )
+      .exec();
+
+    if (!claimed) {
+      return;
+    }
+
     const payload = {
       id: transaction._id,
-      status: statusMap[transaction.status] ?? transaction.status,
+      status: mappedStatus,
       data: {
         estimation: transaction.estimation,
         transactionRef: transaction.transactionRef,
@@ -1059,13 +1141,25 @@ export class TransactionService {
         updatedAt: transaction.updatedAt,
       },
     };
-    await this.httpService.axiosRef.post(transaction.callbackUrl, payload, {
-      timeout: 10000,
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'digiKUNTZ-Payments-Webhook/1.0',
-      },
-    });
+    try {
+      await this.httpService.axiosRef.post(transaction.callbackUrl, payload, {
+        timeout: 10000,
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'digiKUNTZ-Payments-Webhook/1.0',
+        },
+      });
+    } catch (error) {
+      // Allow a later retry for the same status if delivery failed
+      await this.transactionModel
+        .updateOne(
+          { _id: transaction._id, lastCallbackStatus: mappedStatus },
+          { $unset: { lastCallbackStatus: '' } },
+        )
+        .exec()
+        .catch(() => undefined);
+      throw error;
+    }
   }
 
   async claimTransactionForPayout(transactionId: string): Promise<any | null> {
@@ -1157,6 +1251,7 @@ export class TransactionService {
         refund.userId,
         refund.amount,
         refund.currency,
+        `payout-failure-refund:${String(transaction._id)}`,
       );
     } catch (error) {
       await this.transactionModel.updateOne(
@@ -2030,9 +2125,19 @@ export class TransactionService {
       log(`[Reconcile] Ajustement solde: ${userBalance.balance} → ${newBalance} (${netAdjustment > 0 ? 'credit' : 'debit'} ${Math.abs(netAdjustment)})`);
 
       if (netAdjustment > 0) {
-        await this.balanceService.creditBalance(userId, netAdjustment, userBalance.currency || 'XAF');
+        await this.balanceService.creditBalance(
+          userId,
+          netAdjustment,
+          userBalance.currency || 'XAF',
+          `reconcile-credit:${userId}:${Date.now()}`,
+        );
       } else {
-        await this.balanceService.debitBalance(userId, Math.abs(netAdjustment), userBalance.currency || 'XAF');
+        await this.balanceService.debitBalance(
+          userId,
+          Math.abs(netAdjustment),
+          userBalance.currency || 'XAF',
+          `reconcile-debit:${userId}:${Date.now()}`,
+        );
       }
     } else {
       log(`[Reconcile] Aucun ajustement nécessaire`);

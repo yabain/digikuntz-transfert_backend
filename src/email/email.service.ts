@@ -295,7 +295,7 @@ export class EmailService {
       this.saveMail({ to, subject, from, status: true, body: url || html });
       return true;
     } catch (error) {
-      console.error('Erreur lors de l\'envoi du mail :', error);
+      console.warn('Erreur lors de l\'envoi du mail :', error);
       if (url) {
         this.saveMail({ to, subject, from, status: false, body: url });
       } else this.saveMail({
@@ -347,7 +347,7 @@ export class EmailService {
       const html = template(context);
       return await this.proceedToSendEmail(toEmail, subject, html, resetPwdUrl);
     } catch (error) {
-      console.error(
+      console.warn(
         'Erreur lors de l\'envoi du mail de réinitialisation :',
         error,
       );
