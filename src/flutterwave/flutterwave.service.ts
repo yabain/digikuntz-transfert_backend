@@ -51,6 +51,7 @@ import { Gateway } from 'src/gateway/gateway.schema';
 import { CryptService } from 'src/dev/crypt.service';
 import { PaymentMethodService } from 'src/payment-method/payment-method.service';
 import { AuditLogService } from 'src/audit-log/audit-log.service';
+import { InvoiceService } from 'src/invoice/invoice.service';
 
 @Injectable()
 export class FlutterwaveService {
@@ -88,6 +89,8 @@ export class FlutterwaveService {
     private paystackService: PaystackService,
     private mpesaService: MpesaService,
     private auditLogService: AuditLogService,
+    @Inject(forwardRef(() => InvoiceService))
+    private invoiceService: InvoiceService,
   ) {}
 
   setCredentials(creds: Record<string, any>): void {
@@ -1063,6 +1066,7 @@ export class FlutterwaveService {
           String(payin.transactionId),
         );
         if (alreadySuccessful?.status === this.tStatus.PAYINSUCCESS) {
+          await this.repairInvoiceFinalization(transaction);
           return { message: 'Payin already successful', status: 'successful' };
         }
 
@@ -1163,6 +1167,7 @@ export class FlutterwaveService {
           String(payin.transactionId),
         );
         if (alreadySuccessful?.status === this.tStatus.PAYINSUCCESS) {
+          await this.repairInvoiceFinalization(transaction);
           return { message: 'Payin already successful', status: 'successful' };
         }
 
@@ -1208,11 +1213,75 @@ export class FlutterwaveService {
     await this.operationNotificationService.notifyAdminPayoutPending(transaction);
   }
 
+  /**
+   * Répare la finalisation d'une facture restée bloquée en "en attente" :
+   * appelée quand la transaction est déjà au statut PAYINSUCCESS mais que
+   * la facture n'a jamais été marquée payée.
+   */
+  private async repairInvoiceFinalization(transaction: any): Promise<void> {
+    if (transaction?.transactionType === 'invoice' && transaction?.invoiceId) {
+      try {
+        await this.invoiceService.handlePaymentSuccess(transaction);
+      } catch (err) {
+        this.logger.error(
+          'repairInvoiceFinalization: invoice finalize failed',
+          err,
+        );
+      }
+    }
+  }
+
+  /**
+   * Répare la facture lors du polling public (get-txRef) : si le payin est
+   * réussi mais que la facture n'est pas encore marquée payée, elle l'est
+   * immédiatement, même quand la transaction a déjà été réclamée.
+   */
+  async repairInvoiceFinalizationByTxRef(txRef: string): Promise<any> {
+    const payin = await this.payinService.getPayinByTxRef(txRef);
+    if (payin?.status !== 'successful' || !payin.transactionId) {
+      return payin;
+    }
+    try {
+      const transaction = await this.transactionService.findById(
+        String(payin.transactionId),
+      );
+      if (transaction) {
+        await this.repairInvoiceFinalization(transaction);
+      }
+    } catch (err) {
+      this.logger.error(
+        'repairInvoiceFinalizationByTxRef: failed',
+        err,
+      );
+    }
+    return payin;
+  }
+
   async processSuccessfulPayin(transaction: any, transactionId: string) {
     const claimed =
       await this.transactionService.claimTransactionForSuccessfulPayin(
         transactionId,
       );
+
+    // La facture doit être marquée payée même si la transaction a déjà été
+    // réclamée (statut PAYINSUCCESS) : cela répare les paiements restés
+    // bloqués en "en attente" lors d'une précédente tentative échouée.
+    if (
+      transaction.transactionType === 'invoice' &&
+      transaction.invoiceId &&
+      !transaction.payed
+    ) {
+      try {
+        await this.invoiceService.handlePaymentSuccess(transaction);
+        transaction.payed = true;
+      } catch (err) {
+        this.logger.error(
+          'processSuccessfulPayin: invoice finalize failed',
+          err,
+        );
+      }
+    }
+
     if (!claimed) {
       return;
     }
@@ -1221,12 +1290,21 @@ export class FlutterwaveService {
       transaction.transactionType !== 'withdrawal' &&
       transaction.transactionType !== 'transfer'
     ) {
-      await this.balanceService.creditBalance(
-        transaction.receiverId,
-        Number(transaction.estimation),
-        transaction.senderCurrency,
-        `payin-credit:${transactionId}`,
-      );
+      try {
+        await this.balanceService.creditBalance(
+          transaction.receiverId,
+          Number(transaction.estimation),
+          transaction.senderCurrency,
+          `payin-credit:${transactionId}`,
+        );
+      } catch (err) {
+        // Un échec de crédit du solde ne doit pas empêcher la finalisation
+        // du paiement (ex. devise non conforme, pays non renseigné).
+        this.logger.warn(
+          'processSuccessfulPayin: creditBalance failed',
+          err,
+        );
+      }
     }
 
     if (transaction.transactionType === 'subscription') {

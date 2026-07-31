@@ -42,6 +42,7 @@ import { DistributedLockModule } from './distributed-lock/distributed-lock.modul
 import { LoggerModule } from './common/logger';
 import { TraceModule } from './common/trace';
 import { IdempotencyModule } from './common/idempotency/idempotency.module';
+import { InvoiceModule } from './invoice/invoice.module';
 
 @Module({
   imports: [
@@ -109,6 +110,7 @@ import { IdempotencyModule } from './common/idempotency/idempotency.module';
     PaymentRequestModule,
     PaymentMethodModule,
     TrackingModule,
+    InvoiceModule,
     DevModule,
     AuditLogModule,
     GatewayModule,

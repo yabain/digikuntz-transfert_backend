@@ -110,7 +110,7 @@ export class PayinController {
   @ApiResponse({ status: 200, description: 'Payin data returned.' })
   @ApiResponse({ status: 404, description: 'Payin not found.' })
   async getPayinByTxRef(@Param('txRef') txRef: string) {
-    return this.payinService.getPayinByTxRef(txRef);
+    return this.fwService.repairInvoiceFinalizationByTxRef(txRef);
   }
 
   @Post('mpesa/callback')

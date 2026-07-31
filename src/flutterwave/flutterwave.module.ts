@@ -49,6 +49,7 @@ import { PaymentRequestModule } from 'src/payment-request/payment-request.module
 import { MpesaModule } from 'src/mpesa/mpesa.module';
 import { PaymentMethodModule } from 'src/payment-method/payment-method.module';
 import { PaymentModule } from 'src/payment/payment.module';
+import { InvoiceModule } from 'src/invoice/invoice.module';
 import { Gateway, GatewaySchema } from 'src/gateway/gateway.schema';
 import { CryptService } from 'src/dev/crypt.service';
 
@@ -64,6 +65,7 @@ import { CryptService } from 'src/dev/crypt.service';
     forwardRef(() => PlansModule),
     forwardRef(() => FundraisingModule),
     forwardRef(() => PaymentRequestModule),
+    forwardRef(() => InvoiceModule),
     SystemModule,
     AppCacheModule,
     MongooseModule.forFeature([

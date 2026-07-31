@@ -13,6 +13,7 @@ export enum TransactionType {
   FUNDRAISING = 'fundraising',
   PAYMENTREQUEST = 'paymentRequest',
   APICALL = 'apiCall',
+  INVOICE = 'invoice',
 }
 
 export enum Currency {
@@ -193,6 +194,10 @@ export class Transaction {
 
   @Prop()
   fundraisingId: string;
+
+  /** Référence à la facture liée (paiement public de facture). */
+  @Prop({ index: true })
+  invoiceId?: string;
 
   @Prop()
   donorVisibility: boolean;
