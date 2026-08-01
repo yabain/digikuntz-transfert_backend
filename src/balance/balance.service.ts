@@ -144,6 +144,14 @@ export class BalanceService {
   }
 
   /**
+   * Indique si une écriture de solde existe déjà pour une clé d'idempotence.
+   * Permet d'éviter de rejouer inutilement un crédit déjà effectué.
+   */
+  async hasMovementKey(key: string): Promise<boolean> {
+    return !!(await this.balanceMovementModel.exists({ key }).exec());
+  }
+
+  /**
    * Debit wallet atomically (`balance >= amount`). Optional idempotency key.
    */
   async debitBalance(

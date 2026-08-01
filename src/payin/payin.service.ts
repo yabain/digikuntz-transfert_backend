@@ -868,6 +868,38 @@ export class PayinService {
       .exec();
   }
 
+  /**
+   * Payins confirmés `successful` par la passerelle liés à une facture,
+   * utilisés par le cron de réconciliation pour finaliser (claim / crédit /
+   * facture) les paiements restés en attente alors que la passerelle a
+   * encaissé (webhook non délivré, erreur transitoire).
+   * Idempotent : la réconciliation peut repasser plusieurs fois.
+   */
+  async findSuccessfulUnclaimed(limit = 100) {
+    return this.payinModel
+      .aggregate([
+        {
+          $match: {
+            status: PayinStatus.SUCCESSFUL,
+            transactionId: { $type: 'objectId' },
+          },
+        },
+        {
+          $lookup: {
+            from: 'transactions',
+            localField: 'transactionId',
+            foreignField: '_id',
+            as: 'tx',
+          },
+        },
+        { $unwind: { path: '$tx', preserveNullAndEmptyArrays: false } },
+        { $match: { 'tx.transactionType': 'invoice' } },
+        { $sort: { createdAt: -1 } },
+        { $limit: limit },
+      ])
+      .exec();
+  }
+
   hasExpiredInMinutes(inputDate: string | Date, duration: number = 15): boolean {
     const target = new Date(inputDate).getTime();
     const now = Date.now();

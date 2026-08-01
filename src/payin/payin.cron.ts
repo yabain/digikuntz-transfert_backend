@@ -38,4 +38,24 @@ export class PayinCron {
       }
     });
   }
+
+  /**
+   * Filet de sécurité : finalise les payins "successful" liés à des factures
+   * jamais finalisées (webhook non délivré ou finalisation en erreur).
+   * Exécuté toutes les 15 minutes : les paiements se résolvent normalement
+   * via le webhook / la vérification ; ce cron ne couvre que les cas orphelins.
+   */
+  @Cron('0 */15 * * * *')
+  async handleReconcile() {
+    await this.lockService.withLock('cron:payin:reconcile', 60_000, async () => {
+      try {
+        const adjusted = await this.fw.reconcileSuccessfulPayins();
+        if (adjusted > 0) {
+          this.logger.log(`Reconciled successful payins: ${adjusted}`);
+        }
+      } catch (err) {
+        this.logger.warn('reconcileSuccessfulPayins failed: ' + err.message);
+      }
+    });
+  }
 }

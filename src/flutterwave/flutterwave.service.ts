@@ -1219,16 +1219,7 @@ export class FlutterwaveService {
    * la facture n'a jamais été marquée payée.
    */
   private async repairInvoiceFinalization(transaction: any): Promise<void> {
-    if (transaction?.transactionType === 'invoice' && transaction?.invoiceId) {
-      try {
-        await this.invoiceService.handlePaymentSuccess(transaction);
-      } catch (err) {
-        this.logger.error(
-          'repairInvoiceFinalization: invoice finalize failed',
-          err,
-        );
-      }
-    }
+    await this.handleInvoice(transaction);
   }
 
   /**
@@ -1246,7 +1237,10 @@ export class FlutterwaveService {
         String(payin.transactionId),
       );
       if (transaction) {
-        await this.repairInvoiceFinalization(transaction);
+        await this.processSuccessfulPayin(
+          transaction,
+          String(payin.transactionId),
+        );
       }
     } catch (err) {
       this.logger.error(
@@ -1255,6 +1249,35 @@ export class FlutterwaveService {
       );
     }
     return payin;
+  }
+
+  /**
+   * Réconciliation : finalise les payins marqués `successful` par la
+   * passerelle mais dont la transaction n'a jamais été clôturée
+   * (webhook non délivré, erreur transitoire lors du `processSuccessfulPayin`).
+   * `processSuccessfulPayin` étant idempotent, relancer est sûr.
+   */
+  async reconcileSuccessfulPayins(): Promise<number> {
+    const unclaimed = await this.payinService.findSuccessfulUnclaimed(100);
+    let adjusted = 0;
+    for (const payin of unclaimed) {
+      const transactionId = String(payin.transactionId || '');
+      try {
+        // `processSuccessfulPayin` est idempotent (claim, crédit via clé
+        // unique, finalisation facture) : on l'appelle même si la transaction
+        // est déjà `PAYINSUCCESS` afin de réparer un crédit de solde manquant.
+        const transaction = await this.transactionService.findById(transactionId);
+        if (transaction) {
+          await this.processSuccessfulPayin(transaction, transactionId);
+          adjusted++;
+        }
+      } catch (err: any) {
+        this.logger.warn(
+          `reconcileSuccessfulPayins: ${payin.txRef} failed: ${err?.message}`,
+        );
+      }
+    }
+    return adjusted;
   }
 
   async processSuccessfulPayin(transaction: any, transactionId: string) {
@@ -1266,37 +1289,29 @@ export class FlutterwaveService {
     // La facture doit être marquée payée même si la transaction a déjà été
     // réclamée (statut PAYINSUCCESS) : cela répare les paiements restés
     // bloqués en "en attente" lors d'une précédente tentative échouée.
-    if (
-      transaction.transactionType === 'invoice' &&
-      transaction.invoiceId &&
-      !transaction.payed
-    ) {
-      try {
-        await this.invoiceService.handlePaymentSuccess(transaction);
-        transaction.payed = true;
-      } catch (err) {
-        this.logger.error(
-          'processSuccessfulPayin: invoice finalize failed',
-          err,
-        );
-      }
-    }
+    // Ce handle s'exécute dans le bloc "toujours", hors de la garde `claimed`.
+    await this.handleInvoice(transaction);
 
-    if (!claimed) {
-      return;
-    }
-
+    // Le crédit du solde est idempotent (clé balance_movements unique) :
+    // il s'exécute même si la transaction a déjà été réclamée, afin de
+    // réparer les paiements crédités jamais (ex. claim passé sans crédit).
+    // Si l'écriture existe déjà, on saute le crédit (pas de double $inc).
     if (
       transaction.transactionType !== 'withdrawal' &&
       transaction.transactionType !== 'transfer'
     ) {
+      const creditKey = `payin-credit:${transactionId}`;
       try {
-        await this.balanceService.creditBalance(
-          transaction.receiverId,
-          Number(transaction.estimation),
-          transaction.senderCurrency,
-          `payin-credit:${transactionId}`,
-        );
+        const alreadyCredited =
+          await this.balanceService.hasMovementKey(creditKey);
+        if (!alreadyCredited) {
+          await this.balanceService.creditBalance(
+            transaction.receiverId,
+            Number(transaction.estimation),
+            transaction.senderCurrency,
+            creditKey,
+          );
+        }
       } catch (err) {
         // Un échec de crédit du solde ne doit pas empêcher la finalisation
         // du paiement (ex. devise non conforme, pays non renseigné).
@@ -1305,6 +1320,10 @@ export class FlutterwaveService {
           err,
         );
       }
+    }
+
+    if (!claimed) {
+      return;
     }
 
     if (transaction.transactionType === 'subscription') {
@@ -1330,6 +1349,31 @@ export class FlutterwaveService {
     }
 
     return;
+  }
+
+  /**
+   * Finalise une facture liée à un payin réussi. Idempotent : exécuté même
+   * quand la transaction a déjà été réclamée (statut PAYINSUCCESS), afin de
+   * réparer les factures restées en attente malgré un encaissement réussi
+   * par la passerelle.
+   */
+  async handleInvoice(transaction: any): Promise<void> {
+    if (
+      transaction?.transactionType !== 'invoice' ||
+      !transaction?.invoiceId ||
+      transaction.payed
+    ) {
+      return;
+    }
+    try {
+      await this.invoiceService.handlePaymentSuccess(transaction);
+      transaction.payed = true;
+    } catch (err) {
+      this.logger.error(
+        'handleInvoice: invoice finalize failed',
+        err,
+      );
+    }
   }
 
   async handleSubscription(transaction) {
@@ -1831,6 +1875,32 @@ export class FlutterwaveService {
           path: '/fw/webhook',
           statusCode: 500,
         });
+      }
+    } else if (
+      body?.event === 'charge.completed' &&
+      body?.data?.status === 'successful' &&
+      txRef
+    ) {
+      // Le payin était déjà marqué successful (ex. vérification passée avant
+      // l'arrivée du webhook) : on finalise quand même la transaction.
+      try {
+        const localPayin = await this.payinService.getPayinByTxRef(txRef);
+        if (localPayin?.status === 'successful' && localPayin.transactionId) {
+          const transaction = await this.transactionService.findById(
+            String(localPayin.transactionId),
+          );
+          if (transaction) {
+            await this.processSuccessfulPayin(
+              transaction,
+              String(localPayin.transactionId),
+            );
+          }
+        }
+      } catch (err) {
+        this.logger.error(
+          'Webhook already-successful finalization failed',
+          err,
+        );
       }
     }
 

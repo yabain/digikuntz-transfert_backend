@@ -555,10 +555,14 @@ export class UserService {
 
     const oldValue = user.isActive;
     const status = oldValue === true ? false : true;
+    const update: any = { isActive: status };
+    if (status === false) {
+      update.sessionInvalidatedAt = new Date();
+    }
     const updatedUser = await this.userModel
       .findByIdAndUpdate(
         userId,
-        { isActive: status },
+        update,
         { new: true, runValidators: true },
       )
 

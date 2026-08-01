@@ -723,8 +723,10 @@ export class TransactionService {
     if (!transaction) {
       throw new NotFoundException('transaction not found');
     }
-    transaction.userId.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
-    transaction.userId.password = ''; // Remove the password from the response for security
+    if (transaction.userId) {
+      transaction.userId.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
+      transaction.userId.password = ''; // Remove the password from the response for security
+    }
 
     return transaction;
   }

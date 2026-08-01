@@ -128,6 +128,9 @@ export class User extends Document {
 
   @Prop({ type: Date, default: null })
   lockoutUntil?: Date | null;
+
+  @Prop({ type: Date, default: null })
+  sessionInvalidatedAt?: Date | null;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

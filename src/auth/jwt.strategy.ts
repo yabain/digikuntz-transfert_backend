@@ -45,6 +45,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException();
     }
 
+    if (user.isActive === false) {
+      throw new UnauthorizedException();
+    }
+
+    if (user.sessionInvalidatedAt && payload.iat) {
+      const invalidatedSeconds = new Date(user.sessionInvalidatedAt).getTime() / 1000;
+      if (payload.iat <= invalidatedSeconds) {
+        throw new UnauthorizedException();
+      }
+    }
+
     const userObj = user.toObject();
     userObj.password = '';
     userObj.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
