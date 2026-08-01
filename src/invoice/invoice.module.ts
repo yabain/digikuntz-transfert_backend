@@ -10,6 +10,7 @@ import { PaymentMethodModule } from 'src/payment-method/payment-method.module';
 import { FlutterwaveModule } from 'src/flutterwave/flutterwave.module';
 import { Transaction, TransactionSchema } from 'src/transaction/transaction.schema';
 import { Payin, PayinSchema } from 'src/payin/payin.schema';
+import { EmailModule } from 'src/email/email.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { Payin, PayinSchema } from 'src/payin/payin.schema';
     SystemModule,
     PaymentMethodModule,
     forwardRef(() => FlutterwaveModule),
+    EmailModule,
   ],
   controllers: [InvoiceController],
   providers: [InvoiceService, InvoiceCron],

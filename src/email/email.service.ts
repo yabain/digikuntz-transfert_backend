@@ -652,6 +652,76 @@ export class EmailService {
     );
   }
 
+  /**
+   * Notifie un payeur (invité) ou le propriétaire de la facture après un
+   * paiement réussi. Lien de la facture publique `invoice-pay/:id`.
+   */
+  async sendInvoicePaidEmail(
+    userData: { name?: string; email: string; language?: string },
+    invoiceData: {
+      _id: any;
+      totalAmount: number;
+      currency?: string;
+      txRef?: string;
+      transactionDate?: Date;
+    },
+  ): Promise<boolean> {
+    const userName = userData.name || 'Client';
+    const language = userData?.language === 'fr' ? 'fr' : 'en';
+    const templateName = 'invoice_paid';
+    const subject =
+      language === 'fr'
+        ? 'Paiement de facture reçu'
+        : 'Invoice payment received';
+
+    let templatePath = path.join(
+      this.templateFolder,
+      `${templateName}_${language}.hbs`,
+    );
+
+    let templateSource: string;
+    try {
+      templateSource = fs.readFileSync(templatePath, 'utf8');
+    } catch (err) {
+      // fallback to fr template if language file is missing
+      if (language !== 'fr') {
+        templatePath = path.join(
+          this.templateFolder,
+          `${templateName}_fr.hbs`,
+        );
+        templateSource = fs.readFileSync(templatePath, 'utf8');
+      } else {
+        throw err;
+      }
+    }
+    const template = handlebars.compile(templateSource);
+    const front = this.configService.get<string>('FRONT_URL') || this.frontUrl;
+
+    const context = {
+      userName,
+      invoice_url: `${front}/invoice-pay/${invoiceData._id.toString()}`,
+      amount: `${invoiceData.totalAmount} ${invoiceData.currency || ''}`.trim(),
+      transactionDate: this.dateService.formatDate(
+        invoiceData.transactionDate
+          ? invoiceData.transactionDate.toISOString()
+          : new Date().toISOString(),
+        'short',
+        language,
+      ),
+      transactionRef: invoiceData.txRef || '--',
+      frontUrl: front,
+    };
+
+    const html = template(context);
+
+    return await this.proceedToSendEmail(
+      userData.email,
+      subject,
+      html,
+      'Invoice paid: ' + context.invoice_url,
+    );
+  }
+
 
   async sendAdminPayoutPendingEmail(transactionData: any): Promise<boolean> {
     const to = this.getAlertDestination();

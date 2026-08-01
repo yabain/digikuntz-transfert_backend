@@ -20,6 +20,7 @@ import { PaymentMethodService } from 'src/payment-method/payment-method.service'
 import { Payin } from 'src/payin/payin.schema';
 import { Invoice, InvoiceItem, InvoiceStatus } from './invoice.schema';
 import { CreateInvoiceDto, UpdateInvoiceDto } from './invoice.dto';
+import { EmailService } from 'src/email/email.service';
 
 export interface InvoiceStats {
   total: number;
@@ -44,6 +45,7 @@ export class InvoiceService {
     @Inject(forwardRef(() => FlutterwaveService))
     private readonly flutterwaveService: FlutterwaveService,
     private readonly auditLogService: AuditLogService,
+    private readonly emailService: EmailService,
   ) {}
 
   async create(userId: string, dto: CreateInvoiceDto): Promise<Invoice> {
@@ -103,10 +105,16 @@ export class InvoiceService {
     return { total, pending, payed, disabled, drafts };
   }
 
-  async findByIdForUser(userId: string, invoiceId: string): Promise<Invoice> {
+  async findByIdForUser(userId: string, invoiceId: string): Promise<any> {
     const invoice = await this.invoiceModel.findOne({ _id: this.toObjectId(invoiceId), userId }).lean();
     if (!invoice) throw new NotFoundException('Invoice not found');
-    return invoice;
+    const fees = await this.computeFees(invoice.totalAmount, invoice.currency);
+    return {
+      ...invoice,
+      feesPercent: fees.percent,
+      feesAmount: fees.amount,
+      amountToPay: fees.amountToPay,
+    };
   }
 
   async getPublic(invoiceId: string): Promise<any> {
@@ -391,7 +399,9 @@ export class InvoiceService {
     invoice.transactionId = String(transaction._id);
     invoice.payerName = transaction.senderName;
     invoice.payerPhone = transaction.senderContact;
-    invoice.payerEmail = transaction.senderEmail;
+    if (!this.isPlaceholderPayerEmail(transaction.senderEmail)) {
+      invoice.payerEmail = transaction.senderEmail;
+    }
     await invoice.save();
 
     this.auditLogService.record({
@@ -408,6 +418,55 @@ export class InvoiceService {
         paymentDate: invoice.paymentDate,
       },
     });
+
+    await this.notifyPaymentSuccess(invoice, transaction);
+  }
+
+  /**
+   * Email de secours généré pour satisfaire l'exigence Flutterwave d'un
+   * email client ; il ne doit jamais être persisté sur la facture ni envoyé.
+   */
+  private isPlaceholderPayerEmail(email?: string): boolean {
+    return typeof email === 'string' && email.endsWith('@invoice.digikuntz.com');
+  }
+
+  /**
+   * Notifie par email le payeur (si son email réel est connu) et le
+   * propriétaire de la facture après un paiement réussi.
+   */
+  private async notifyPaymentSuccess(invoice: any, transaction: any): Promise<void> {
+    try {
+      const owner = await this.userService.getUserById(String(invoice.userId)).catch(() => null);
+      const payerEmail = invoice.payerEmail;
+      const ownerEmail = owner?.email;
+
+      const txData = {
+        _id: invoice._id,
+        totalAmount: Number(invoice.totalAmount) || 0,
+        currency: invoice.currency,
+        txRef: transaction?.txRef || transaction?.transactionRef,
+        transactionDate: invoice.paymentDate || new Date(),
+      };
+
+      if (payerEmail) {
+        await this.emailService.sendInvoicePaidEmail(
+          { name: invoice.payerName || 'Client', email: payerEmail },
+          txData,
+        );
+      }
+      if (ownerEmail) {
+        await this.emailService.sendInvoicePaidEmail(
+          {
+            name: owner?.name || owner?.firstName || owner?.lastName || 'Client',
+            email: ownerEmail,
+            language: owner?.language,
+          },
+          txData,
+        );
+      }
+    } catch (err) {
+      console.warn('Erreur envoi notification facture payée :', err);
+    }
   }
 
   /**
