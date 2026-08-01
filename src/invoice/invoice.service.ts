@@ -8,6 +8,9 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
+import { existsSync } from 'fs';
+import { readFile, stat } from 'fs/promises';
+import { extname, join } from 'path';
 import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
 import { Transaction, TransactionType, TStatus } from 'src/transaction/transaction.schema';
 import { UserService } from 'src/user/user.service';
@@ -152,6 +155,7 @@ export class InvoiceService {
       return {
         name: user.name || '',
         pictureUrl: user.pictureUrl || '',
+        pictureData: await this.readPictureData(user.pictureUrl || ''),
         email: user.email || '',
         phone: user.phone || '',
         phone2: user.phone2 || '',
@@ -163,6 +167,50 @@ export class InvoiceService {
         country: user.countryId?.name || '',
         dialCode: user.countryId?.code || '',
       };
+    } catch {
+      return null;
+    }
+  }
+
+  private picturePaths(): string[] {
+    const nodeEnv = process.env.NODE_ENV;
+    return [
+      ...new Set([
+        nodeEnv === 'production' ? '/app/assets' : join(process.cwd(), 'public', 'assets'),
+        join(process.cwd(), 'public', 'assets'),
+        join(process.cwd(), 'assets'),
+        '/app/assets',
+      ]),
+    ];
+  }
+
+  private resolvePictureFile(pictureUrl: string): string | null {
+    if (!pictureUrl || /^https?:\/\//i.test(pictureUrl)) return null;
+    let rel: string | null = null;
+    if (pictureUrl.startsWith('/uploads/')) {
+      rel = `images/${pictureUrl.slice('/uploads/'.length)}`;
+    } else if (pictureUrl.startsWith('/assets/')) {
+      rel = pictureUrl.slice('/assets/'.length);
+    } else if (pictureUrl.startsWith('/')) {
+      rel = pictureUrl.slice(1);
+    }
+    if (!rel) return null;
+    for (const base of this.picturePaths()) {
+      const file = join(base, rel);
+      if (existsSync(file)) return file;
+    }
+    return null;
+  }
+
+  private async readPictureData(pictureUrl: string): Promise<string | null> {
+    const file = this.resolvePictureFile(pictureUrl);
+    if (!file) return null;
+    try {
+      const fileStat = await stat(file);
+      if (fileStat.size > 500 * 1024) return null;
+      const buf = await readFile(file);
+      const mime = extname(file).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
+      return `data:${mime};base64,${buf.toString('base64')}`;
     } catch {
       return null;
     }

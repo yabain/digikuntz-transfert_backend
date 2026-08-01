@@ -140,9 +140,8 @@ function enhanceSwaggerDocument(document: any): any {
 }
 
 function getAllowedCorsOrigins(): string[] {
-  const productionDefaults = ['https://payments.digikuntz.com'];
-  const developmentDefaults = [
-    ...productionDefaults,
+  const productionDefaults = [
+    'https://payments.digikuntz.com',
     'http://localhost',
     'https://localhost',
     'http://localhost:8100',
@@ -151,6 +150,10 @@ function getAllowedCorsOrigins(): string[] {
     'https://localhost:4200',
     'capacitor://localhost',
     'ionic://localhost',
+  ];
+  const developmentDefaults = [
+    ...productionDefaults,
+    'http://localhost:3000',
   ];
 
   const configured = String(process.env.CORS_ORIGINS || '')
