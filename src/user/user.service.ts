@@ -19,6 +19,7 @@ import { UpdateUserDto } from './update-user.dto';
 import * as bcrypt from 'bcryptjs';
 import { ConfigService } from '@nestjs/config';
 import { buildAssetImageUrl } from 'src/common/asset-url.util';
+import { convertToWebp, removePreviousImages } from 'src/common/image.util';
 import { CacheService } from '../cache/cache.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 
@@ -286,13 +287,6 @@ export class UserService {
     }
   }
 
-  /**
-   * Update the profile picture of a user.
-   * @param req - The request object containing the authenticated user.
-   * @param files - The uploaded files (e.g., profile picture).
-   * @returns The updated user data.
-   * @throws NotFoundException if the user ID is invalid or the user is not found.
-   */
   async updateUserPicture(
     req: any,
     files: Array<Express.Multer.File>,
@@ -311,11 +305,15 @@ export class UserService {
       user.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
     }
 
+    const file = files[0];
+    await convertToWebp(file);
+    removePreviousImages(file.destination, `pictureFile_${req.user._id}.`, file.filename);
+
     // Generate URLs for the uploaded files
-    const fileUrls = files.map((file) => {
+    const fileUrls = files.map((f) => {
       return buildAssetImageUrl(
         process.env.NODE_ENV,
-        file.filename,
+        f.filename,
         this.configService.get<string>('BACK_URL'),
       );
     });
@@ -358,11 +356,15 @@ export class UserService {
       user.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
     }
 
+    const file = files[0];
+    await convertToWebp(file);
+    removePreviousImages(file.destination, `coverFile_${req.user._id}.`, file.filename);
+
     // Generate URLs for the uploaded files
-    const fileUrls = files.map((file) => {
+    const fileUrls = files.map((f) => {
       return buildAssetImageUrl(
         process.env.NODE_ENV,
-        file.filename,
+        f.filename,
         this.configService.get<string>('BACK_URL'),
       );
     });

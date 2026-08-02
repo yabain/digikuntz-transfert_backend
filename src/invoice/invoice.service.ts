@@ -88,10 +88,28 @@ export class InvoiceService {
   }
 
   async findAllForUser(userId: string): Promise<Invoice[]> {
-    return this.invoiceModel
+    const invoices = await this.invoiceModel
       .find({ userId })
       .sort({ createdAt: -1 })
       .lean();
+    const configCache = new Map<string, number>();
+    return Promise.all(
+      invoices.map(async (invoice: any) => {
+        const currency = invoice.currency || 'XAF';
+        if (!configCache.has(currency)) {
+          const { feesPercent } = await this.getPaymentConfig(currency);
+          configCache.set(currency, feesPercent);
+        }
+        const feesPercent = configCache.get(currency) || 0;
+        const feesAmount = Math.ceil((Number(invoice.totalAmount) * feesPercent) / 100);
+        return {
+          ...invoice,
+          feesPercent,
+          feesAmount,
+          amountToPay: Number(invoice.totalAmount) + feesAmount,
+        };
+      }),
+    );
   }
 
   async getStats(userId: string): Promise<InvoiceStats> {

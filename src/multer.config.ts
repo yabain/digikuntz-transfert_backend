@@ -51,7 +51,7 @@ export const multerConfig = {
     },
   }),
   limits: {
-    fileSize: 2 * 1024 * 1024, // 2 MB
+    fileSize: 3 * 1024 * 1024, // 3 MB
   },
 };
 
@@ -66,13 +66,12 @@ export const multerConfigForUser = {
     destination: getUploadPath(),
     filename: (req: any, file, callback) => {
       const userId = req.user._id;
-      const fileExt = path.extname(file.originalname);
-      const fileName = `pictureFile_${userId}${fileExt}`;
+      const fileName = `pictureFile_${userId}.webp`;
       callback(null, fileName);
     },
   }),
   limits: {
-    fileSize: 2 * 1024 * 1024, // 2 MB
+    fileSize: 3 * 1024 * 1024, // 3 MB
   },
 };
 
@@ -82,13 +81,12 @@ export const multerConfigForCover = {
     destination: getUploadPath(),
     filename: (req: any, file, callback) => {
       const userId = req.user._id;
-      const fileExt = path.extname(file.originalname);
-      const fileName = `coverFile_${userId}${fileExt}`;
+      const fileName = `coverFile_${userId}.webp`;
       callback(null, fileName);
     },
   }),
   limits: {
-    fileSize: 2 * 1024 * 1024, // 2 MB
+    fileSize: 3 * 1024 * 1024, // 3 MB
   },
 };
 
@@ -103,7 +101,7 @@ export const multerConfigForEvent = {
     },
   }),
   limits: {
-    fileSize: 2 * 1024 * 1024, // 2 MB
+    fileSize: 3 * 1024 * 1024, // 3 MB
   },
 };
 
@@ -113,13 +111,12 @@ export const multerConfigForService = {
     destination: getUploadPath(),
     filename: (req, file, callback) => {
       const serviceId = req.params.id;
-      const fileExt = path.extname(file.originalname);
-      const fileName = `serviceFile_${serviceId}${fileExt}`;
+      const fileName = `serviceFile_${serviceId}.webp`;
       callback(null, fileName);
     },
   }),
   limits: {
-    fileSize: 2 * 1024 * 1024, // 2 MB
+    fileSize: 3 * 1024 * 1024, // 3 MB
   },
 };
 
@@ -129,13 +126,12 @@ export const multerConfigForPlan = {
     destination: getUploadPath(),
     filename: (req, file, callback) => {
       const planId = req.params.id;
-      const fileExt = path.extname(file.originalname);
-      const fileName = `planImage_${planId}${fileExt}`;
+      const fileName = `planImage_${planId}.webp`;
       callback(null, fileName);
     },
   }),
   limits: {
-    fileSize: 2 * 1024 * 1024, // 2 MB
+    fileSize: 3 * 1024 * 1024, // 3 MB
   },
 };
 
@@ -151,7 +147,7 @@ export const multerConfigForGateway = {
     },
   }),
   limits: {
-    fileSize: 2 * 1024 * 1024, // 2 MB
+    fileSize: 3 * 1024 * 1024, // 3 MB
   },
 };
 
@@ -161,12 +157,11 @@ export const multerConfigForFundraising = {
     destination: getUploadPath(),
     filename: (req, file, callback) => {
       const fundraisingId = req.params.id;
-      const fileExt = path.extname(file.originalname);
-      const fileName = `fundraisingCoverFile_${fundraisingId}${fileExt}`;
+      const fileName = `fundraisingCoverFile_${fundraisingId}.webp`;
       callback(null, fileName);
     },
   }),
   limits: {
-    fileSize: 2 * 1024 * 1024, // 2 MB
+    fileSize: 3 * 1024 * 1024, // 3 MB
   },
 };

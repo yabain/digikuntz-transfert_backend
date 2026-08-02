@@ -10,6 +10,7 @@ import { Injectable, ForbiddenException, NotFoundException, Inject, forwardRef }
 import { Query } from 'express-serve-static-core';
 import { InjectModel } from '@nestjs/mongoose';
 import * as mongoose from 'mongoose';
+import * as path from 'path';
 import { OptionsService } from './options/options.service';
 import { CreatePlansDto } from './create-plans.dto';
 import { UpdatePlansDto } from './update-plans.dto';
@@ -22,6 +23,7 @@ import { WhatsappService } from 'src/wa/whatsapp.service';
 import { UserService } from 'src/user/user.service';
 import { EmailService } from 'src/email/email.service';
 import { generateFileUrl } from '../multer.config';
+import { convertToWebp, removePreviousImages } from 'src/common/image.util';
 import { randomBytes } from 'crypto';
 
 @Injectable()
@@ -488,7 +490,15 @@ export class PlansService {
       throw new ForbiddenException('Unauthorized');
     }
 
-    const imageUrl = generateFileUrl(picture[0].filename);
+    const file = picture[0];
+    await convertToWebp(file);
+    removePreviousImages(
+      path.dirname(file.path),
+      `planImage_${plansId}.`,
+      file.filename,
+    );
+
+    const imageUrl = generateFileUrl(file.filename);
 
     return this.plansModel.findByIdAndUpdate(
       plansId,

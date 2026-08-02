@@ -23,6 +23,7 @@ import { Donation, DonationDocument } from './donation.schema';
 import { UpdateFundraisingDto } from './update-fundraising.dto';
 import { ConfigService } from '@nestjs/config';
 import { buildAssetImageUrl } from 'src/common/asset-url.util';
+import { convertToWebp, removePreviousImages } from 'src/common/image.util';
 
 @Injectable()
 export class FundraisingService {
@@ -158,6 +159,14 @@ export class FundraisingService {
     if (!fundraising) {
       throw new NotFoundException('fundraising not found');
     }
+
+    const file = coverFile[0];
+    await convertToWebp(file);
+    removePreviousImages(
+      path.dirname(file.path),
+      `fundraisingCoverFile_${fundraisingId}.`,
+      file.filename,
+    );
 
     // Generate URLs for the uploaded files
     const fileUrls = coverFile.map((file) => {

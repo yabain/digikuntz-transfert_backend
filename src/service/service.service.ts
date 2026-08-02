@@ -10,6 +10,7 @@ import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/commo
 import { Query } from 'express-serve-static-core';
 import { InjectModel } from '@nestjs/mongoose';
 import * as mongoose from 'mongoose';
+import * as path from 'path';
 import { OptionsServiceService } from './options-service/options-service.service';
 import { CreateServiceDto } from './create-service.dto';
 import { UpdateServiceDto } from './update-service.dto';
@@ -21,6 +22,7 @@ import { UserService } from 'src/user/user.service';
 import { ServicePaymentService } from './service-payment/service-payment.service';
 import { ConfigService } from '@nestjs/config';
 import { buildAssetImageUrl } from 'src/common/asset-url.util';
+import { convertToWebp, removePreviousImages } from 'src/common/image.util';
 
 @Injectable()
 export class ServiceService {
@@ -219,6 +221,14 @@ export class ServiceService {
     if (!service) {
       throw new NotFoundException('Service not found');
     }
+
+    const file = files[0];
+    await convertToWebp(file);
+    removePreviousImages(
+      path.dirname(file.path),
+      `serviceFile_${serviceId}.`,
+      file.filename,
+    );
 
     // Generate URLs for the uploaded files
     const fileUrls = files.map((file) => {
