@@ -126,3 +126,4 @@ echo " Pour quitter les logs : CTRL + C"
 echo "=================================================="
 
 sudo journalctl -u "$SERVICE_NAME" -f
+

@@ -124,6 +124,18 @@ export class FundraisingController {
     return this.fundraisingService.getMyFundraisingStats(String(req.user._id));
   }
 
+  @Get('all/stats')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all system fundraising statistics (admin only)' })
+  @ApiResponse({ status: 200, description: 'System fundraising stats returned.' })
+  @UseGuards(AuthGuard('jwt'))
+  async getAllFundraisingStats(@Req() req) {
+    if (!req.user?.isAdmin) {
+      throw new ForbiddenException('Unauthorised');
+    }
+    return this.fundraisingService.getAllFundraisingStats();
+  }
+
   @Get('my/list')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user fundraising list' })

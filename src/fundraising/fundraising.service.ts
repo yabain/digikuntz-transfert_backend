@@ -46,6 +46,34 @@ export class FundraisingService {
     return { page, limit, skip };
   }
 
+  private buildKeywordFilter(query: any): any {
+    const keyword =
+      typeof query?.keyword === 'string' ? query.keyword.trim() : '';
+    if (!keyword) return {};
+    return {
+      $or: [
+        { title: { $regex: keyword, $options: 'i' } },
+        { subTitle: { $regex: keyword, $options: 'i' } },
+        { description: { $regex: keyword, $options: 'i' } },
+      ],
+    };
+  }
+
+  private buildCategoryFilter(query: any): any {
+    const now = new Date();
+    const category = query?.category;
+    if (category === 'active') {
+      return { status: true, endDate: { $gte: now } };
+    }
+    if (category === 'completed') {
+      return { endDate: { $lt: now } };
+    }
+    if (category === 'inactive') {
+      return { status: false, endDate: { $gte: now } };
+    }
+    return {};
+  }
+
   private getUploadPath(): string {
     if (process.env.NODE_ENV === 'production') {
       return '/app/assets/images';
@@ -206,24 +234,39 @@ export class FundraisingService {
       }),
       this.fundraisingModel.countDocuments({
         creatorId: userId,
-        status: false,
+        status: true,
         endDate: { $gte: now },
       }),
       this.fundraisingModel.countDocuments({
         creatorId: userId,
-        status: true,
+        status: false,
         endDate: { $gte: now },
       }),
     ]);
     return { total, active, completed, inactive };
   }
 
+  async getAllFundraisingStats() {
+    const now = new Date();
+    const [total, completed, active, inactive] = await Promise.all([
+      this.fundraisingModel.countDocuments(),
+      this.fundraisingModel.countDocuments({ endDate: { $lt: now } }),
+      this.fundraisingModel.countDocuments({ status: true, endDate: { $gte: now } }),
+      this.fundraisingModel.countDocuments({ status: false, endDate: { $gte: now } }),
+    ]);
+    return { total, active, completed, inactive };
+  }
+
   async getAllSystem(query: any) {
     const { page, limit, skip } = this.getPagination(query);
+    const filter = {
+      ...this.buildKeywordFilter(query),
+      ...this.buildCategoryFilter(query),
+    };
 
     const [data, totalItems] = await Promise.all([
-      this.fundraisingModel.find().sort({ createdAt: -1 }).skip(skip).limit(limit).lean().exec(),
-      this.fundraisingModel.countDocuments(),
+      this.fundraisingModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean().exec(),
+      this.fundraisingModel.countDocuments(filter),
     ]);
 
     return {
@@ -240,15 +283,20 @@ export class FundraisingService {
 
   async getUserFundraisings(userId: string, query: any) {
     const { page, limit, skip } = this.getPagination(query);
+    const filter = {
+      creatorId: userId,
+      ...this.buildKeywordFilter(query),
+      ...this.buildCategoryFilter(query),
+    };
     const [data, totalItems] = await Promise.all([
       this.fundraisingModel
-        .find({ creatorId: userId })
+        .find(filter)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean()
         .exec(),
-      this.fundraisingModel.countDocuments({ creatorId: userId }),
+      this.fundraisingModel.countDocuments(filter),
     ]);
 
     return {
@@ -269,6 +317,7 @@ export class FundraisingService {
       creatorId: userId,
       status: true,
       endDate: { $gt: new Date() },
+      ...this.buildKeywordFilter(query),
     };
     const [data, totalItems] = await Promise.all([
       this.fundraisingModel
@@ -300,6 +349,7 @@ export class FundraisingService {
       status: true,
       visibility: FundraisingVisibility.PUBLIC,
       endDate: { $gt: new Date() },
+      ...this.buildKeywordFilter(query),
     };
     const [data, totalItems] = await Promise.all([
       this.fundraisingModel
