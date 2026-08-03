@@ -52,6 +52,7 @@ import { CryptService } from 'src/dev/crypt.service';
 import { PaymentMethodService } from 'src/payment-method/payment-method.service';
 import { AuditLogService } from 'src/audit-log/audit-log.service';
 import { InvoiceService } from 'src/invoice/invoice.service';
+import { SystemBalanceService } from 'src/system-balance/system-balance.service';
 
 @Injectable()
 export class FlutterwaveService {
@@ -91,6 +92,7 @@ export class FlutterwaveService {
     private auditLogService: AuditLogService,
     @Inject(forwardRef(() => InvoiceService))
     private invoiceService: InvoiceService,
+    private systemBalanceService: SystemBalanceService,
   ) {}
 
   setCredentials(creds: Record<string, any>): void {
@@ -452,6 +454,133 @@ export class FlutterwaveService {
   }
 
   // ---------- Pay-In (Hosted Payment) ----------
+  async createSystemPayin(body: any, userId: string) {
+    const currency = String(body?.currency || '').toUpperCase();
+    const amount = Number(body?.amount);
+    if (!currency || !Number.isFinite(amount) || amount <= 0) {
+      throw new HttpException(
+        { status: HttpStatus.BAD_REQUEST, error: 'Invalid currency or amount' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Router le payin vers la passerelle active de la devise
+    // (Flutterwave / Paystack / M-Pesa) comme pour un payin classique.
+    const gateway = await this.gatewayModel
+      .findOne({ currency, isActive: true })
+      .lean()
+      .exec();
+    if (!gateway) {
+      throw new NotFoundException(
+        `No active payment gateway found for currency ${currency}`,
+      );
+    }
+
+    const raw = {
+      transactionType: 'systemPayin',
+      status: TStatus.PAYINPENDING,
+      estimation: amount,
+      senderCurrency: currency,
+      receiverCurrency: currency,
+      senderId: userId,
+      userId,
+      senderName: 'Système',
+      senderEmail: body?.email || undefined,
+      senderContact: body?.phone || undefined,
+      raisonForTransfer: body?.description || 'Recharge du solde système',
+      noFees: true,
+      gatewayId: String(gateway._id),
+      redirectUrl: body?.redirectUrl,
+    };
+
+    return this.createPayin(raw, userId);
+  }
+
+  async createSystemWithdrawal(body: any, userId: string) {
+    const currency = String(body?.currency || '').toUpperCase();
+    const amount = Number(body?.amount);
+    if (!currency || !Number.isFinite(amount) || amount <= 0) {
+      throw new HttpException(
+        { status: HttpStatus.BAD_REQUEST, error: 'Invalid currency or amount' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const paymentMethod = String(body?.paymentMethod || '').toUpperCase();
+    if (!['OM', 'MTN', 'BANK'].includes(paymentMethod)) {
+      throw new HttpException(
+        {
+          status: HttpStatus.BAD_REQUEST,
+          error: 'Invalid payment method (OM, MTN or BANK)',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Vérifier que le solde système est suffisant
+    const balance = await this.systemBalanceService.getSystemBalance(currency);
+    if (Number(balance?.balance ?? 0) < amount) {
+      throw new HttpException(
+        { status: HttpStatus.BAD_REQUEST, error: 'Insufficient system balance' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Débiter le solde système (idempotent via clé unique)
+    const debitKey = `system-withdraw:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+    await this.systemBalanceService.debitSystemBalance(currency, amount, debitKey, {
+      reference: '',
+      description: `Retrait du solde système (${paymentMethod})`,
+    });
+
+    const txRef = this.payoutService.generateTxRef('txPayout');
+    const raw = {
+      txRef,
+      userId,
+      senderId: userId,
+      receiverId: userId,
+      senderName: 'Système',
+      senderCurrency: currency,
+      receiverCurrency: currency,
+      receiverCountryCode: body?.receiverCountryCode,
+      receiverName: body?.receiverName || 'Système',
+      paymentMethod,
+      bankCode: body?.receiverBankCode,
+      bankAccountNumber: body?.receiverAccountNumber || body?.receiverPhone,
+      receiverMobileAccountNumber: body?.receiverPhone,
+      raisonForTransfer: body?.description || 'Retrait du solde système',
+      estimation: amount,
+      transactionType: 'systemWithdrawal',
+      status: TStatus.PAYINSUCCESS,
+      noFees: true,
+    };
+
+    try {
+      const saved = await this.transactionService.createTransaction(raw);
+      if (!saved) {
+        throw new NotFoundException('Error to save transaction details');
+      }
+      // Informer les admins qu'un retrait du solde système attend validation
+      void this.operationNotificationService
+        .notifyAdminPayoutPending(saved)
+        .catch(() => undefined);
+      return { status: 'pending', transactionId: saved._id, txRef };
+    } catch (error) {
+      // Reverser le débit si la transaction n'a pas pu être créée
+      await this.systemBalanceService
+        .creditSystemBalance(
+          currency,
+          amount,
+          `system-withdraw-reversal:${Date.now()}:${Math.random().toString(36).slice(2)}`,
+          {
+            reference: '',
+            description: 'Rétablissement du solde système (échec création retrait)',
+          },
+        )
+        .catch(() => undefined);
+      throw error;
+    }
+  }
+
   async createPayin(
     transactionData: any,
     userId,
@@ -1296,10 +1425,43 @@ export class FlutterwaveService {
     // il s'exécute même si la transaction a déjà été réclamée, afin de
     // réparer les paiements crédités jamais (ex. claim passé sans crédit).
     // Si l'écriture existe déjà, on saute le crédit (pas de double $inc).
-    if (
+    const isSystemPayin = transaction.transactionType === 'systemPayin';
+    const isUserCreditType =
       transaction.transactionType !== 'withdrawal' &&
-      transaction.transactionType !== 'transfer'
-    ) {
+      transaction.transactionType !== 'transfer' &&
+      !isSystemPayin;
+
+    if (isSystemPayin) {
+      // Recharge du solde système : créditer le montant TOTAL encaissé
+      // (pas de frais appliqués pour cette recharge).
+      const systemAmount =
+        Number(transaction.paymentWithTaxes) ||
+        Number(transaction.estimation) ||
+        0;
+      if (systemAmount > 0) {
+        const systemKey = `system-payin-credit:${transactionId}`;
+        try {
+          const alreadyCredited =
+            await this.systemBalanceService.hasMovementKey(systemKey);
+          if (!alreadyCredited) {
+            await this.systemBalanceService.creditSystemBalance(
+              transaction.senderCurrency || transaction.receiverCurrency,
+              systemAmount,
+              systemKey,
+              {
+                reference: transaction.txRef || transactionId,
+                description: 'Recharge du solde système',
+              },
+            );
+          }
+        } catch (err) {
+          this.logger.warn(
+            'processSuccessfulPayin: system payin credit failed',
+            err,
+          );
+        }
+      }
+    } else if (isUserCreditType) {
       const creditKey = `payin-credit:${transactionId}`;
       try {
         const alreadyCredited =
@@ -1319,6 +1481,34 @@ export class FlutterwaveService {
           'processSuccessfulPayin: creditBalance failed',
           err,
         );
+      }
+
+      // Créditer le solde système du montant des frais (taxes) prélevés lors
+      // de l'encaissement. Idempotent (clé système unique) : relançable par le
+      // cron de réconciliation sans double écriture.
+      const systemFees = Number(transaction.taxesAmount) || 0;
+      if (systemFees > 0) {
+        const systemKey = `system-fees-credit:${transactionId}`;
+        try {
+          const alreadyCredited =
+            await this.systemBalanceService.hasMovementKey(systemKey);
+          if (!alreadyCredited) {
+            await this.systemBalanceService.creditSystemBalance(
+              transaction.senderCurrency || transaction.receiverCurrency,
+              systemFees,
+              systemKey,
+              {
+                reference: transaction.txRef || transactionId,
+                description: `Frais d'encaissement`,
+              },
+            );
+          }
+        } catch (err) {
+          this.logger.warn(
+            'processSuccessfulPayin: creditSystemBalance failed',
+            err,
+          );
+        }
       }
     }
 

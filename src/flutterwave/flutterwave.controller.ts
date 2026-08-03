@@ -305,6 +305,71 @@ export class FlutterwaveController {
     return this.fw.withdrawal(transactionData, req.user._id);
   }
 
+  // Recharge du solde système : crée un payin `systemPayin` (sans frais) et
+  // retourne le lien de paiement de la passerelle de la devise.
+  @Post('system-payin')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Create a system balance recharge (payin) — admin only',
+  })
+  @ApiBody({
+    schema: {
+      example: {
+        currency: 'XAF',
+        amount: 100000,
+        description: 'Recharge trésorerie',
+        email: 'admin@digikuntz.com',
+        redirectUrl: 'https://app.digikuntz.com/system-balance',
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Payin created, payment link returned.' })
+  @ApiResponse({ status: 400, description: 'Invalid currency or amount.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async createSystemPayin(@Body() body: any, @Req() req) {
+    if (!req.user.isAdmin) {
+      throw new ForbiddenException('Unauthorised');
+    }
+    return this.fw.createSystemPayin(body, req.user._id);
+  }
+
+  // Retrait du solde système : débite le solde, crée une transaction
+  // `systemWithdrawal` en attente de validation admin, puis envoyée au provider.
+  @Post('system-withdrawal')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Create a system balance withdrawal (payout) — admin only',
+  })
+  @ApiBody({
+    schema: {
+      example: {
+        currency: 'XAF',
+        amount: 50000,
+        description: 'Virement fournisseur',
+        paymentMethod: 'BANK',
+        receiverName: 'Bénéficiaire',
+        receiverBankCode: '044',
+        receiverAccountNumber: '1234567890',
+        receiverCountryCode: 'CM',
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'System withdrawal created, awaiting validation.' })
+  @ApiResponse({ status: 400, description: 'Invalid payload or insufficient system balance.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async createSystemWithdrawal(@Body() body: any, @Req() req) {
+    if (!req.user.isAdmin) {
+      throw new ForbiddenException('Unauthorised');
+    }
+    return this.fw.createSystemWithdrawal(body, req.user._id);
+  }
+
   @Get('verify-payin/:txRef')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Verify a payin status by txRef' })

@@ -52,6 +52,8 @@ import { PaymentModule } from 'src/payment/payment.module';
 import { InvoiceModule } from 'src/invoice/invoice.module';
 import { Gateway, GatewaySchema } from 'src/gateway/gateway.schema';
 import { CryptService } from 'src/dev/crypt.service';
+import { SystemBalanceModule } from 'src/system-balance/system-balance.module';
+import { SystemBalanceService } from 'src/system-balance/system-balance.service';
 
 @Module({
   imports: [
@@ -67,6 +69,7 @@ import { CryptService } from 'src/dev/crypt.service';
     forwardRef(() => PaymentRequestModule),
     forwardRef(() => InvoiceModule),
     SystemModule,
+    SystemBalanceModule,
     AppCacheModule,
     MongooseModule.forFeature([
       { name: Payin.name, schema: PayinSchema },
@@ -93,6 +96,7 @@ import { CryptService } from 'src/dev/crypt.service';
     PayoutService,
     TransactionService,
     BalanceService,
+    SystemBalanceService,
     UserService,
     SubscriptionService,
     ItemService,

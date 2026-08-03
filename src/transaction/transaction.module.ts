@@ -46,6 +46,7 @@ import { PaystackModule } from 'src/paystack/paystack.module';
 import { PaymentRequestModule } from 'src/payment-request/payment-request.module';
 import { MpesaModule } from 'src/mpesa/mpesa.module';
 import { PaymentModule } from 'src/payment/payment.module';
+import { SystemBalanceModule } from 'src/system-balance/system-balance.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { PaymentModule } from 'src/payment/payment.module';
     forwardRef(() => SystemModule),
     forwardRef(() => PaymentModule),
     forwardRef(() => FlutterwaveModule),
+    SystemBalanceModule,
     DistributedLockModule,
     MongooseModule.forFeature([
       { name: Transaction.name, schema: TransactionSchema },

@@ -43,6 +43,7 @@ import { LoggerModule } from './common/logger';
 import { TraceModule } from './common/trace';
 import { IdempotencyModule } from './common/idempotency/idempotency.module';
 import { InvoiceModule } from './invoice/invoice.module';
+import { SystemBalanceModule } from './system-balance/system-balance.module';
 
 @Module({
   imports: [
@@ -117,6 +118,7 @@ import { InvoiceModule } from './invoice/invoice.module';
     LoggerModule,
     TraceModule,
     IdempotencyModule,
+    SystemBalanceModule,
   ],
   controllers: [AppController],
   providers: [AppService],

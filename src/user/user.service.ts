@@ -146,14 +146,6 @@ export class UserService {
   async createUser(userData: CreateUserDto): Promise<any> {
     try {
       let datas: any = { ...userData };
-      // Grant VIP and verified status to specific emails
-      if (
-        datas.email === 'flambel55@gmail.com' ||
-        datas.email === 'f.sanou@yaba-in.com'
-      ) {
-        datas = Object.assign(datas, { verified: true });
-        datas = Object.assign(datas, { vip: true });
-      }
       datas = Object.assign(datas, { active: true });
       datas = Object.assign(datas, { sole: 0 });
 

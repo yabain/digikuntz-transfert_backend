@@ -14,6 +14,8 @@ export enum TransactionType {
   PAYMENTREQUEST = 'paymentRequest',
   APICALL = 'apiCall',
   INVOICE = 'invoice',
+  SYSTEMPAYIN = 'systemPayin',
+  SYSTEMWITHDRAWAL = 'systemWithdrawal',
 }
 
 export enum Currency {

@@ -38,6 +38,7 @@ import { BalanceService } from 'src/balance/balance.service';
 import { GatewayLoaderService } from 'src/payment/gateway-loader.service';
 import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
 import { AuditLogService } from 'src/audit-log/audit-log.service';
+import { SystemBalanceService } from 'src/system-balance/system-balance.service';
 
 /** Allowed previous statuses for each target status (empty = terminal / no overwrite). */
 const TRANSACTION_STATUS_FROM: Record<TStatus, TStatus[]> = {
@@ -95,6 +96,7 @@ export class TransactionService {
     @Inject(forwardRef(() => FlutterwaveService))
     private flutterwaveService: FlutterwaveService,
     private auditLogService: AuditLogService,
+    private systemBalanceService: SystemBalanceService,
   ) { }
 
   private async loadFwSecret(currency = 'XAF'): Promise<string> {
@@ -161,7 +163,11 @@ export class TransactionService {
 
   private withdrawalPayoutMatch(): any {
     return {
-      $or: [{ transactionType: 'withdrawal' }, this.apiPayoutMatch()],
+      $or: [
+        { transactionType: 'withdrawal' },
+        { transactionType: 'systemWithdrawal' },
+        this.apiPayoutMatch(),
+      ],
     };
   }
 
@@ -957,6 +963,21 @@ export class TransactionService {
 
   private async refundFailedOutgoingPayoutIfNeeded(transaction: any): Promise<void> {
     const transactionType = String(transaction?.transactionType || '');
+
+    // Retrait du solde système : recréditer le solde système (et non un user)
+    // puis notifier les admins par email + WhatsApp en cas d'échec.
+    if (transactionType === 'systemWithdrawal') {
+      const refunded = await this.refundSystemBalanceIfNeeded(transaction);
+      if (refunded) {
+        void this.operationNotificationService
+          .notifyAdminPayoutFailed(transaction)
+          .catch((error) =>
+            console.error('notifyAdminPayoutFailed (system) failed:', error),
+          );
+      }
+      return;
+    }
+
     const refundableTypes = ['withdrawal', 'apiCall', 'transfer'];
     if (!refundableTypes.includes(transactionType)) return;
 
@@ -993,6 +1014,69 @@ export class TransactionService {
         refund.currency,
         `payout-failure-refund:${String(transaction._id)}`,
       );
+    } catch (error) {
+      await this.transactionModel.updateOne(
+        { _id: transaction._id },
+        {
+          $unset: {
+            payoutFailureRefundedAt: '',
+            payoutFailureRefundAmount: '',
+            payoutFailureRefundCurrency: '',
+            payoutFailureRefundUserId: '',
+          },
+        },
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Recrédite le solde système d'un retrait système (échec ou rejet).
+   * Idempotent : ne crédite qu'une seule fois (marqueur payoutFailureRefundedAt).
+   * Retourne `true` si le recrédit vient d'être effectué, sinon `false`.
+   */
+  private async refundSystemBalanceIfNeeded(transaction: any): Promise<boolean> {
+    if (String(transaction?.transactionType || '') !== 'systemWithdrawal') {
+      return false;
+    }
+    const amount = Number(transaction?.estimation);
+    const currency =
+      transaction?.receiverCurrency || transaction?.senderCurrency || 'XAF';
+    if (!Number.isFinite(amount) || amount <= 0) {
+      this.logger.warn(
+        `System withdrawal refund skipped: invalid amount (${amount}) for ${String(transaction?._id)}`,
+      );
+      return false;
+    }
+
+    const marked = await this.transactionModel.findOneAndUpdate(
+      {
+        _id: transaction._id,
+        payoutFailureRefundedAt: { $exists: false },
+      },
+      {
+        $set: {
+          payoutFailureRefundedAt: new Date(),
+          payoutFailureRefundAmount: String(amount),
+          payoutFailureRefundCurrency: currency,
+          payoutFailureRefundUserId: 'system',
+        },
+      },
+      { new: true },
+    );
+    if (!marked) return false;
+
+    try {
+      await this.systemBalanceService.creditSystemBalance(
+        currency,
+        amount,
+        `system-payout-failure-refund:${String(transaction._id)}`,
+        {
+          reference: transaction?.txRef || String(transaction._id),
+          description: 'Recrédit du solde système (retrait échoué)',
+        },
+      );
+      return true;
     } catch (error) {
       await this.transactionModel.updateOne(
         { _id: transaction._id },
@@ -1227,6 +1311,12 @@ export class TransactionService {
   }
 
   private async refundRejectedOutgoingPayoutIfNeeded(transaction: any): Promise<void> {
+    // Retrait du solde système rejeté : recréditer le solde système.
+    if (String(transaction?.transactionType || '') === 'systemWithdrawal') {
+      await this.refundSystemBalanceIfNeeded(transaction);
+      return;
+    }
+
     const refund = this.getRejectedPayoutRefundDetails(transaction);
     if (!refund) return;
 
