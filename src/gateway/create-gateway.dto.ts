@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsIn, IsOptional, IsBoolean, IsObject } from 'class-validator';
+import { IsString, IsIn, IsOptional, IsBoolean, IsObject, IsNumber, Min } from 'class-validator';
 
 export class CreateGatewayDto {
   @ApiProperty({ example: 'Flutterwave XAF' })
@@ -34,4 +34,15 @@ export class CreateGatewayDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiProperty({
+    example: 3,
+    required: false,
+    description:
+      'Commission (%) prélevée par le provider gateway sur chaque transaction réussie',
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  providerCommission?: number;
 }

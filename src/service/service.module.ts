@@ -56,6 +56,7 @@ import { PaystackModule } from 'src/paystack/paystack.module';
 import { PaymentRequestModule } from 'src/payment-request/payment-request.module';
 import { MpesaModule } from 'src/mpesa/mpesa.module';
 import { PaymentModule } from 'src/payment/payment.module';
+import { SystemBalanceModule } from 'src/system-balance/system-balance.module';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { PaymentModule } from 'src/payment/payment.module';
     forwardRef(() => SubscriptionModule),
     forwardRef(() => SystemModule),
     forwardRef(() => PaymentModule),
+    SystemBalanceModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       inject: [ConfigService],

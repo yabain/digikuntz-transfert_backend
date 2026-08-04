@@ -333,7 +333,7 @@ export class FlutterwaveController {
     if (!req.user.isAdmin) {
       throw new ForbiddenException('Unauthorised');
     }
-    return this.fw.createSystemPayin(body, req.user._id);
+    return this.fw.createSystemPayin(body, req.user);
   }
 
   // Retrait du solde système : débite le solde, crée une transaction
@@ -367,7 +367,7 @@ export class FlutterwaveController {
     if (!req.user.isAdmin) {
       throw new ForbiddenException('Unauthorised');
     }
-    return this.fw.createSystemWithdrawal(body, req.user._id);
+    return this.fw.createSystemWithdrawal(body, req.user);
   }
 
   @Get('verify-payin/:txRef')

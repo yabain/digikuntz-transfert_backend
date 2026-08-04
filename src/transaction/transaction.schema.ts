@@ -82,6 +82,9 @@ export class Transaction {
   paymentStatus: string;
 
   @Prop()
+  gatewayId: string;
+
+  @Prop()
   paymentWithTaxes: string;
 
   @Prop()

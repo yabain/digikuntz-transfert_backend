@@ -1074,6 +1074,14 @@ export class TransactionService {
         {
           reference: transaction?.txRef || String(transaction._id),
           description: 'Recrédit du solde système (retrait échoué)',
+          transactionId: String(transaction._id),
+          amountCollected: amount,
+          amountCredited: amount,
+          performedBy: {
+            userId: String(transaction?.senderId || transaction?.userId || ''),
+            name: String(transaction?.senderName || '').trim(),
+            email: String(transaction?.senderEmail || '').trim(),
+          },
         },
       );
       return true;

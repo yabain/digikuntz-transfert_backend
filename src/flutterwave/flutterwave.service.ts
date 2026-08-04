@@ -453,8 +453,23 @@ export class FlutterwaveService {
     }
   }
 
+  /** Nom d'affichage de l'utilisateur (personal => prénom + nom, sinon nom d'entité) */
+  private userDisplayName(user: any): string {
+    if (!user) return '';
+    const first = String(user?.firstName || '').trim();
+    const last = String(user?.lastName || '').trim();
+    if (first || last) return `${first} ${last}`.trim();
+    return String(user?.name || '').trim();
+  }
+
   // ---------- Pay-In (Hosted Payment) ----------
-  async createSystemPayin(body: any, userId: string) {
+  async createSystemPayin(body: any, user: any) {    const userId = String(user?._id || '');
+    if (!userId) {
+      throw new HttpException(
+        { status: HttpStatus.BAD_REQUEST, error: 'User not found' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
     const currency = String(body?.currency || '').toUpperCase();
     const amount = Number(body?.amount);
     if (!currency || !Number.isFinite(amount) || amount <= 0) {
@@ -463,6 +478,13 @@ export class FlutterwaveService {
         HttpStatus.BAD_REQUEST,
       );
     }
+
+    // Appliquer les limites de transaction de la devise (dépôt)
+    await this.transactionService.validateTransactionLimit(
+      amount,
+      currency,
+      'deposit',
+    );
 
     // Router le payin vers la passerelle active de la devise
     // (Flutterwave / Paystack / M-Pesa) comme pour un payin classique.
@@ -476,6 +498,16 @@ export class FlutterwaveService {
       );
     }
 
+    // Détails de l'administrateur qui effectue la recharge
+    const adminName = this.userDisplayName(user);
+    const adminEmail = String(user?.email || '').trim();
+    const adminPhone = String(user?.phone || '').trim();
+
+    // Commission (%) prélevée par le provider gateway : le paiement est
+    // initié à `montant + montant*commission%` (ex. 100 XAF @ 3% → 103),
+    // mais le solde système n'est crédité que du montant de base.
+    const commissionRate = Number(gateway?.providerCommission) || 0;
+
     const raw = {
       transactionType: 'systemPayin',
       status: TStatus.PAYINPENDING,
@@ -484,19 +516,69 @@ export class FlutterwaveService {
       receiverCurrency: currency,
       senderId: userId,
       userId,
-      senderName: 'Système',
-      senderEmail: body?.email || undefined,
-      senderContact: body?.phone || undefined,
+      senderName: adminName || 'Système',
+      senderEmail: adminEmail || body?.email || undefined,
+      senderContact: adminPhone || body?.phone || undefined,
+      receiverName: 'System',
+      receiverId: userId,
       raisonForTransfer: body?.description || 'Recharge du solde système',
-      noFees: true,
+      noFees: commissionRate <= 0,
+      invoiceTaxes: commissionRate,
       gatewayId: String(gateway._id),
       redirectUrl: body?.redirectUrl,
     };
 
-    return this.createPayin(raw, userId);
+    const payin = await this.createPayin(raw, userId);
+
+    // Création immédiate du mouvement de solde en `status: pending` : il est
+    // visible dans la liste /system-balance dès la création du payin, et son
+    // statut évolue en temps réel avec la transaction (`completed` à la
+    // confirmation via `creditSystemBalance`, `failed`/`cancelled` sinon).
+    // Le solde n'est crédité qu'à la confirmation, du montant de base.
+    try {
+      const transactionId = String(payin?.transactionId || '');
+      if (transactionId) {
+        const saved = await this.transactionService
+          .findById(transactionId)
+          .catch(() => null);
+        const commissionAmount =
+          commissionRate > 0
+            ? Math.max(Math.ceil((amount * commissionRate) / 100), 0)
+            : 0;
+        await this.systemBalanceService.createPendingMovement({
+          key: `system-payin-credit:${transactionId}`,
+          type: 'in',
+          amount,
+          currency,
+          transactionId,
+          reference: String(payin?.txRef || ''),
+          description: body?.description || 'Recharge du solde système',
+          amountCollected:
+            Number(saved?.paymentWithTaxes) || amount + commissionAmount,
+          gatewayFee: 0,
+          providerCommission: Number(saved?.taxesAmount) || commissionAmount,
+          amountCredited: amount,
+          performedBy: { userId, name: adminName, email: adminEmail },
+        });
+      }
+    } catch (err) {
+      this.logger.warn(
+        'createSystemPayin: pending movement creation failed',
+        err,
+      );
+    }
+
+    return payin;
   }
 
-  async createSystemWithdrawal(body: any, userId: string) {
+  async createSystemWithdrawal(body: any, user: any) {
+    const userId = String(user?._id || '');
+    if (!userId) {
+      throw new HttpException(
+        { status: HttpStatus.BAD_REQUEST, error: 'User not found' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
     const currency = String(body?.currency || '').toUpperCase();
     const amount = Number(body?.amount);
     if (!currency || !Number.isFinite(amount) || amount <= 0) {
@@ -506,15 +588,22 @@ export class FlutterwaveService {
       );
     }
     const paymentMethod = String(body?.paymentMethod || '').toUpperCase();
-    if (!['OM', 'MTN', 'BANK'].includes(paymentMethod)) {
+    if (!['OM', 'MTN', 'MPESA', 'BANK'].includes(paymentMethod)) {
       throw new HttpException(
         {
           status: HttpStatus.BAD_REQUEST,
-          error: 'Invalid payment method (OM, MTN or BANK)',
+          error: 'Invalid payment method (OM, MTN, MPESA or BANK)',
         },
         HttpStatus.BAD_REQUEST,
       );
     }
+
+    // Appliquer les limites de transaction de la devise (retrait)
+    await this.transactionService.validateTransactionLimit(
+      amount,
+      currency,
+      'withdrawal',
+    );
 
     // Vérifier que le solde système est suffisant
     const balance = await this.systemBalanceService.getSystemBalance(currency);
@@ -525,12 +614,10 @@ export class FlutterwaveService {
       );
     }
 
-    // Débiter le solde système (idempotent via clé unique)
-    const debitKey = `system-withdraw:${Date.now()}:${Math.random().toString(36).slice(2)}`;
-    await this.systemBalanceService.debitSystemBalance(currency, amount, debitKey, {
-      reference: '',
-      description: `Retrait du solde système (${paymentMethod})`,
-    });
+    // Détails de l'administrateur qui effectue le retrait
+    const adminName = this.userDisplayName(user);
+    const adminEmail = String(user?.email || '').trim();
+    const performedBy = { userId, name: adminName, email: adminEmail };
 
     const txRef = this.payoutService.generateTxRef('txPayout');
     const raw = {
@@ -538,11 +625,13 @@ export class FlutterwaveService {
       userId,
       senderId: userId,
       receiverId: userId,
-      senderName: 'Système',
+      senderName: adminName || 'Système',
+      senderEmail: adminEmail || undefined,
+      senderContact: String(user?.phone || '').trim() || undefined,
       senderCurrency: currency,
       receiverCurrency: currency,
       receiverCountryCode: body?.receiverCountryCode,
-      receiverName: body?.receiverName || 'Système',
+      receiverName: body?.receiverName || adminName || 'Système',
       paymentMethod,
       bankCode: body?.receiverBankCode,
       bankAccountNumber: body?.receiverAccountNumber || body?.receiverPhone,
@@ -554,28 +643,41 @@ export class FlutterwaveService {
       noFees: true,
     };
 
+    // Créer d'abord la transaction (permet de référencer son id dans le mouvement),
+    // puis débiter le solde système (idempotent via clé unique = id de transaction).
+    let saved: any;
     try {
-      const saved = await this.transactionService.createTransaction(raw);
+      saved = await this.transactionService.createTransaction(raw);
       if (!saved) {
         throw new NotFoundException('Error to save transaction details');
       }
+    } catch (error) {
+      throw error;
+    }
+
+    try {
+      await this.systemBalanceService.debitSystemBalance(
+        currency,
+        amount,
+        `system-withdraw:${String(saved._id)}`,
+        {
+          reference: txRef,
+          description: `Retrait du solde système (${paymentMethod})`,
+          transactionId: String(saved._id),
+          amountCollected: amount,
+          amountCredited: amount,
+          performedBy,
+        },
+      );
       // Informer les admins qu'un retrait du solde système attend validation
       void this.operationNotificationService
         .notifyAdminPayoutPending(saved)
         .catch(() => undefined);
       return { status: 'pending', transactionId: saved._id, txRef };
     } catch (error) {
-      // Reverser le débit si la transaction n'a pas pu être créée
-      await this.systemBalanceService
-        .creditSystemBalance(
-          currency,
-          amount,
-          `system-withdraw-reversal:${Date.now()}:${Math.random().toString(36).slice(2)}`,
-          {
-            reference: '',
-            description: 'Rétablissement du solde système (échec création retrait)',
-          },
-        )
+      // Débit échoué → retirer la transaction créée (pas de paiement sans fonds)
+      await this.transactionService
+        .deleteTransaction(String(saved._id))
         .catch(() => undefined);
       throw error;
     }
@@ -1245,6 +1347,10 @@ export class FlutterwaveService {
         this.tStatus.PAYINCLOSED,
         payin.raw.data,
       );
+      await this.systemBalanceService.updateMovementStatusByTransaction(
+        String(payin.transactionId),
+        'cancelled',
+      );
       return { message: 'Payin already cancelled', status: 'cancelled' };
     }
 
@@ -1260,6 +1366,10 @@ export class FlutterwaveService {
         );
       }
       await this.payinService.updatePayinStatus(txRef, 'cancelled');
+      await this.systemBalanceService.updateMovementStatusByTransaction(
+        String(payin.transactionId),
+        'cancelled',
+      );
       return { message: 'Payin cancelled', status: 'cancelled' };
     }
 
@@ -1280,6 +1390,10 @@ export class FlutterwaveService {
         }
         // console.log('transactionUpdated: ', transactionUpdated);
         await this.payinService.updatePayinStatus(txRef, 'failed');
+        await this.systemBalanceService.updateMovementStatusByTransaction(
+          String(payin.transactionId),
+          'failed',
+        );
         return { message: 'Payin failed', status: 'failed' };
       } catch {
         return {
@@ -1424,7 +1538,8 @@ export class FlutterwaveService {
     // Le crédit du solde est idempotent (clé balance_movements unique) :
     // il s'exécute même si la transaction a déjà été réclamée, afin de
     // réparer les paiements crédités jamais (ex. claim passé sans crédit).
-    // Si l'écriture existe déjà, on saute le crédit (pas de double $inc).
+    // S'il existe déjà (créé en `pending` à la création du payin), il est
+    // passé à `completed` et le crédit est appliqué une seule fois.
     const isSystemPayin = transaction.transactionType === 'systemPayin';
     const isUserCreditType =
       transaction.transactionType !== 'withdrawal' &&
@@ -1432,28 +1547,37 @@ export class FlutterwaveService {
       !isSystemPayin;
 
     if (isSystemPayin) {
-      // Recharge du solde système : créditer le montant TOTAL encaissé
-      // (pas de frais appliqués pour cette recharge).
-      const systemAmount =
-        Number(transaction.paymentWithTaxes) ||
-        Number(transaction.estimation) ||
-        0;
+      // Recharge du solde système : créditer le montant de BASE (estimation),
+      // la commission du provider gateway ayant déjà été prélevée sur le
+      // montant encaissé (paymentWithTaxes = estimation + commission).
+      const systemAmount = Number(transaction.estimation) || 0;
       if (systemAmount > 0) {
         const systemKey = `system-payin-credit:${transactionId}`;
         try {
-          const alreadyCredited =
-            await this.systemBalanceService.hasMovementKey(systemKey);
-          if (!alreadyCredited) {
-            await this.systemBalanceService.creditSystemBalance(
-              transaction.senderCurrency || transaction.receiverCurrency,
-              systemAmount,
-              systemKey,
-              {
-                reference: transaction.txRef || transactionId,
-                description: 'Recharge du solde système',
+          const collected = Number(transaction.paymentWithTaxes) || systemAmount;
+          const commission = Math.max(
+            Number(transaction.taxesAmount) || 0,
+            0,
+          );
+          await this.systemBalanceService.creditSystemBalance(
+            transaction.senderCurrency || transaction.receiverCurrency,
+            systemAmount,
+            systemKey,
+            {
+              reference: transaction.txRef || transactionId,
+              description: 'Recharge du solde système',
+              transactionId,
+              amountCollected: collected,
+              gatewayFee: 0,
+              providerCommission: commission,
+              amountCredited: systemAmount,
+              performedBy: {
+                userId: String(transaction.senderId || transaction.userId || ''),
+                name: String(transaction.senderName || '').trim(),
+                email: String(transaction.senderEmail || '').trim(),
               },
-            );
-          }
+            },
+          );
         } catch (err) {
           this.logger.warn(
             'processSuccessfulPayin: system payin credit failed',
@@ -1483,25 +1607,51 @@ export class FlutterwaveService {
         );
       }
 
-      // Créditer le solde système du montant des frais (taxes) prélevés lors
-      // de l'encaissement. Idempotent (clé système unique) : relançable par le
-      // cron de réconciliation sans double écriture.
-      const systemFees = Number(transaction.taxesAmount) || 0;
-      if (systemFees > 0) {
+      // Créditer le solde système de la MARGE sur les frais encaissés :
+      // (taxes encaissées) − (commission prélevée par le provider gateway).
+      // Idempotent (clé système unique) : relançable par le cron de
+      // réconciliation sans double écriture.
+      const feesAmount = Number(transaction.taxesAmount) || 0;
+      if (feesAmount > 0) {
         const systemKey = `system-fees-credit:${transactionId}`;
         try {
           const alreadyCredited =
             await this.systemBalanceService.hasMovementKey(systemKey);
           if (!alreadyCredited) {
-            await this.systemBalanceService.creditSystemBalance(
-              transaction.senderCurrency || transaction.receiverCurrency,
-              systemFees,
-              systemKey,
-              {
-                reference: transaction.txRef || transactionId,
-                description: `Frais d'encaissement`,
-              },
-            );
+            let commission = 0;
+            try {
+              const gw = transaction.gatewayId
+                ? await this.gatewayModel
+                    .findById(transaction.gatewayId)
+                    .lean()
+                    .exec()
+                : null;
+              const rate = Number(gw?.providerCommission) || 0;
+              if (rate > 0) {
+                const base = Number(transaction.estimation) || 0;
+                commission = Math.ceil((base * rate) / 100);
+              }
+            } catch {
+              commission = 0;
+            }
+            const systemCredit = feesAmount - commission;
+            if (systemCredit > 0) {
+              await this.systemBalanceService.creditSystemBalance(
+                transaction.senderCurrency || transaction.receiverCurrency,
+                systemCredit,
+                systemKey,
+                {
+                  reference: transaction.txRef || transactionId,
+                  description: `Frais d'encaissement`,
+                  transactionId,
+                  amountCollected:
+                    Number(transaction.paymentWithTaxes) || 0,
+                  gatewayFee: feesAmount,
+                  providerCommission: commission,
+                  amountCredited: systemCredit,
+                },
+              );
+            }
           }
         } catch (err) {
           this.logger.warn(

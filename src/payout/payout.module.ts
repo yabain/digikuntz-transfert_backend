@@ -27,6 +27,7 @@ import { ServicePaymentModule } from 'src/service/service-payment/service-paymen
 import { PaymentModule } from 'src/payment/payment.module';
 import { FlutterwaveModule } from 'src/flutterwave/flutterwave.module';
 import { DistributedLockModule } from 'src/distributed-lock/distributed-lock.module';
+import { SystemBalanceModule } from 'src/system-balance/system-balance.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { DistributedLockModule } from 'src/distributed-lock/distributed-lock.mod
     forwardRef(() => ServicePaymentModule),
     forwardRef(() => PaymentModule),
     forwardRef(() => FlutterwaveModule),
+    SystemBalanceModule,
     DistributedLockModule,
     MongooseModule.forFeature([
       { name: Payin.name, schema: PayinSchema },

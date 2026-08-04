@@ -40,6 +40,11 @@ export class Gateway extends Document {
   @Prop({ default: true })
   isActive: boolean;
 
+  /** Commission (%) prélevée par le provider gateway (Flutterwave, Paystack, M-Pesa)
+   *  sur chaque transaction réussie. Utilisée lors du crédit du solde système. */
+  @Prop({ default: 0 })
+  providerCommission: number;
+
   @Prop({ type: Object, default: {} })
   balance: Record<string, any>;
 }
