@@ -894,6 +894,34 @@ export class PayinService {
         },
         { $unwind: { path: '$tx', preserveNullAndEmptyArrays: false } },
         { $match: { 'tx.transactionType': 'invoice' } },
+        {
+          $addFields: {
+            invoiceObjectId: {
+              $convert: {
+                input: '$tx.invoiceId',
+                to: 'objectId',
+                onError: null,
+                onNull: null,
+              },
+            },
+          },
+        },
+        {
+          $lookup: {
+            from: 'invoices',
+            localField: 'invoiceObjectId',
+            foreignField: '_id',
+            as: 'inv',
+          },
+        },
+        {
+          $match: {
+            $or: [
+              { $expr: { $not: { $gt: [{ $size: '$inv' }, 0] } } },
+              { 'inv.payed': { $ne: true, $exists: true } },
+            ],
+          },
+        },
         { $sort: { createdAt: -1 } },
         { $limit: limit },
       ])
