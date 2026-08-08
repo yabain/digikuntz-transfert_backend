@@ -129,21 +129,31 @@ export class AnnouncementsService {
 
     const recipients = [...byEmail.values()].map(formatRecipient);
     if (recipients.length === 0 && isQueued) {
-      for (const email of announcement.recipientEmails || []) {
-        if (String(email || '').trim()) {
-          recipients.push({
-            email: String(email).toLowerCase(),
-            userName: '',
-            userFirstName: '',
-            userLastName: '',
-            phone: '',
-            userPhone: '',
-            userId: '',
-            status: 'planned',
-            attempts: 0,
-            lastError: '',
-            sentAt: null,
-          });
+      const live = await this.resolveRecipients(
+        announcement.recipientGroup,
+        announcement.recipientEmails,
+      );
+      if (live.length) {
+        for (const r of live.slice(0, 100)) {
+          recipients.push(formatRecipient({ ...r, status: 'planned' }));
+        }
+      } else {
+        for (const email of announcement.recipientEmails || []) {
+          if (String(email || '').trim()) {
+            recipients.push({
+              email: String(email).toLowerCase(),
+              userName: '',
+              userFirstName: '',
+              userLastName: '',
+              phone: '',
+              userPhone: '',
+              userId: '',
+              status: 'planned',
+              attempts: 0,
+              lastError: '',
+              sentAt: null,
+            });
+          }
         }
       }
     }
@@ -237,6 +247,11 @@ export class AnnouncementsService {
     });
 
     if (sendNow) return this.sendAnnouncement(String(announcement._id));
+
+    const recipients = await this.resolveRecipients(recipientGroup ?? undefined, recipientEmails);
+    announcement.recipientCount = recipients.length;
+    announcement.recipientsSnapshot = recipients.slice(0, 100) as any[];
+    await announcement.save();
     return announcement;
   }
 
@@ -279,6 +294,15 @@ export class AnnouncementsService {
     announcement.status = announcement.scheduledAt
       ? AnnouncementStatus.SCHEDULED
       : AnnouncementStatus.DRAFT;
+
+    const recipients = await this.resolveRecipients(
+      announcement.recipientGroup,
+      announcement.recipientEmails,
+    );
+    announcement.recipientCount = recipients.length;
+    announcement.recipientsSnapshot = recipients.slice(0, 100) as any[];
+    announcement.successCount = announcement.successCount || 0;
+    announcement.failureCount = announcement.failureCount || 0;
     return announcement.save();
   }
 
@@ -286,6 +310,22 @@ export class AnnouncementsService {
     const announcement = await this.announcementModel.findById(id);
     if (!announcement) throw new NotFoundException('Announcement not found');
     if ([AnnouncementStatus.SENT, AnnouncementStatus.SENDING].includes(announcement.status)) {
+      throw new BadRequestException('Announcement already sent or sending');
+    }
+
+    // Transition atomique SENDING : une seule instance peut gagner la course
+    // (ex. instance #1 via le bouton, instance #2 via le cron programmé).
+    const claimed = await this.announcementModel.findOneAndUpdate(
+      {
+        _id: announcement._id,
+        status: {
+          $nin: [AnnouncementStatus.SENDING, AnnouncementStatus.SENT],
+        },
+      },
+      { $set: { status: AnnouncementStatus.SENDING } },
+      { new: true, select: { _id: 1 } },
+    );
+    if (!claimed) {
       throw new BadRequestException('Announcement already sent or sending');
     }
 
