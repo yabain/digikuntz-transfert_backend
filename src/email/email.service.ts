@@ -63,9 +63,9 @@ export class EmailService {
       tls: {
         rejectUnauthorized: true,
       },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
+      connectionTimeout: 6000,
+      greetingTimeout: 6000,
+      socketTimeout: 8000,
     });
   }
 
@@ -269,7 +269,7 @@ export class EmailService {
     );
   }
 
-  async proceedToSendEmail(to, subject, html, url?: string): Promise<boolean> {
+  async proceedToSendEmail(to, subject, html, url?: string, attachments?: any[]): Promise<boolean> {
     if (!(await this.isEmailNotificationsEnabled())) {
       throw new Error('Les notifications email sont désactivées. Activez emailNotificationsEnabled dans la collection system.');
     }
@@ -285,12 +285,21 @@ export class EmailService {
     const from = this.configService.get<string>('SMTP_USER');
     try {
       await this.ensureTransporterReady();
-      const resp: any = await this.transporter.sendMail({
+      const mailOptions: any = {
         from,
         to,
         subject,
         html,
-      });
+      };
+      if (attachments && attachments.length) {
+        mailOptions.attachments = attachments.map((att) => {
+          if (att && typeof att === 'object' && (att.filename || att.path || att.content)) {
+            return att;
+          }
+          return { path: att };
+        });
+      }
+      const resp: any = await this.transporter.sendMail(mailOptions);
 
       this.saveMail({ to, subject, from, status: true, body: url || html });
       return true;

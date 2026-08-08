@@ -19,6 +19,8 @@ import { TransactionModule } from './transaction/transaction.module';
 import { AlertModule } from './alert/alert.module';
 import { ExchangeModule } from './exchange/exchange.module';
 import { NewsletterModule } from './newsletter/newsletter.module';
+import { ProspectsModule } from './prospects/prospects.module';
+import { AnnouncementsModule } from './announcements/announcements.module';
 import { SubscriptionModule } from './plans/subscription/subscription.module';
 import { OptionsModule } from './plans/options/options.module';
 import { BalanceModule } from './balance/balance.module';
@@ -95,6 +97,8 @@ import { SystemBalanceModule } from './system-balance/system-balance.module';
     AlertModule,
     ExchangeModule,
     NewsletterModule,
+    ProspectsModule,
+    AnnouncementsModule,
     SubscriptionModule,
     OptionsModule,
     BalanceModule,

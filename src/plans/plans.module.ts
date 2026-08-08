@@ -58,6 +58,7 @@ import { PaymentRequestModule } from 'src/payment-request/payment-request.module
 import { MpesaModule } from 'src/mpesa/mpesa.module';
 import { PaymentModule } from 'src/payment/payment.module';
 import { SystemBalanceModule } from 'src/system-balance/system-balance.module';
+import { ProspectsModule } from 'src/prospects/prospects.module';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { SystemBalanceModule } from 'src/system-balance/system-balance.module';
     MpesaModule,
     forwardRef(() => PaymentModule),
     SystemBalanceModule,
+    ProspectsModule,
     AppCacheModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({

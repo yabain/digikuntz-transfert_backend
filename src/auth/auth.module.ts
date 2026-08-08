@@ -24,6 +24,7 @@ import { SmtpService } from 'src/email/smtp/smtp.service';
 import { SystemService } from 'src/system/system.service';
 import { System, SystemSchema } from 'src/system/system.schema';
 import { WhatsappModule } from 'src/wa/whatsapp.module';
+import { ProspectsModule } from 'src/prospects/prospects.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { WhatsappModule } from 'src/wa/whatsapp.module';
       { name: System.name, schema: SystemSchema },
     ]),
     forwardRef(() => WhatsappModule),
+    ProspectsModule,
   ],
   controllers: [AuthController],
   providers: [

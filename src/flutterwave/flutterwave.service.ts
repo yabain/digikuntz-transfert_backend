@@ -522,8 +522,7 @@ export class FlutterwaveService {
       receiverName: 'System',
       receiverId: userId,
       raisonForTransfer: body?.description || 'Recharge du solde système',
-      noFees: commissionRate <= 0,
-      invoiceTaxes: commissionRate,
+      noFees: true,
       gatewayId: String(gateway._id),
       redirectUrl: body?.redirectUrl,
     };
@@ -534,30 +533,28 @@ export class FlutterwaveService {
     // visible dans la liste /system-balance dès la création du payin, et son
     // statut évolue en temps réel avec la transaction (`completed` à la
     // confirmation via `creditSystemBalance`, `failed`/`cancelled` sinon).
-    // Le solde n'est crédité qu'à la confirmation, du montant de base.
+    // Le solde n'est crédité qu'à la confirmation, du montant de base MINUS
+    // la commission du provider gateway (ex. 15 XAF @ 3% → crédité 14.55).
     try {
       const transactionId = String(payin?.transactionId || '');
       if (transactionId) {
-        const saved = await this.transactionService
-          .findById(transactionId)
-          .catch(() => null);
         const commissionAmount =
           commissionRate > 0
             ? Math.max(Math.ceil((amount * commissionRate) / 100), 0)
             : 0;
+        const creditedAmount = Math.max(amount - commissionAmount, 0);
         await this.systemBalanceService.createPendingMovement({
           key: `system-payin-credit:${transactionId}`,
           type: 'in',
-          amount,
+          amount: creditedAmount,
           currency,
           transactionId,
           reference: String(payin?.txRef || ''),
           description: body?.description || 'Recharge du solde système',
-          amountCollected:
-            Number(saved?.paymentWithTaxes) || amount + commissionAmount,
+          amountCollected: amount,
           gatewayFee: 0,
-          providerCommission: Number(saved?.taxesAmount) || commissionAmount,
-          amountCredited: amount,
+          providerCommission: commissionAmount,
+          amountCredited: creditedAmount,
           performedBy: { userId, name: adminName, email: adminEmail },
         });
       }
@@ -1547,37 +1544,51 @@ export class FlutterwaveService {
       !isSystemPayin;
 
     if (isSystemPayin) {
-      // Recharge du solde système : créditer le montant de BASE (estimation),
-      // la commission du provider gateway ayant déjà été prélevée sur le
-      // montant encaissé (paymentWithTaxes = estimation + commission).
+      // Recharge du solde système : créditer le montant de BASE (estimation)
+      // moins la commission du provider gateway. Ex. estimation 15 @ 3% →
+      // 0.45 de commission provider, solde crédité de 14.55.
       const systemAmount = Number(transaction.estimation) || 0;
       if (systemAmount > 0) {
         const systemKey = `system-payin-credit:${transactionId}`;
         try {
+          let commission = 0;
+          try {
+            const gw = transaction.gatewayId
+              ? await this.gatewayModel
+                  .findById(transaction.gatewayId)
+                  .lean()
+                  .exec()
+              : null;
+            const rate = Number(gw?.providerCommission) || 0;
+            if (rate > 0) {
+              commission = Math.ceil((systemAmount * rate) / 100);
+            }
+          } catch {
+            commission = 0;
+          }
+          const amountCredited = Math.max(systemAmount - commission, 0);
           const collected = Number(transaction.paymentWithTaxes) || systemAmount;
-          const commission = Math.max(
-            Number(transaction.taxesAmount) || 0,
-            0,
-          );
-          await this.systemBalanceService.creditSystemBalance(
-            transaction.senderCurrency || transaction.receiverCurrency,
-            systemAmount,
-            systemKey,
-            {
-              reference: transaction.txRef || transactionId,
-              description: 'Recharge du solde système',
-              transactionId,
-              amountCollected: collected,
-              gatewayFee: 0,
-              providerCommission: commission,
-              amountCredited: systemAmount,
-              performedBy: {
-                userId: String(transaction.senderId || transaction.userId || ''),
-                name: String(transaction.senderName || '').trim(),
-                email: String(transaction.senderEmail || '').trim(),
+          if (amountCredited > 0) {
+            await this.systemBalanceService.creditSystemBalance(
+              transaction.senderCurrency || transaction.receiverCurrency,
+              amountCredited,
+              systemKey,
+              {
+                reference: transaction.txRef || transactionId,
+                description: 'Recharge du solde système',
+                transactionId,
+                amountCollected: collected,
+                gatewayFee: 0,
+                providerCommission: commission,
+                amountCredited,
+                performedBy: {
+                  userId: String(transaction.senderId || transaction.userId || ''),
+                  name: String(transaction.senderName || '').trim(),
+                  email: String(transaction.senderEmail || '').trim(),
+                },
               },
-            },
-          );
+            );
+          }
         } catch (err) {
           this.logger.warn(
             'processSuccessfulPayin: system payin credit failed',

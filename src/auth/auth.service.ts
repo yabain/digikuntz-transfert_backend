@@ -24,6 +24,7 @@ import { RevokedToken } from 'src/revoked-token/revoked-token.schema';
 import { EmailService } from 'src/email/email.service';
 import { WhatsappService } from 'src/wa/whatsapp.service';
 import { AuditLogService } from 'src/audit-log/audit-log.service';
+import { ProspectsService } from 'src/prospects/prospects.service';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { parseUserAgent } from 'src/common/user-agent.util';
@@ -44,6 +45,7 @@ export class AuthService {
     @Inject(forwardRef(() => WhatsappService))
     private whatsappService: WhatsappService,
     private auditLogService: AuditLogService,
+    private prospectsService: ProspectsService,
   ) { }
 
   /**
@@ -95,6 +97,13 @@ export class AuthService {
       }
 
       user = this.sanitizeUser(user); // Remove the resetPasswordToken from the response for security
+
+      // Supprimer le prospect correspondant (même email/phone) après création du compte
+      try {
+        await this.prospectsService.removeMatchingProspect(user.email, user.phone);
+      } catch {
+        // la suppression du prospect ne doit pas bloquer la création du compte
+      }
 
       const userName = user.name ? user.name : user.firstName + ' ' + user.lastName;;
 

@@ -93,6 +93,7 @@ export class SystemBalanceService {
 
     const setFields: any = {
       status: 'completed',
+      amount,
       reference: meta?.reference ?? '',
       description: meta?.description ?? '',
       amountCollected: meta?.amountCollected ?? 0,
@@ -191,6 +192,7 @@ export class SystemBalanceService {
 
     const setFields: any = {
       status: 'completed',
+      amount,
       reference: meta?.reference ?? '',
       description: meta?.description ?? '',
       amountCollected: meta?.amountCollected ?? amount,
@@ -339,13 +341,17 @@ export class SystemBalanceService {
     const skip = (page - 1) * limit;
 
     const filter: any = {};
-    if (options.currency) {
+    if (options.currency && !['undefined', 'null'].includes(options.currency)) {
       filter.currency = this.normalizeCurrency(options.currency);
     }
     if (options.type === 'in' || options.type === 'out') {
       filter.type = options.type;
     }
-    if (typeof options.keyword === 'string' && options.keyword.trim()) {
+    if (
+      typeof options.keyword === 'string' &&
+      options.keyword.trim() &&
+      !['undefined', 'null'].includes(options.keyword.trim())
+    ) {
       const kw = options.keyword.trim();
       const regex = { $regex: kw, $options: 'i' };
       filter.$or = [
