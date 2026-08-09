@@ -6,8 +6,7 @@ import { EmailController } from './email.controller';
 import { DateService } from './date.service';
 import { User, UserSchema } from 'src/user/user.schema';
 import { ConfigModule } from '@nestjs/config';
-import { SmtpService } from './smtp/smtp.service';
-import { Smtp, SmtpSchema } from './smtp/smtp.schema';
+import { SmtpModule } from './smtp/smtp.module';
 import { Email, EmailSchema } from './email.schema';
 import { System, SystemSchema } from 'src/system/system.schema';
 import { SystemService } from 'src/system/system.service';
@@ -18,12 +17,12 @@ import { SystemService } from 'src/system/system.service';
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: Email.name, schema: EmailSchema },
-      { name: Smtp.name, schema: SmtpSchema },
       { name: System.name, schema: SystemSchema },
     ]),
+    SmtpModule,
   ],
-  providers: [EmailService, DateService, SmtpService, SystemService],
+  providers: [EmailService, DateService, SystemService],
   controllers: [EmailController],
-  exports: [EmailService, DateService, SmtpService],
+  exports: [EmailService, DateService],
 })
 export class EmailModule {}

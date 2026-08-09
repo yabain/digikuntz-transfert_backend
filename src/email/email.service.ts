@@ -52,13 +52,16 @@ export class EmailService {
   async initializeTransporter(): Promise<void> {
     this.smtpData = await this.getTransporterData();
     this.alertEmail = this.getAlertDestination();
+    if (!this.smtpData || !this.smtpData.smtpHost || !this.smtpData.smtpUser || !this.smtpData.smtpPassword) {
+      throw new Error('SMTP configuration is missing. Please configure SMTP settings in the database.');
+    }
     this.transporter = nodemailer.createTransport({
-      host: this.smtpData.smtpHost || 'smtppro.zoho.com',
-      port: this.smtpData.smtpPort || '465',
-      secure: this.smtpData.smtpSecure || true,
+      host: this.smtpData.smtpHost,
+      port: Number(this.smtpData.smtpPort),
+      secure: this.smtpData.smtpSecure,
       auth: {
-        user: this.smtpData.smtpUser || 'payments@digikuntz.com',
-        pass: this.smtpData.smtpPassword || 'YD7pkyKyarD8',
+        user: this.smtpData.smtpUser,
+        pass: this.smtpData.smtpPassword,
       },
       tls: {
         rejectUnauthorized: true,
