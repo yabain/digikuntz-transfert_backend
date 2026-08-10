@@ -30,15 +30,15 @@ import { ItemService } from 'src/plans/item/item.service';
 import { OptionsService } from 'src/plans/options/options.service';
 import { Item, ItemSchema } from 'src/plans/item/item.shema';
 import { Plans, PlansSchema } from 'src/plans/plans.schema';
-import { EmailService } from 'src/email/email.service';
 import { Options, OptionsSchema } from 'src/plans/options/options.shema';
 import { Email, EmailSchema } from 'src/email/email.schema';
-import { DateService } from 'src/email/date.service';
-import { SmtpService } from 'src/email/smtp/smtp.service';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
 import { WhatsappModule } from 'src/wa/whatsapp.module';
 import { ServicePaymentService } from 'src/service/service-payment/service-payment.service';
-import { ServicePayment, ServicePaymentSchema } from 'src/service/service-payment/service-payment.schema';
+import {
+  ServicePayment,
+  ServicePaymentSchema,
+} from 'src/service/service-payment/service-payment.schema';
 import { AppCacheModule } from '../cache/cache.module';
 import { PlansModule } from 'src/plans/plans.module';
 import { SystemModule } from 'src/system/system.module';
@@ -51,12 +51,14 @@ import { PaymentMethodModule } from 'src/payment-method/payment-method.module';
 import { PaymentModule } from 'src/payment/payment.module';
 import { InvoiceModule } from 'src/invoice/invoice.module';
 import { Gateway, GatewaySchema } from 'src/gateway/gateway.schema';
-import { CryptService } from 'src/dev/crypt.service';
 import { SystemBalanceModule } from 'src/system-balance/system-balance.module';
 import { SystemBalanceService } from 'src/system-balance/system-balance.service';
+import { EmailModule } from 'src/email/email.module';
+import { CryptService } from 'src/dev/crypt.service';
 
 @Module({
   imports: [
+    EmailModule,
     ConfigModule,
     HttpModule,
     PaystackModule,
@@ -101,9 +103,6 @@ import { SystemBalanceService } from 'src/system-balance/system-balance.service'
     SubscriptionService,
     ItemService,
     OptionsService,
-    EmailService,
-    DateService,
-    SmtpService,
     ServicePaymentService,
     OperationNotificationService,
   ],

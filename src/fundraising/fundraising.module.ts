@@ -5,19 +5,18 @@ import { FlutterwaveModule } from 'src/flutterwave/flutterwave.module';
 import { OperationNotificationService } from 'src/notification/operation-notification.service';
 import { UserModule } from 'src/user/user.module';
 import { WhatsappModule } from 'src/wa/whatsapp.module';
-import { EmailService } from 'src/email/email.service';
-import { DateService } from 'src/email/date.service';
 import { Email, EmailSchema } from 'src/email/email.schema';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
-import { SmtpService } from 'src/email/smtp/smtp.service';
 import { User, UserSchema } from 'src/user/user.schema';
 import { FundraisingController } from './fundraising.controller';
 import { Donation, DonationSchema } from './donation.schema';
 import { Fundraising, FundraisingSchema } from './fundraising.schema';
 import { FundraisingService } from './fundraising.service';
+import { EmailModule } from 'src/email/email.module';
 
 @Module({
   imports: [
+    EmailModule,
     forwardRef(() => UserModule),
     BalanceModule,
     forwardRef(() => FlutterwaveModule),
@@ -31,13 +30,7 @@ import { FundraisingService } from './fundraising.service';
     ]),
   ],
   controllers: [FundraisingController],
-  providers: [
-    FundraisingService,
-    OperationNotificationService,
-    EmailService,
-    DateService,
-    SmtpService,
-  ],
+  providers: [FundraisingService, OperationNotificationService],
   exports: [FundraisingService],
 })
 export class FundraisingModule {}

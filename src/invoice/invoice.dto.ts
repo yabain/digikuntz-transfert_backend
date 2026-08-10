@@ -62,6 +62,20 @@ export class UpdateInvoiceDto {
   status?: InvoiceStatus;
 }
 
+export class MarkInvoicePaidDto {
+  @IsString()
+  @IsNotEmpty()
+  payerName: string;
+
+  @IsString()
+  @IsNotEmpty()
+  payerPhone: string;
+
+  @IsOptional()
+  @IsString()
+  payerEmail?: string;
+}
+
 export class InitiateInvoicePaymentDto {
   @IsString()
   @IsNotEmpty()

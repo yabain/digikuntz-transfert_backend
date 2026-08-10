@@ -4,14 +4,14 @@ import { ServiceController } from './service.controller';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from 'src/auth/auth.module';
 import { UserSchema, User } from 'src/user/user.schema';
-import { OptionsServiceSchema, OptionsService } from './options-service/options-service.shema';
+import {
+  OptionsServiceSchema,
+  OptionsService,
+} from './options-service/options-service.shema';
 import { ServiceSchema, Service } from './service.schema';
 import { UserService } from 'src/user/user.service';
-import { DateService } from 'src/email/date.service';
-import { EmailService } from 'src/email/email.service';
 import { OptionsServiceService } from './options-service/options-service.service';
 import { EmailSchema, Email } from 'src/email/email.schema';
-import { SmtpService } from 'src/email/smtp/smtp.service';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
 import { FlutterwaveModule } from 'src/flutterwave/flutterwave.module';
 import { HttpModule } from '@nestjs/axios';
@@ -40,8 +40,14 @@ import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { ServicePaymentService } from './service-payment/service-payment.service';
-import { ServicePayment, ServicePaymentSchema } from './service-payment/service-payment.schema';
-import { Subscription, SubscriptionSchema } from 'src/plans/subscription/subscription.schema';
+import {
+  ServicePayment,
+  ServicePaymentSchema,
+} from './service-payment/service-payment.schema';
+import {
+  Subscription,
+  SubscriptionSchema,
+} from 'src/plans/subscription/subscription.schema';
 import { ItemService } from 'src/plans/item/item.service';
 import { Item, ItemSchema } from 'src/plans/item/item.shema';
 import { OptionsService as PlansOptionsService } from 'src/plans/options/options.service';
@@ -58,9 +64,11 @@ import { MpesaModule } from 'src/mpesa/mpesa.module';
 import { PaymentModule } from 'src/payment/payment.module';
 import { SystemBalanceModule } from 'src/system-balance/system-balance.module';
 import { ProspectsModule } from 'src/prospects/prospects.module';
+import { EmailModule } from 'src/email/email.module';
 
 @Module({
   imports: [
+    EmailModule,
     forwardRef(() => AuthModule),
     forwardRef(() => WhatsappModule),
     forwardRef(() => FlutterwaveModule),
@@ -108,9 +116,6 @@ import { ProspectsModule } from 'src/prospects/prospects.module';
     ServiceService,
     UserService,
     OptionsServiceService,
-    EmailService,
-    DateService,
-    SmtpService,
     PayinService,
     PayoutService,
     TransactionService,

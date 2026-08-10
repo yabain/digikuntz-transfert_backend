@@ -8,12 +8,9 @@ import { OptionsSchema, Options } from './options/options.shema';
 import { ItemSchema, Item } from './item/item.shema';
 import { PlansSchema, Plans } from './plans.schema';
 import { UserService } from 'src/user/user.service';
-import { DateService } from 'src/email/date.service';
-import { EmailService } from 'src/email/email.service';
 import { ItemService } from './item/item.service';
 import { OptionsService } from './options/options.service';
 import { EmailSchema, Email } from 'src/email/email.schema';
-import { SmtpService } from 'src/email/smtp/smtp.service';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
 import { FlutterwaveModule } from 'src/flutterwave/flutterwave.module';
 import { HttpModule } from '@nestjs/axios';
@@ -47,7 +44,10 @@ import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { ServicePaymentService } from 'src/service/service-payment/service-payment.service';
-import { ServicePayment, ServicePaymentSchema } from 'src/service/service-payment/service-payment.schema';
+import {
+  ServicePayment,
+  ServicePaymentSchema,
+} from 'src/service/service-payment/service-payment.schema';
 import { AppCacheModule } from '../cache/cache.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { SystemModule } from 'src/system/system.module';
@@ -59,9 +59,11 @@ import { MpesaModule } from 'src/mpesa/mpesa.module';
 import { PaymentModule } from 'src/payment/payment.module';
 import { SystemBalanceModule } from 'src/system-balance/system-balance.module';
 import { ProspectsModule } from 'src/prospects/prospects.module';
+import { EmailModule } from 'src/email/email.module';
 
 @Module({
   imports: [
+    EmailModule,
     forwardRef(() => FlutterwaveModule),
     forwardRef(() => AuthModule),
     forwardRef(() => WhatsappModule),
@@ -109,9 +111,6 @@ import { ProspectsModule } from 'src/prospects/prospects.module';
     UserService,
     OptionsService,
     ItemService,
-    EmailService,
-    DateService,
-    SmtpService,
     PayinService,
     PayoutService,
     TransactionService,

@@ -10,11 +10,8 @@ import { OptionsSchema, Options } from '../options/options.shema';
 import { OptionsService } from '../options/options.service';
 import { Item, ItemSchema } from '../item/item.shema';
 import { ItemService } from '../item/item.service';
-import { EmailService } from 'src/email/email.service';
-import { DateService } from 'src/email/date.service';
 import { Plans, PlansSchema } from '../plans.schema';
 import { EmailSchema, Email } from 'src/email/email.schema';
-import { SmtpService } from 'src/email/smtp/smtp.service';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
 import { WhatsappModule } from 'src/wa/whatsapp.module';
 import { AppCacheModule } from '../../cache/cache.module';
@@ -22,9 +19,11 @@ import { PlansModule } from '../plans.module';
 import { TransactionModule } from 'src/transaction/transaction.module';
 import { OperationNotificationService } from 'src/notification/operation-notification.service';
 import { DistributedLockModule } from 'src/distributed-lock/distributed-lock.module';
+import { EmailModule } from 'src/email/email.module';
 
 @Module({
   imports: [
+    EmailModule,
     forwardRef(() => WhatsappModule),
     AppCacheModule,
     forwardRef(() => PlansModule),
@@ -46,9 +45,6 @@ import { DistributedLockModule } from 'src/distributed-lock/distributed-lock.mod
     UserService,
     OptionsService,
     ItemService,
-    EmailService,
-    DateService,
-    SmtpService,
     OperationNotificationService,
   ],
   controllers: [SubscriptionController],

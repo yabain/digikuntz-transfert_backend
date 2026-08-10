@@ -16,6 +16,7 @@ import { InvoiceService } from './invoice.service';
 import {
   CreateInvoiceDto,
   InitiateInvoicePaymentDto,
+  MarkInvoicePaidDto,
   UpdateInvoiceDto,
 } from './invoice.dto';
 
@@ -79,8 +80,9 @@ export class InvoiceController {
   @Post(':id/mark-paid')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(200)
-  markAsPaid(@Param('id') id: string, @Req() req: any) {
-    return this.invoiceService.markAsPaid(req.user._id, id);
+  @UsePipes(ValidationPipe)
+  markAsPaid(@Param('id') id: string, @Body() dto: MarkInvoicePaidDto, @Req() req: any) {
+    return this.invoiceService.markAsPaid(req.user._id, id, dto);
   }
 
   @Post(':id/pay')

@@ -19,7 +19,7 @@ import { SystemService } from 'src/system/system.service';
 import { PaymentMethodService } from 'src/payment-method/payment-method.service';
 import { Payin } from 'src/payin/payin.schema';
 import { Invoice, InvoiceItem, InvoiceStatus } from './invoice.schema';
-import { CreateInvoiceDto, UpdateInvoiceDto } from './invoice.dto';
+import { CreateInvoiceDto, MarkInvoicePaidDto, UpdateInvoiceDto } from './invoice.dto';
 import { EmailService } from 'src/email/email.service';
 
 export interface InvoiceStats {
@@ -300,9 +300,15 @@ export class InvoiceService {
   /**
    * Marque manuellement une facture comme payée (sans transaction de paiement).
    * Le payeur peut ainsi régler la facture hors-ligne (espèces, virement, etc.)
-   * et le commerçant la passe à l'état `payed` lui-même.
+   * et le commerçant la passe à l'état `payed` lui-même. Les informations du
+   * payeur saisies dans le formulaire (nom, téléphone, email optionnel) sont
+   * enregistrées sur la facture.
    */
-  async markAsPaid(userId: string, invoiceId: string): Promise<Invoice> {
+  async markAsPaid(
+    userId: string,
+    invoiceId: string,
+    dto: MarkInvoicePaidDto,
+  ): Promise<Invoice> {
     const invoice = await this.invoiceModel.findOne({
       _id: this.toObjectId(invoiceId),
       userId,
@@ -325,6 +331,9 @@ export class InvoiceService {
     invoice.paidManually = true;
     invoice.paymentStartedAt = undefined;
     invoice.paymentLink = undefined;
+    invoice.payerName = dto.payerName;
+    invoice.payerPhone = dto.payerPhone;
+    invoice.payerEmail = dto.payerEmail;
     await invoice.save();
 
     this.auditLogService.record({
@@ -342,6 +351,9 @@ export class InvoiceService {
         paidManually: true,
         paymentDate: invoice.paymentDate,
         totalAmount: invoice.totalAmount,
+        payerName: invoice.payerName,
+        payerPhone: invoice.payerPhone,
+        payerEmail: invoice.payerEmail,
       },
     });
 

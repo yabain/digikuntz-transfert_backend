@@ -12,20 +12,19 @@ import {
   RevokedToken,
   RevokedTokenSchema,
 } from '../revoked-token/revoked-token.schema';
-import { EmailService } from 'src/email/email.service';
-import { DateService } from 'src/email/date.service';
 // import { WhatsappService } from 'src/whatsapp/whatsapp.service';
 // import { WhatsappQr, WhatsappQrSchema } from 'src/whatsapp/whatsapp-qr.schema';
 import { Email, EmailSchema } from 'src/email/email.schema';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
-import { SmtpService } from 'src/email/smtp/smtp.service';
 import { SystemService } from 'src/system/system.service';
 import { System, SystemSchema } from 'src/system/system.schema';
 import { WhatsappModule } from 'src/wa/whatsapp.module';
 import { ProspectsModule } from 'src/prospects/prospects.module';
+import { EmailModule } from 'src/email/email.module';
 
 @Module({
   imports: [
+    EmailModule,
     HttpModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
@@ -50,14 +49,7 @@ import { ProspectsModule } from 'src/prospects/prospects.module';
     ProspectsModule,
   ],
   controllers: [AuthController],
-  providers: [
-    AuthService,
-    JwtStrategy,
-    EmailService,
-    DateService,
-    SmtpService,
-    SystemService,
-  ],
+  providers: [AuthService, JwtStrategy, SystemService],
   exports: [JwtStrategy, PassportModule, AuthService],
 })
 export class AuthModule {}

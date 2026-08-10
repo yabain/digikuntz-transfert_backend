@@ -31,14 +31,14 @@ import { PlansModule } from 'src/plans/plans.module';
 import { SubscriptionModule } from 'src/plans/subscription/subscription.module';
 import { SystemModule } from 'src/system/system.module';
 import { Email, EmailSchema } from 'src/email/email.schema';
-import { EmailService } from 'src/email/email.service';
 import { Options, OptionsSchema } from 'src/plans/options/options.shema';
-import { DateService } from 'src/email/date.service';
-import { SmtpService } from 'src/email/smtp/smtp.service';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
 import { WhatsappModule } from 'src/wa/whatsapp.module';
 import { ServicePaymentService } from 'src/service/service-payment/service-payment.service';
-import { ServicePayment, ServicePaymentSchema } from 'src/service/service-payment/service-payment.schema';
+import {
+  ServicePayment,
+  ServicePaymentSchema,
+} from 'src/service/service-payment/service-payment.schema';
 import { AppCacheModule } from '../cache/cache.module';
 import { OperationNotificationService } from 'src/notification/operation-notification.service';
 import { FundraisingModule } from 'src/fundraising/fundraising.module';
@@ -47,9 +47,11 @@ import { PaymentRequestModule } from 'src/payment-request/payment-request.module
 import { MpesaModule } from 'src/mpesa/mpesa.module';
 import { PaymentModule } from 'src/payment/payment.module';
 import { SystemBalanceModule } from 'src/system-balance/system-balance.module';
+import { EmailModule } from 'src/email/email.module';
 
 @Module({
   imports: [
+    EmailModule,
     ConfigModule,
     HttpModule,
     PaystackModule,
@@ -89,9 +91,6 @@ import { SystemBalanceModule } from 'src/system-balance/system-balance.module';
     UserService,
     ItemService,
     OptionsService,
-    EmailService,
-    DateService,
-    SmtpService,
     ServicePaymentService,
     OperationNotificationService,
   ],

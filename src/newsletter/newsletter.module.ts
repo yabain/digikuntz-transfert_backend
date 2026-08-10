@@ -4,15 +4,14 @@ import { NewsletterController } from './newsletter.controller';
 import { AuthModule } from 'src/auth/auth.module';
 import { MongooseModule } from '@nestjs/mongoose';
 import { NewsletterSchema } from './newsletter.schema';
-import { EmailService } from 'src/email/email.service';
-import { DateService } from 'src/email/date.service';
 import { EmailSchema, Email } from 'src/email/email.schema';
-import { SmtpService } from 'src/email/smtp/smtp.service';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
 import { SystemModule } from 'src/system/system.module';
+import { EmailModule } from 'src/email/email.module';
 
 @Module({
   imports: [
+    EmailModule,
     AuthModule,
     SystemModule,
     MongooseModule.forFeature([
@@ -21,7 +20,7 @@ import { SystemModule } from 'src/system/system.module';
       { name: Smtp.name, schema: SmtpSchema },
     ]),
   ],
-  providers: [NewsletterService, EmailService, DateService, SmtpService],
+  providers: [NewsletterService],
   controllers: [NewsletterController],
   exports: [NewsletterService],
 })

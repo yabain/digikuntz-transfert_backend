@@ -6,19 +6,21 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { User, UserSchema } from '../../user/user.schema';
 import { UserService } from '../../user/user.service';
 import { ServicePayment, ServicePaymentSchema } from './service-payment.schema';
-import { OptionsServiceSchema, OptionsService } from '../options-service/options-service.shema';
+import {
+  OptionsServiceSchema,
+  OptionsService,
+} from '../options-service/options-service.shema';
 import { OptionsServiceService } from '../options-service/options-service.service';
-import { EmailService } from 'src/email/email.service';
-import { DateService } from 'src/email/date.service';
 import { Service, ServiceSchema } from '../service.schema';
 import { EmailSchema, Email } from 'src/email/email.schema';
-import { SmtpService } from 'src/email/smtp/smtp.service';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
 import { WhatsappModule } from 'src/wa/whatsapp.module';
 import { AppCacheModule } from '../../cache/cache.module';
+import { EmailModule } from 'src/email/email.module';
 
 @Module({
   imports: [
+    EmailModule,
     forwardRef(() => AuthModule),
     forwardRef(() => WhatsappModule),
     AppCacheModule,
@@ -31,14 +33,7 @@ import { AppCacheModule } from '../../cache/cache.module';
       { name: Smtp.name, schema: SmtpSchema },
     ]),
   ],
-  providers: [
-    ServicePaymentService,
-    UserService,
-    OptionsServiceService,
-    EmailService,
-    DateService,
-    SmtpService,
-  ],
+  providers: [ServicePaymentService, UserService, OptionsServiceService],
   controllers: [ServicePaymentController],
   exports: [ServicePaymentService],
 })

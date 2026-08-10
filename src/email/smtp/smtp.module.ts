@@ -4,13 +4,14 @@ import { SmtpController } from './smtp.controller';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule } from '@nestjs/config';
 import { Smtp, SmtpSchema } from './smtp.schema';
+import { CryptService } from 'src/dev/crypt.service';
 
 @Module({
   imports: [
     ConfigModule,
     MongooseModule.forFeature([{ name: Smtp.name, schema: SmtpSchema }]),
   ],
-  providers: [SmtpService],
+  providers: [SmtpService, CryptService],
   controllers: [SmtpController],
   exports: [SmtpService],
 })

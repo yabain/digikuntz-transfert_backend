@@ -4,14 +4,13 @@ import { Prospect, ProspectSchema } from './prospect.schema';
 import { ProspectsController } from './prospects.controller';
 import { ProspectsPublicController } from './prospects-public.controller';
 import { ProspectsService } from './prospects.service';
-import { EmailService } from 'src/email/email.service';
-import { DateService } from 'src/email/date.service';
 import { Email, EmailSchema } from 'src/email/email.schema';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
-import { SmtpService } from 'src/email/smtp/smtp.service';
+import { EmailModule } from 'src/email/email.module';
 
 @Module({
   imports: [
+    EmailModule,
     MongooseModule.forFeature([
       { name: Prospect.name, schema: ProspectSchema },
       { name: Email.name, schema: EmailSchema },
@@ -19,7 +18,7 @@ import { SmtpService } from 'src/email/smtp/smtp.service';
     ]),
   ],
   controllers: [ProspectsController, ProspectsPublicController],
-  providers: [ProspectsService, EmailService, DateService, SmtpService],
+  providers: [ProspectsService],
   exports: [ProspectsService],
 })
 export class ProspectsModule {}
