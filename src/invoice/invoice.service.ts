@@ -298,6 +298,57 @@ export class InvoiceService {
   }
 
   /**
+   * Marque manuellement une facture comme payée (sans transaction de paiement).
+   * Le payeur peut ainsi régler la facture hors-ligne (espèces, virement, etc.)
+   * et le commerçant la passe à l'état `payed` lui-même.
+   */
+  async markAsPaid(userId: string, invoiceId: string): Promise<Invoice> {
+    const invoice = await this.invoiceModel.findOne({
+      _id: this.toObjectId(invoiceId),
+      userId,
+    });
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found');
+    }
+    if (invoice.payed) {
+      throw new ConflictException('This invoice is already paid.');
+    }
+    if (invoice.status === InvoiceStatus.ARCHIVED) {
+      throw new ConflictException(
+        'An archived invoice cannot be marked as paid.',
+      );
+    }
+
+    invoice.status = InvoiceStatus.PAYED;
+    invoice.payed = true;
+    invoice.paymentDate = new Date();
+    invoice.paidManually = true;
+    invoice.paymentStartedAt = undefined;
+    invoice.paymentLink = undefined;
+    await invoice.save();
+
+    this.auditLogService.record({
+      actorId: String(userId),
+      actorRole: 'user',
+      action: 'invoice.marked_paid_manually',
+      resourceType: 'invoice',
+      resourceId: String(invoice._id),
+      resourceLabel: this.label(invoice),
+      method: 'POST',
+      path: `/invoices/${invoiceId}/mark-paid`,
+      statusCode: 200,
+      metadata: {
+        status: invoice.status,
+        paidManually: true,
+        paymentDate: invoice.paymentDate,
+        totalAmount: invoice.totalAmount,
+      },
+    });
+
+    return invoice;
+  }
+
+  /**
    * Initie le paiement d'une facture (publique, sans authentification).
    * - Si la facture est déjà en cours de paiement (`paying`), on ne crée pas
    *   de nouvelle transaction : on renvoie le même lien de paiement déjà

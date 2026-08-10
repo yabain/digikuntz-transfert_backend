@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
+
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { PassportStrategy } from '@nestjs/passport';
@@ -50,7 +50,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     if (user.sessionInvalidatedAt && payload.iat) {
-      const invalidatedSeconds = new Date(user.sessionInvalidatedAt).getTime() / 1000;
+      const invalidatedSeconds =
+        new Date(user.sessionInvalidatedAt).getTime() / 1000;
       if (payload.iat <= invalidatedSeconds) {
         throw new UnauthorizedException();
       }

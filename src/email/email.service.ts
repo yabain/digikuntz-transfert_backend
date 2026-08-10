@@ -402,6 +402,50 @@ export class EmailService {
     );
   }
 
+  /**
+   * Envoie un code de vérification à 6 chiffres pour la double authentification.
+   */
+  async send2FACode(
+    toEmail: string,
+    language: string,
+    userName: string,
+    code: string,
+  ): Promise<boolean> {
+    if (!this.isEmailValide(toEmail)) return false;
+    const from = this.configService.get<string>('SMTP_USER');
+    const lang = language === 'fr' ? 'fr' : 'en';
+    const subject =
+      lang === 'fr'
+        ? 'Code de vérification — digiKUNTZ Payments'
+        : 'Verification code — digiKUNTZ Payments';
+    try {
+      const templateName = 'two-factor';
+      let templatePath = path.join(
+        this.templateFolder,
+        `${templateName}_${lang}.hbs`,
+      );
+      let templateSource: string;
+      try {
+        templateSource = fs.readFileSync(templatePath, 'utf8');
+      } catch {
+        templatePath = path.join(this.templateFolder, `${templateName}_en.hbs`);
+        templateSource = fs.readFileSync(templatePath, 'utf8');
+      }
+      const template = handlebars.compile(templateSource);
+      const html = template({ userName, code, frontUrl: this.frontUrl });
+      return await this.proceedToSendEmail(
+        toEmail,
+        subject,
+        html,
+        'Two-factor verification code',
+      );
+    } catch (error) {
+      console.warn("Erreur lors de l'envoi du code 2FA :", error);
+      this.saveMail({ to: toEmail, subject, from, status: false, body: error });
+      return false;
+    }
+  }
+
   // async sendPlansEmail(user: any, plansData: any): Promise<boolean> {
   //   const userName = user.name || `${user.firstName} ${user.lastName}`;
   //   const templateName = 'subscribe_MailForSubscriber';

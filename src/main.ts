@@ -13,6 +13,8 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { AppLogger } from './common/logger';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import * as crypto from 'crypto';
+import helmet from 'helmet';
+import * as express from 'express';
 
 // Patch pour crypto manquant dans cPanel
 if (!(global as any).crypto) {
@@ -151,10 +153,7 @@ function getAllowedCorsOrigins(): string[] {
     'capacitor://localhost',
     'ionic://localhost',
   ];
-  const developmentDefaults = [
-    ...productionDefaults,
-    'http://localhost:3000',
-  ];
+  const developmentDefaults = [...productionDefaults, 'http://localhost:3000'];
 
   const configured = String(process.env.CORS_ORIGINS || '')
     .split(',')
@@ -194,10 +193,43 @@ async function bootstrap() {
   });
 
   process.on('unhandledRejection', (reason, promise) => {
-    appLogger.error(`Unhandled Rejection at: ${String(promise)} reason: ${String(reason)}`);
+    appLogger.error(
+      `Unhandled Rejection at: ${String(promise)} reason: ${String(reason)}`,
+    );
   });
 
   const allowedCorsOrigins = getAllowedCorsOrigins();
+
+  // --- Sécurité HTTP (helmet) ---
+  const helmetOptions: any = {
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        'script-src': ["'self'", "'unsafe-inline'"],
+        'style-src': ["'self'", "'unsafe-inline'"],
+        'img-src': ["'self'", 'data:'],
+        'font-src': ["'self'", 'data:'],
+        'connect-src': ["'self'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  };
+  if (process.env.NODE_ENV !== 'production') {
+    // HSTS uniquement en production pour ne pas bloquer le dev en HTTP local
+    helmetOptions.strictTransportSecurity = false;
+  }
+  app.use(helmet(helmetOptions));
+
+  // Limite de taille des corps de requête JSON (anti-DoS)
+  app.use(express.json({ limit: '1mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+  // Utiliser le proxy (nginx) pour lire la vraie IP via X-Forwarded-For
+  app.set(
+    'trust proxy',
+    process.env.TRUST_PROXY ? Number(process.env.TRUST_PROXY) : 1,
+  );
+
   app.enableCors({
     origin: (origin, callback) => {
       // Non-browser integrations do not send Origin and are not controlled by CORS.
@@ -231,7 +263,10 @@ async function bootstrap() {
     optionsSuccessStatus: 204,
   });
   app.use((req, res, next) => {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader(
+      'Cache-Control',
+      'no-store, no-cache, must-revalidate, proxy-revalidate',
+    );
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
     next();

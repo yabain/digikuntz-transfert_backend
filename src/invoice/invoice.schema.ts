@@ -74,6 +74,9 @@ export class Invoice {
 
   @Prop({ lowercase: true, trim: true })
   payerEmail?: string;
+
+  @Prop({ default: false })
+  paidManually?: boolean;
 }
 
 export const InvoiceSchema = SchemaFactory.createForClass(Invoice);

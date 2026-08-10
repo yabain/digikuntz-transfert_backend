@@ -131,6 +131,18 @@ export class User extends Document {
 
   @Prop({ type: Date, default: null })
   sessionInvalidatedAt?: Date | null;
+
+  @Prop({ default: false })
+  twoFactorEnabled?: boolean;
+
+  @Prop()
+  twoFactorCode?: string;
+
+  @Prop({ type: Date, default: null })
+  twoFactorCodeExpiresAt?: Date | null;
+
+  @Prop({ default: 0 })
+  twoFactorAttempts?: number;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

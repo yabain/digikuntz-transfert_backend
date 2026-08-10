@@ -76,6 +76,13 @@ export class InvoiceController {
     return this.invoiceService.archive(req.user._id, id);
   }
 
+  @Post(':id/mark-paid')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(200)
+  markAsPaid(@Param('id') id: string, @Req() req: any) {
+    return this.invoiceService.markAsPaid(req.user._id, id);
+  }
+
   @Post(':id/pay')
   @HttpCode(200)
   @UsePipes(ValidationPipe)

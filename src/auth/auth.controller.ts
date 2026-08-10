@@ -1,14 +1,22 @@
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+ 
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { ApiBody, ApiOperation, ApiTags, ApiResponse } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { CreateUserDto } from 'src/user/create-user.dto';
 import { AuthGuard } from '@nestjs/passport';
+import { SignInDto } from './dto/sign-in.dto';
+import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { VerifyTokenDto } from './dto/verify-token.dto';
+import { LogoutDto } from './dto/logout.dto';
+import { VerifyTwoFactorDto } from './dto/verify-two-factor.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -20,6 +28,7 @@ export class AuthController {
    * @param userData User registration data
    * @returns JWT token
    */
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('/signup')
   @ApiOperation({
     summary: 'Register a new user',
@@ -37,8 +46,8 @@ export class AuthController {
     },
   })
   @ApiResponse({ status: 400, description: 'Validation error or invalid payload.' })
-  @ApiResponse({ status: 409, description: 'User already exists.' })
-  signUp(@Body() userData: CreateUserDto): Promise<{ token: string }> {
+  @ApiResponse({ status: 409, description: 'Registration failed.' })
+  signUp(@Body() userData: CreateUserDto): Promise<any> {
     return this.authService.signUp(userData);
   }
 
@@ -47,35 +56,13 @@ export class AuthController {
    * @param authData User credentials
    * @returns JWT token
    */
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('/signin')
   @ApiOperation({
     summary: 'Sign in a user',
     description: 'Authenticates user credentials and returns an access token.',
   })
-  @ApiBody({
-    schema: {
-      oneOf: [
-        {
-          type: 'object',
-          required: ['type', 'email', 'password'],
-          properties: {
-            type: { type: 'string', example: 'email' },
-            email: { type: 'string', example: 'user@mail.com' },
-            password: { type: 'string', example: 'string' },
-          },
-        },
-        {
-          type: 'object',
-          required: ['type', 'whatsapp', 'password'],
-          properties: {
-            type: { type: 'string', example: 'phone' },
-            whatsapp: { type: 'string', example: '+237 694949617' },
-            password: { type: 'string', example: 'string' },
-          },
-        },
-      ],
-    },
-  })
+  @ApiBody({ type: SignInDto })
   @ApiResponse({
     status: 200,
     description: 'User signed in and token returned.',
@@ -87,20 +74,49 @@ export class AuthController {
   })
   @ApiResponse({ status: 400, description: 'Invalid request body.' })
   @ApiResponse({ status: 401, description: 'Invalid credentials.' })
-  signIn(@Body() authData: any, @Req() req: Request): Promise<{ token: string }> {
+  signIn(@Body() authData: SignInDto, @Req() req: Request): Promise<any> {
     return this.authService.signIn(authData, req);
+  }
+
+  /**
+   * Verify a two-factor authentication code
+   * @param data 2FA challenge token and 6-digit code
+   * @returns JWT token and user data
+   */
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('verify-2fa')
+  @ApiOperation({
+    summary: 'Verify a two-factor authentication code',
+    description:
+      'Completes the two-factor authentication step after a successful sign-in using the 6-digit code sent by email.',
+  })
+  @ApiBody({ type: VerifyTwoFactorDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Code verified. Token and user data returned.',
+    schema: {
+      example: {
+        userData: {},
+        token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Invalid or expired code or challenge.' })
+  async verifyTwoFactor(@Body() data: VerifyTwoFactorDto) {
+    return this.authService.verifyTwoFactor(data.challengeToken, data.code);
   }
 
   /**
    * Logout a user
    * @param authData JWT token
    */
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post('/logout')
   @ApiOperation({
     summary: 'Logout a user',
     description: 'Revokes the provided JWT token (blacklist strategy).',
   })
-  @ApiBody({ schema: { example: { token: 'jwt-token' } } })
+  @ApiBody({ type: LogoutDto })
   @ApiResponse({
     status: 200,
     description: 'User logged out.',
@@ -111,8 +127,8 @@ export class AuthController {
     },
   })
   @ApiResponse({ status: 400, description: 'Token missing or malformed.' })
-  logout(@Body() authData: any): Promise<any> {
-    const token: any = authData.token;
+  logout(@Body() authData: LogoutDto): Promise<any> {
+    const token: string = authData.token;
     return this.authService.logout(token);
   }
 
@@ -120,15 +136,16 @@ export class AuthController {
    * Request a password reset email
    * @param data User email
    */
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('request-password-reset')
   @ApiOperation({
     summary: 'Request a password reset email',
     description: 'Sends a password reset email and WhatsApp notification if configured.',
   })
-  @ApiBody({ schema: { example: { email: 'user@mail.com' } } })
+  @ApiBody({ type: RequestPasswordResetDto })
   @ApiResponse({
     status: 200,
-    description: 'Password reset email sent.',
+    description: 'Reset password link sent.',
     schema: {
       example: {
         message: 'Reset password link sent',
@@ -136,8 +153,7 @@ export class AuthController {
     },
   })
   @ApiResponse({ status: 400, description: 'Invalid email.' })
-  @ApiResponse({ status: 404, description: 'User not found.' })
-  async requestPasswordReset(@Body() data: any) {
+  async requestPasswordReset(@Body() data: RequestPasswordResetDto) {
     const email = data.email;
     return this.authService.requestPasswordReset(email);
   }
@@ -146,12 +162,13 @@ export class AuthController {
    * Verify a password reset token
    * @param data Reset token
    */
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post('verify-token')
   @ApiOperation({
     summary: 'Verify a password reset token',
     description: 'Checks whether a reset password token is valid and not expired.',
   })
-  @ApiBody({ schema: { example: { token: 'reset-token' } } })
+  @ApiBody({ type: VerifyTokenDto })
   @ApiResponse({
     status: 200,
     description: 'Token is valid.',
@@ -163,7 +180,7 @@ export class AuthController {
   })
   @ApiResponse({ status: 400, description: 'Token missing or invalid.' })
   @ApiResponse({ status: 404, description: 'Token not found.' })
-  async verifyResetPwdToken(@Body() data: any) {
+  async verifyResetPwdToken(@Body() data: VerifyTokenDto) {
     const token = data.token;
     return this.authService.verifyResetPwdToken(token);
   }
@@ -172,14 +189,13 @@ export class AuthController {
    * Reset password with token
    * @param data Reset token and new password
    */
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('reset-password')
   @ApiOperation({
     summary: 'Reset password with token',
     description: 'Resets the user password using a valid reset token.',
   })
-  @ApiBody({
-    schema: { example: { token: 'reset-token', password: 'newPassword' } },
-  })
+  @ApiBody({ type: ResetPasswordDto })
   @ApiResponse({
     status: 200,
     description: 'Password has been reset.',
@@ -190,24 +206,22 @@ export class AuthController {
     },
   })
   @ApiResponse({ status: 400, description: 'Invalid token or password policy error.' })
-  @ApiResponse({ status: 404, description: 'User not found for this token.' })
-  async resetPassword(@Body() data: any) {
+  async resetPassword(@Body() data: ResetPasswordDto) {
     return this.authService.resetPassword(data.token, data.password);
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('change-password')
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({
     summary: 'Change authenticated user password',
     description: 'Changes the authenticated user password after checking the current password.',
   })
-  @ApiBody({
-    schema: { example: { currentPassword: 'temporaryPassword', newPassword: 'newPassword' } },
-  })
+  @ApiBody({ type: ChangePasswordDto })
   @ApiResponse({ status: 200, description: 'Password changed.' })
   @ApiResponse({ status: 400, description: 'Invalid password policy.' })
   @ApiResponse({ status: 401, description: 'Current password invalid.' })
-  async changePassword(@Req() req: any, @Body() data: any) {
+  async changePassword(@Req() req: any, @Body() data: ChangePasswordDto) {
     return this.authService.changePassword(req.user._id, data.currentPassword, data.newPassword);
   }
 }

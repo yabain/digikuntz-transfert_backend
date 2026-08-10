@@ -1,6 +1,7 @@
-/* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/require-await */
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -53,6 +54,8 @@ import { SystemBalanceModule } from './system-balance/system-balance.module';
       envFilePath: '.env',
       isGlobal: true,
     }),
+    // Rate-limiting global: 100 requêtes / minute / IP
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     ScheduleModule.forRoot(),
     DistributedLockModule,
     MongooseModule.forRootAsync({
@@ -125,6 +128,12 @@ import { SystemBalanceModule } from './system-balance/system-balance.module';
     SystemBalanceModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}

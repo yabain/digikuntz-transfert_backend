@@ -27,11 +27,15 @@ import { AuditLogService } from 'src/audit-log/audit-log.service';
 import { ProspectsService } from 'src/prospects/prospects.service';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
+import * as crypto from 'crypto';
 import { parseUserAgent } from 'src/common/user-agent.util';
 import { lookupIpLocation } from 'src/common/geoip.util';
 
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
+
+const TWO_FACTOR_CODE_DURATION_MS = 5 * 60 * 1000;
+const MAX_TWO_FACTOR_ATTEMPTS = 5;
 
 @Injectable()
 export class AuthService {
@@ -125,18 +129,26 @@ export class AuthService {
         });
       }
 
+      // 2FA obligatoire pour les comptes admin et organisation
+      if (this.requiresTwoFactor(user)) {
+        const challengeToken = await this.sendTwoFactorCode(user);
+        void this.auditLogService.record({
+          actorId: String(user._id),
+          action: 'auth.two_factor_challenge_sent',
+          resourceType: 'user',
+          resourceId: String(user._id),
+          metadata: { via: 'signup' },
+        });
+        return { requiresTwoFactor: true, challengeToken };
+      }
+
       // Return the user data and a JWT token for authentication
       return { userData: user, token: this.jwtService.sign({ id: user._id }) };
     } catch (error) {
       if (error.code === 11000) {
-        const duplicatedField = Object.keys(error?.keyPattern || {})[0] || '';
-        if (duplicatedField === 'email') {
-          throw new ConflictException('Email already exists');
-        }
-        if (duplicatedField === 'whatsapp') {
-          throw new ConflictException('WhatsApp already exists');
-        }
-        throw new ConflictException('Duplicate value');
+        throw new ConflictException(
+          'Unable to register. Please check your details or try to sign in.',
+        );
       }
       throw error; // Propagate other errors
     }
@@ -318,6 +330,24 @@ export class AuthService {
     // Success — reset brute-force counter
     await this.userModel.findByIdAndUpdate(user._id, { loginAttempts: 0, lockoutUntil: null });
 
+    // 2FA obligatoire pour les comptes admin et organisation
+    if (this.requiresTwoFactor(user)) {
+      const challengeToken = await this.sendTwoFactorCode(user);
+      this.auditLogService.record({
+        actorId: String(user._id),
+        actorEmail: user.email,
+        action: 'auth.two_factor_challenge_sent',
+        resourceType: 'user',
+        resourceId: String(user._id),
+        metadata: { via: 'signin', ip, location: lookupIpLocation(ip)?.location },
+        method: 'POST',
+        path: '/auth/signin',
+        statusCode: 200,
+        ip,
+      });
+      return { requiresTwoFactor: true, challengeToken };
+    }
+
     user.password = ''; // Remove the password from the response for security
     user.resetPasswordToken = ''; // Remove the resetPasswordToken from the response for security
 
@@ -368,23 +398,24 @@ export class AuthService {
 
   /**
    * Sends a password reset email.
+   * Anti-enumeration: returns the same success response whether or not the
+   * email exists (never reveals if an account exists).
    * @param email - The user's email address.
    * @returns a success message.
    */
   async requestPasswordReset(email: string): Promise<boolean> {
     const user = await this.userModel.findOne({ email });
     if (!user) {
-      throw new NotFoundException('User not found');
+      return true;
     }
 
-    const resetToken = this.generateResetToken(String(user._id));
+    const resetToken = this.generateResetToken();
     const resetExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
 
-    user.resetPasswordToken = resetToken;
+    user.resetPasswordToken = this.hashResetToken(resetToken);
     user.resetPasswordTokenExpiresAt = resetExpiresAt;
     await user.save();
 
-    // const resetPwdUrl = `;token=${resetToken}`;
     const resetPwdUrl = `${resetToken}`;
 
     await this.emailService.sendResetPwd(
@@ -429,10 +460,12 @@ export class AuthService {
     const hashedPwd = await bcrypt.hash(newPassword, 10);
     user.password = hashedPwd;
     user.mustChangePassword = false;
-    user.resetPasswordToken = ''; // Clear the reset token
+    user.resetPasswordToken = ''; // Clear the reset token (single-use)
     user.resetPasswordTokenExpiresAt = null;
+    user.sessionInvalidatedAt = new Date(); // Invalidate all existing sessions
+    user.loginAttempts = 0;
+    user.lockoutUntil = null;
     await user.save();
-    await this.revokedTokenModel.create({ token });
     void this.emailService.sendPasswordUpdatedEmail(user).catch((error) =>
       console.warn('sendPasswordUpdatedEmail failed:', error),
     );
@@ -468,6 +501,7 @@ export class AuthService {
 
     user.password = await bcrypt.hash(newPassword, 10);
     user.mustChangePassword = false;
+    user.sessionInvalidatedAt = new Date(); // Invalidate all existing sessions
     await user.save();
 
     void this.emailService.sendPasswordUpdatedEmail(user).catch((error) =>
@@ -488,33 +522,177 @@ export class AuthService {
     return true;
   }
 
+  /**
+   * Détermine si le compte exige une double authentification.
+   * Systématique pour les comptes admin et de type organisation.
+   */
+  private requiresTwoFactor(user: any): boolean {
+    return (
+      user.twoFactorEnabled === true ||
+      user.isAdmin === true ||
+      user.accountType === 'organisation'
+    );
+  }
+
+  /**
+   * Génère un code 2FA à 6 chiffres (stocké en hash bcrypt), l'envoie par
+   * email et retourne un challenge JWT court lié à l'utilisateur.
+   */
+  private async sendTwoFactorCode(user: any): Promise<string> {
+    const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+    const hash = await bcrypt.hash(code, 10);
+
+    user.twoFactorCode = hash;
+    user.twoFactorCodeExpiresAt = new Date(Date.now() + TWO_FACTOR_CODE_DURATION_MS);
+    user.twoFactorAttempts = 0;
+    await user.save();
+
+    const userName = user.name
+      ? user.name
+      : `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email;
+
+    void this.emailService
+      .send2FACode(user.email, user.language, userName, code)
+      .catch((error) => console.warn('send2FACode failed:', error));
+
+    return this.jwtService.sign(
+      { id: String(user._id), purpose: '2fa' },
+      { expiresIn: '10m' },
+    );
+  }
+
+  /**
+   * Vérifie le code 2FA saisi par l'utilisateur après une première étape réussie
+   * (mot de passe correct). En cas de succès, un token d'accès JWT est émis.
+   */
+  async verifyTwoFactor(challengeToken: string, code: string): Promise<any> {
+    if (!challengeToken || !code) {
+      throw new BadRequestException('Invalid request');
+    }
+
+    let payload: any;
+    try {
+      payload = this.jwtService.verify(challengeToken);
+    } catch {
+      throw new UnauthorizedException('Invalid or expired challenge');
+    }
+    if (payload?.purpose !== '2fa' || !payload?.id) {
+      throw new UnauthorizedException('Invalid or expired challenge');
+    }
+
+    const user: any = await this.userModel
+      .findById(payload.id)
+      .populate('cityId')
+      .populate('countryId');
+    if (!user || !user.twoFactorCode || !user.twoFactorCodeExpiresAt) {
+      throw new UnauthorizedException('Invalid or expired code');
+    }
+    if (new Date(user.twoFactorCodeExpiresAt) < new Date()) {
+      throw new UnauthorizedException('Code expired. Please sign in again.');
+    }
+
+    const isMatch = await bcrypt.compare(code, user.twoFactorCode);
+    if (!isMatch) {
+      const attempts = (user.twoFactorAttempts || 0) + 1;
+      if (attempts >= MAX_TWO_FACTOR_ATTEMPTS) {
+        await this.userModel.findByIdAndUpdate(user._id, {
+          twoFactorCode: '',
+          twoFactorCodeExpiresAt: null,
+          twoFactorAttempts: 0,
+        });
+        this.auditLogService.record({
+          actorId: String(user._id),
+          actorEmail: user.email,
+          action: 'auth.two_factor_blocked',
+          resourceType: 'user',
+          resourceId: String(user._id),
+          metadata: { reason: 'max_attempts', attempts: MAX_TWO_FACTOR_ATTEMPTS },
+        });
+        throw new UnauthorizedException(
+          'Too many invalid codes. Please sign in again.',
+        );
+      }
+      await this.userModel.findByIdAndUpdate(user._id, {
+        twoFactorAttempts: attempts,
+      });
+      throw new UnauthorizedException('Invalid code');
+    }
+
+    // Succès : purge du code et émission du token d'accès
+    await this.userModel.findByIdAndUpdate(user._id, {
+      twoFactorCode: '',
+      twoFactorCodeExpiresAt: null,
+      twoFactorAttempts: 0,
+    });
+
+    user.twoFactorCode = '';
+    user.twoFactorCodeExpiresAt = null;
+    user.password = '';
+    user.resetPasswordToken = '';
+
+    this.auditLogService.record({
+      actorId: String(user._id),
+      actorEmail: user.email,
+      actorRole: user.isAdmin ? 'admin' : user.accountType || 'user',
+      action: 'auth.login',
+      resourceType: 'user',
+      resourceId: String(user._id),
+      resourceLabel: user.email,
+      method: 'POST',
+      path: '/auth/verify-2fa',
+      statusCode: 200,
+    });
+
+    return { userData: user, token: this.jwtService.sign({ id: user._id }) };
+  }
+
   // token validation
   async verifyResetPwdToken(token: string): Promise<any> {
-    const verify = await this.isTokenRevoked(token);
-    if (verify === true) {
+    if (!token || typeof token !== 'string' || token.length === 0) {
       throw new BadRequestException('Invalid or expired token');
     }
 
-    let userId: string | undefined;
-    try {
-      const decoded = this.jwtService.verify(token);
-      userId = decoded.id;
-    } catch {
-      const user = await this.userModel.findOne({
-        resetPasswordToken: token,
-        resetPasswordTokenExpiresAt: { $gt: new Date() },
-      });
-      if (!user) {
-        throw new BadRequestException('Invalid or expired token');
-      }
-      userId = String(user._id);
+    // Recherche par hash stocké en base (mot de passe jamais exposé)
+    const hash = this.hashResetToken(token);
+    const user = await this.userModel.findOne({
+      resetPasswordToken: hash,
+      resetPasswordTokenExpiresAt: { $gt: new Date() },
+    });
+    if (user) {
+      return { userId: String(user._id) };
     }
 
-    return { userId };
+    // Rétro-compatibilité: les tokens JWT émis avant le durcissement
+    if (token.includes('.')) {
+      try {
+        const decoded = this.jwtService.verify(token);
+        if (decoded?.id) {
+          const legacy = await this.userModel.findOne({
+            resetPasswordToken: token,
+            resetPasswordTokenExpiresAt: { $gt: new Date() },
+          });
+          if (legacy && String(legacy._id) === String(decoded.id)) {
+            return { userId: String(legacy._id) };
+          }
+        }
+      } catch {
+        // token invalide ou expiré -> on retombe sur le message générique
+      }
+    }
+
+    throw new BadRequestException('Invalid or expired token');
   }
 
-  private generateResetToken(userId: string): string {
-    return this.jwtService.sign({ id: userId }, { expiresIn: '1h' });
+  /**
+   * Generate a cryptographically safe single-use reset token.
+   * The raw token is sent to the user; only its SHA-256 hash is stored in the DB.
+   */
+  private generateResetToken(): string {
+    return crypto.randomBytes(32).toString('hex');
+  }
+
+  private hashResetToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
   }
 
   private sanitizeUser(user: any): any {
