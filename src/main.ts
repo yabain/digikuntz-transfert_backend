@@ -213,6 +213,11 @@ async function bootstrap() {
       },
     },
     crossOriginEmbedderPolicy: false,
+    // Autorise le frontend (payments.digikuntz.com) à intégrer les images
+    // uploadées (https://app.digikuntz.com/assets/images/...) dans les pages.
+    // Sans cela, helmet envoie `Cross-Origin-Resource-Policy: same-origin`
+    // et le navigateur bloque l'affichage cross-origin des images.
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
   };
   if (process.env.NODE_ENV !== 'production') {
     // HSTS uniquement en production pour ne pas bloquer le dev en HTTP local
