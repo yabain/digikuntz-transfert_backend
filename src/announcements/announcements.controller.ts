@@ -29,16 +29,15 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { randomUUID } from 'crypto';
 import { extname } from 'path';
-import { mkdirSync } from 'fs';
 import { AnnouncementsService } from './announcements.service';
 import { CreateAnnouncementDto, UpdateAnnouncementDto } from './dto/announcement.dto';
 import { AnnouncementStatus } from './announcement.schema';
+import { getAnnouncementsUploadDir } from '../common/upload-dir.util';
 
 const announcementAttachmentStorage = diskStorage({
   destination: (_req, _file, cb) => {
-    const destination = 'public/uploads/announcements';
-    mkdirSync(destination, { recursive: true });
-    cb(null, destination);
+    // Répertoire configurable via UPLOAD_DIR / UPLOAD_DIR_LOCAL
+    cb(null, getAnnouncementsUploadDir());
   },
   filename: (_req, file, cb) => {
     cb(null, `${Date.now()}-${randomUUID()}${extname(file.originalname).toLowerCase()}`);

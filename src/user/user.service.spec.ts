@@ -11,6 +11,8 @@ import * as bcrypt from 'bcryptjs';
 // Mock dependencies
 const mockUserModel = {
   create: jest.fn<Promise<any>, [Record<string, any>]>(),
+  findById: jest.fn(),
+  findByIdAndUpdate: jest.fn(),
 };
 
 type MockUserModel = typeof mockUserModel;
@@ -147,6 +149,84 @@ describe('UserService', () => {
         expect.objectContaining({
           email: 'flambel55@gmail.com',
         }),
+      );
+    });
+  });
+
+  describe('updateStatus', () => {
+    it('should clear lockout fields when activating a previously locked account', async () => {
+      const userId = '507f1f77bcf86cd799439011';
+      const lockedUser = {
+        _id: userId,
+        isActive: false,
+        loginAttempts: 5,
+        lockoutUntil: new Date(Date.now() + 60 * 60 * 1000),
+        firstFailedAttemptAt: new Date(),
+        toObject: () => ({
+          _id: userId,
+          isActive: true,
+          loginAttempts: 0,
+          lockoutUntil: null,
+          firstFailedAttemptAt: null,
+        }),
+      };
+
+      mockUserModel.findById.mockResolvedValue(lockedUser as any);
+      mockUserModel.findByIdAndUpdate.mockResolvedValue(
+        lockedUser.toObject() as any,
+      );
+
+      await service.updateStatus(userId);
+
+      // findByIdAndUpdate doit être appelé avec le reset du lockout
+      expect(mockUserModel.findByIdAndUpdate).toHaveBeenCalledWith(
+        userId,
+        expect.objectContaining({
+          isActive: true,
+          lockoutUntil: null,
+          loginAttempts: 0,
+          firstFailedAttemptAt: null,
+        }),
+        expect.objectContaining({ new: true }),
+      );
+
+      // Le cache doit être invalidé
+      expect(mockCacheService.invalidateUserCache).toHaveBeenCalledWith(userId);
+      // Un audit log doit être enregistré
+      expect(mockAuditLogService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'user.status_updated',
+          resourceId: String(userId),
+        }),
+      );
+    });
+
+    it('should invalidate sessions when deactivating an account', async () => {
+      const userId = '507f1f77bcf86cd799439011';
+      const activeUser = {
+        _id: userId,
+        isActive: true,
+        toObject: () => ({
+          _id: userId,
+          isActive: false,
+          sessionInvalidatedAt: expect.any(Date),
+        }),
+      };
+
+      mockUserModel.findById.mockResolvedValue(activeUser as any);
+      mockUserModel.findByIdAndUpdate.mockResolvedValue(
+        activeUser.toObject() as any,
+      );
+
+      await service.updateStatus(userId);
+
+      expect(mockUserModel.findByIdAndUpdate).toHaveBeenCalledWith(
+        userId,
+        expect.objectContaining({
+          isActive: false,
+          sessionInvalidatedAt: expect.any(Date),
+        }),
+        expect.objectContaining({ new: true }),
       );
     });
   });

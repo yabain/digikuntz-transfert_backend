@@ -1,6 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { AuthCron } from './auth.cron';
 import { MongooseModule } from '@nestjs/mongoose';
 import { User, UserSchema } from 'src/user/user.schema';
 import { PassportModule } from '@nestjs/passport';
@@ -18,6 +19,7 @@ import { Email, EmailSchema } from 'src/email/email.schema';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
 import { SystemService } from 'src/system/system.service';
 import { System, SystemSchema } from 'src/system/system.schema';
+import { CryptService } from 'src/dev/crypt.service';
 import { WhatsappModule } from 'src/wa/whatsapp.module';
 import { ProspectsModule } from 'src/prospects/prospects.module';
 import { EmailModule } from 'src/email/email.module';
@@ -49,7 +51,7 @@ import { EmailModule } from 'src/email/email.module';
     ProspectsModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, SystemService],
+  providers: [AuthService, AuthCron, JwtStrategy, SystemService, CryptService],
   exports: [JwtStrategy, PassportModule, AuthService],
 })
 export class AuthModule {}

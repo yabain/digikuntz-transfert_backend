@@ -17,6 +17,7 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { VerifyTokenDto } from './dto/verify-token.dto';
 import { LogoutDto } from './dto/logout.dto';
 import { VerifyTwoFactorDto } from './dto/verify-two-factor.dto';
+import { GoogleLoginDto } from './dto/google-login.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -104,6 +105,34 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Invalid or expired code or challenge.' })
   async verifyTwoFactor(@Body() data: VerifyTwoFactorDto) {
     return this.authService.verifyTwoFactor(data.challengeToken, data.code);
+  }
+
+  /**
+   * Google Login - Sign in with Google ID token
+   * @param data Google ID token from client
+   * @returns JWT token and user data
+   */
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('google')
+  @ApiOperation({
+    summary: 'Sign in with Google',
+    description:
+      'Authenticates a user with a Google ID token. If the user does not exist, creates a new account. Returns JWT token and user data.',
+  })
+  @ApiBody({ type: GoogleLoginDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Google login successful. Token and user data returned.',
+    schema: {
+      example: {
+        userData: {},
+        token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Invalid Google token or login disabled.' })
+  async googleLogin(@Body() data: GoogleLoginDto) {
+    return this.authService.googleLogin(data.idToken);
   }
 
   /**

@@ -28,6 +28,7 @@ import { ProspectsService } from 'src/prospects/prospects.service';
 import { EmailService } from 'src/email/email.service';
 import { DistributedLockService } from 'src/distributed-lock/distributed-lock.service';
 import { CreateAnnouncementDto, UpdateAnnouncementDto } from './dto/announcement.dto';
+import { getAnnouncementsUploadDir } from '../common/upload-dir.util';
 
 @Injectable()
 export class AnnouncementsService {
@@ -950,7 +951,29 @@ export class AnnouncementsService {
 
   private resolveAttachmentAbsolutePath(relativePath: string): string {
     const clean = relativePath.replace(/^\/+|\/+$/g, '');
-    return path.join(process.cwd(), clean);
+    // Le chemin stocké en base est /uploads/announcements/<file>, mais le
+    // fichier physique se trouve dans le répertoire d'upload configurable.
+    if (clean.startsWith('uploads/announcements/')) {
+      const dir = path.resolve(getAnnouncementsUploadDir());
+      const abs = path.resolve(dir, clean.slice('uploads/announcements/'.length));
+      // Confinement anti path-traversal : on retombe sur le basename seul
+      // si le chemin résolu sort du répertoire autorisé.
+      if (abs !== dir && !abs.startsWith(dir + path.sep)) {
+        const safeName = path.basename(clean);
+        return path.join(
+          dir,
+          safeName === '.' || safeName === '..' ? '' : safeName,
+        );
+      }
+      return abs;
+    }
+    const cwd = path.resolve(process.cwd());
+    const abs = path.resolve(cwd, clean);
+    if (abs !== cwd && !abs.startsWith(cwd + path.sep)) {
+      const safeName = path.basename(clean);
+      return path.join(cwd, safeName === '.' || safeName === '..' ? '' : safeName);
+    }
+    return abs;
   }
 
   private notifyAdminStoppedByFailure(announcement: AnnouncementDocument) {

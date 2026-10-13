@@ -30,9 +30,12 @@ import { Request } from 'express';
 import * as crypto from 'crypto';
 import { parseUserAgent } from 'src/common/user-agent.util';
 import { lookupIpLocation } from 'src/common/geoip.util';
+import { SystemService } from 'src/system/system.service';
+import { google } from 'googleapis';
 
 const MAX_LOGIN_ATTEMPTS = 5;
-const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
+const LOCKOUT_DURATION_MS = 60 * 60 * 1000; // 1 heure de blocage
+const FAILED_ATTEMPT_WINDOW_MS = 60 * 60 * 1000; // Fenêtre d'1 heure pour compter les tentatives
 
 const TWO_FACTOR_CODE_DURATION_MS = 5 * 60 * 1000;
 const MAX_TWO_FACTOR_ATTEMPTS = 5;
@@ -50,6 +53,7 @@ export class AuthService {
     private whatsappService: WhatsappService,
     private auditLogService: AuditLogService,
     private prospectsService: ProspectsService,
+    private systemService: SystemService,
   ) { }
 
   /**
@@ -130,7 +134,7 @@ export class AuthService {
       }
 
       // 2FA obligatoire pour les comptes admin et organisation
-      if (this.requiresTwoFactor(user)) {
+      if (await this.requiresTwoFactor(user)) {
         const challengeToken = await this.sendTwoFactorCode(user);
         void this.auditLogService.record({
           actorId: String(user._id),
@@ -146,6 +150,22 @@ export class AuthService {
       return { userData: user, token: this.jwtService.sign({ id: user._id }) };
     } catch (error) {
       if (error.code === 11000) {
+        // Determine which field is duplicated
+        const duplicatedField = Object.keys(error.keyPattern)[0];
+        const fieldValue = error.keyValue[duplicatedField];
+
+        if (duplicatedField === 'email') {
+          throw new ConflictException(
+            `L'email ${fieldValue} est déjà utilisé. Veuillez utiliser un autre email.`,
+          );
+        }
+
+        if (duplicatedField === 'whatsapp') {
+          throw new ConflictException(
+            `Le numéro de téléphone ${fieldValue} est déjà enregistré. Veuillez en utiliser un autre.`,
+          );
+        }
+
         throw new ConflictException(
           'Unable to register. Please check your details or try to sign in.',
         );
@@ -241,10 +261,43 @@ export class AuthService {
     // Compare the provided password with the hashed password in the database
     const isPwdMatched = await bcrypt.compare(authData.password, user.password);
     if (!isPwdMatched) {
-      const attempts = (user.loginAttempts || 0) + 1;
-      const lockoutUntil = attempts >= MAX_LOGIN_ATTEMPTS ? new Date(Date.now() + LOCKOUT_DURATION_MS) : null;
+      const now = new Date();
 
-      await this.userModel.findByIdAndUpdate(user._id, { loginAttempts: attempts, lockoutUntil });
+      // Fenêtre glissante d'une heure : si la première tentative est
+      // vieille de plus d'1h, on repart à zéro.
+      const firstAttempt = user.firstFailedAttemptAt
+        ? new Date(user.firstFailedAttemptAt)
+        : null;
+      // Si le verrouillage est déjà expiré (en attente du cron), on repart
+      // aussi à zéro pour ne pas re-verrouiller immédiatement.
+      const lockExpired =
+        user.lockoutUntil && new Date(user.lockoutUntil) <= now;
+
+      let attempts = (user.loginAttempts || 0) + 1;
+      let firstFailedAttemptAt = user.firstFailedAttemptAt || now;
+
+      if (
+        lockExpired ||
+        (firstAttempt &&
+          now.getTime() - firstAttempt.getTime() >= FAILED_ATTEMPT_WINDOW_MS)
+      ) {
+        attempts = 1;
+        firstFailedAttemptAt = now;
+      }
+
+      // Verrouillage uniquement si les 5 échecs sont dans la même heure
+      const lockoutUntil =
+        attempts >= MAX_LOGIN_ATTEMPTS
+          ? new Date(now.getTime() + LOCKOUT_DURATION_MS)
+          : null;
+
+      const updateData: any = {
+        loginAttempts: lockoutUntil ? 0 : attempts,
+        firstFailedAttemptAt: lockoutUntil ? null : firstFailedAttemptAt,
+        lockoutUntil,
+      };
+
+      await this.userModel.findByIdAndUpdate(user._id, updateData);
 
       const ua = parseUserAgent(userAgent);
       const geo = lookupIpLocation(ip);
@@ -273,51 +326,45 @@ export class AuthService {
       });
 
       if (lockoutUntil) {
-        const attemptDate = new Date().toISOString();
+        const attemptDate = now.toISOString();
         const userName = user.name ? user.name : `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email;
 
-        // Email détaillé à l'admin
-        const adminDetails = [
-          `User: ${userName}`,
-          `Email: ${user.email}`,
-          `User ID: ${String(user._id)}`,
-          `Account type: ${user.accountType || 'user'}`,
-          `Role: ${user.isAdmin ? 'admin' : user.accountType || 'user'}`,
-          ``,
-          `Attempt date: ${attemptDate}`,
-          `IP address: ${ip || 'Unknown'}`,
-          `Location: ${geo?.location || 'Unknown'}`,
-          `Browser: ${ua.browser}`,
-          `Operating system: ${ua.os}`,
-          `Device: ${ua.device}`,
-          `User-Agent: ${userAgent || 'Unknown'}`,
-          ``,
-          `Failed attempts: ${attempts}/${MAX_LOGIN_ATTEMPTS}`,
-          `Locked until: ${lockoutUntil.toISOString()}`,
-          `Duration: ${LOCKOUT_DURATION_MS / 60000} minutes`,
-        ].join('\n');
+        const lockDetails = {
+          userName,
+          email: user.email,
+          userId: String(user._id),
+          accountType: user.accountType || 'user',
+          role: user.isAdmin ? 'admin' : user.accountType || 'user',
+          attemptDate,
+          ip: ip || 'Unknown',
+          location: geo?.location || 'Unknown',
+          browser: ua.browser || 'Unknown',
+          os: ua.os || 'Unknown',
+          device: ua.device || 'Unknown',
+          userAgent: userAgent || 'Unknown',
+          attempts: `${MAX_LOGIN_ATTEMPTS}/${MAX_LOGIN_ATTEMPTS}`,
+          lockedUntil: lockoutUntil.toISOString(),
+          duration: `${LOCKOUT_DURATION_MS / 60000} minutes`,
+        };
 
-        void this.emailService.sendAlertEmail(
-          `🔒 Brute-force detected: ${user.email}`,
-          adminDetails,
-        );
+        // Email détaillé à l'admin (template HTML présentable)
+        void this.emailService.sendAdminBruteForceAlert(lockDetails);
 
-        // Email à l'utilisateur
+        // Email à l'utilisateur (template HTML présentable)
         void this.emailService
-          .sendEmail(
+          .sendAccountLockedEmail(
             user.email,
-            '🔒 Compte temporairement verrouillé — DigiKuntz Payments',
-            `Bonjour ${userName},\n\nNous avons détecté ${MAX_LOGIN_ATTEMPTS} tentatives de connexion échouées sur votre compte.\n\n` +
-              `Pour votre sécurité, votre compte a été temporairement verrouillé jusqu'au ${lockoutUntil.toLocaleString()} ` +
-              `(${LOCKOUT_DURATION_MS / 60000} minutes).\n\n` +
-              `Si vous n'êtes pas à l'origine de ces tentatives, nous vous recommandons de changer votre mot de passe dès que le délai est écoulé.\n\n` +
-              `Détails de la tentative :\n` +
-              `- Date : ${attemptDate}\n` +
-              `- IP : ${ip || 'Unknown'}\n` +
-              `- Localisation : ${geo?.location || 'Unknown'}\n` +
-              `- Navigateur : ${ua.browser}\n` +
-              `- Système : ${ua.os}\n\n` +
-              `L'équipe DigiKuntz Payments`,
+            user.language,
+            {
+              userName,
+              lockedUntil: lockoutUntil.toISOString(),
+              duration: `${LOCKOUT_DURATION_MS / 60000} minutes`,
+              attemptDate,
+              ip: ip || 'Unknown',
+              location: geo?.location || 'Unknown',
+              browser: ua.browser || 'Unknown',
+              os: ua.os || 'Unknown',
+            },
           )
           .catch((error) =>
             console.warn('sendLockoutUserEmail failed:', error),
@@ -328,10 +375,14 @@ export class AuthService {
     }
 
     // Success — reset brute-force counter
-    await this.userModel.findByIdAndUpdate(user._id, { loginAttempts: 0, lockoutUntil: null });
+    await this.userModel.findByIdAndUpdate(user._id, {
+      loginAttempts: 0,
+      lockoutUntil: null,
+      firstFailedAttemptAt: null,
+    });
 
     // 2FA obligatoire pour les comptes admin et organisation
-    if (this.requiresTwoFactor(user)) {
+    if (await this.requiresTwoFactor(user)) {
       const challengeToken = await this.sendTwoFactorCode(user);
       this.auditLogService.record({
         actorId: String(user._id),
@@ -465,6 +516,7 @@ export class AuthService {
     user.sessionInvalidatedAt = new Date(); // Invalidate all existing sessions
     user.loginAttempts = 0;
     user.lockoutUntil = null;
+    user.firstFailedAttemptAt = null;
     await user.save();
     void this.emailService.sendPasswordUpdatedEmail(user).catch((error) =>
       console.warn('sendPasswordUpdatedEmail failed:', error),
@@ -524,9 +576,15 @@ export class AuthService {
 
   /**
    * Détermine si le compte exige une double authentification.
-   * Systématique pour les comptes admin et de type organisation.
+   * Vérifie le paramètre système global, puis les règles par rôle.
    */
-  private requiresTwoFactor(user: any): boolean {
+  private async requiresTwoFactor(user: any): Promise<boolean> {
+    // Vérifier le paramètre système global (toggle 2FA système)
+    const securitySettings = await this.systemService.getSecuritySettingsWithKey();
+    if (securitySettings.twoFactorEnabled === false) {
+      return false;
+    }
+    // Règles par rôle : admin et organisation forcent la 2FA
     return (
       user.twoFactorEnabled === true ||
       user.isAdmin === true ||
@@ -644,6 +702,102 @@ export class AuthService {
     });
 
     return { userData: user, token: this.jwtService.sign({ id: user._id }) };
+  }
+
+  /**
+   * Google Login - vérifie le token ID Google, crée ou retrouve l'utilisateur.
+   * Ne déclenche PAS de 2FA (Google est considéré comme second facteur).
+   */
+  async googleLogin(idToken: string): Promise<any> {
+    // Vérifier que la connexion Google est activée au niveau système
+    const securitySettings = await this.systemService.getSecuritySettingsWithKey();
+    if (securitySettings.googleLoginEnabled === false) {
+      throw new UnauthorizedException('La connexion Google est désactivée');
+    }
+
+    const googleClientId = securitySettings.googleClientId || process.env.GOOGLE_CLIENT_ID;
+    if (!googleClientId) {
+      throw new UnauthorizedException('Configuration Google manquante');
+    }
+
+    const oauth2Client = new google.auth.OAuth2();
+    let ticket;
+    try {
+      ticket = await oauth2Client.verifyIdToken({
+        idToken,
+        audience: googleClientId,
+      });
+    } catch (error) {
+      throw new UnauthorizedException('Token Google invalide');
+    }
+
+    const payload = ticket.getPayload();
+    if (!payload?.email_verified || !payload?.email) {
+      throw new UnauthorizedException('Email Google non vérifié ou absent');
+    }
+
+    const { email, sub: googleId, name, picture, given_name, family_name } = payload;
+
+    // Rechercher ou créer l'utilisateur
+    let user = await this.userModel
+      .findOne({ email })
+      .populate('cityId')
+      .populate('countryId');
+
+    if (!user) {
+      // Créer un nouvel utilisateur
+      const baseName = name || email.split('@')[0];
+      const username = baseName.toLowerCase().replace(/\s+/g, '') + '_' + googleId.slice(-4);
+      user = await this.userModel.create({
+        email,
+        googleId,
+        firstName: given_name || baseName,
+        lastName: family_name || '',
+        name: name || baseName,
+        username,
+        pictureUrl: picture,
+        isActive: true,
+        verified: true,
+        accountType: 'personal',
+      });
+      // TODO: envoyer email de bienvenue
+    } else {
+      // Mettre à jour googleId si absent
+      if (!user.googleId) {
+        user.googleId = googleId;
+        await user.save();
+      }
+      // Mettre à jour la photo si fournie
+      if (picture && !user.pictureUrl) {
+        user.pictureUrl = picture;
+        await user.save();
+      }
+    }
+
+    // Vérifier si le compte est actif
+    if (!user.isActive) {
+      throw new UnauthorizedException('Compte désactivé');
+    }
+
+    // Google login contourne la 2FA (Google = second facteur)
+    user.password = '';
+    user.resetPasswordToken = '';
+
+    this.auditLogService.record({
+      actorId: String(user._id),
+      actorEmail: user.email,
+      actorRole: user.isAdmin ? 'admin' : user.accountType || 'user',
+      action: 'auth.login',
+      resourceType: 'user',
+      resourceId: String(user._id),
+      resourceLabel: user.email,
+      method: 'POST',
+      path: '/auth/google',
+      statusCode: 200,
+      metadata: { via: 'google', googleId },
+    });
+
+    return { userData: this.sanitizeUser(user), token: this.jwtService.sign({ id: user._id }) };
   }
 
   // token validation

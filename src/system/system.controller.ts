@@ -55,4 +55,45 @@ export class SystemController {
     if(req.user.isAdmin !== true) return 'Unauthorized';
     return this.systemService.updateData(systemData);
   }
+
+  // ===== Security settings =====
+
+  @Get('security')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get security settings (admin only)' })
+  @ApiResponse({ status: 200, description: 'Security settings returned.' })
+  @UseGuards(AuthGuard('jwt'))
+  async getSecuritySettings(@Req() req): Promise<any> {
+    if (req.user.isAdmin !== true) return 'Unauthorized';
+    return this.systemService.getSecuritySettings();
+  }
+
+  @Get('security/public')
+  @ApiOperation({ summary: 'Get public security settings (for login page)' })
+  @ApiResponse({ status: 200, description: 'Public security settings returned.' })
+  async getPublicSecuritySettings(): Promise<any> {
+    return this.systemService.getPublicSecuritySettings();
+  }
+
+  @Put('security')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update security settings (admin only)' })
+  @ApiBody({
+    schema: {
+      example: {
+        twoFactorEnabled: false,
+        googleLoginEnabled: true,
+        googleClientId: '123456789.apps.googleusercontent.com',
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Security settings updated.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Admin privileges required.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async updateSecuritySettings(@Body() data: any, @Req() req): Promise<any> {
+    if (req.user.isAdmin !== true) return 'Unauthorized';
+    return this.systemService.updateSecuritySettings(data);
+  }
 }

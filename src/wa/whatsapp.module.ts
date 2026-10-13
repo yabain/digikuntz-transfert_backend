@@ -9,6 +9,7 @@ import { Email, EmailSchema } from 'src/email/email.schema';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
 import { SystemService } from 'src/system/system.service';
 import { System, SystemSchema } from 'src/system/system.schema';
+import { CryptService } from 'src/dev/crypt.service';
 import { UserModule } from 'src/user/user.module';
 import { PlansService } from 'src/plans/plans.service';
 import { Plans, PlansSchema } from 'src/plans/plans.schema';
@@ -32,6 +33,7 @@ import { EmailModule } from 'src/email/email.module';
   providers: [
     WhatsappService,
     SystemService,
+    CryptService,
     // PlansService,
   ],
   exports: [WhatsappService],

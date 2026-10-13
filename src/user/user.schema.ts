@@ -123,6 +123,9 @@ export class User extends Document {
   @Prop()
   address: string;
 
+  @Prop({ type: Date, default: null })
+  firstFailedAttemptAt?: Date | null;
+
   @Prop({ default: 0 })
   loginAttempts?: number;
 
@@ -143,6 +146,9 @@ export class User extends Document {
 
   @Prop({ default: 0 })
   twoFactorAttempts?: number;
+
+  @Prop()
+  googleId?: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

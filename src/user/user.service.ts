@@ -553,6 +553,12 @@ export class UserService {
     if (status === false) {
       update.sessionInvalidatedAt = new Date();
     }
+    if (status === true) {
+      // Clear brute-force lockout when activating the account
+      update.lockoutUntil = null;
+      update.loginAttempts = 0;
+      update.firstFailedAttemptAt = null;
+    }
     const updatedUser = await this.userModel
       .findByIdAndUpdate(
         userId,

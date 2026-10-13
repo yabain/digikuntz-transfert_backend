@@ -10,6 +10,7 @@ import { SmtpModule } from './smtp/smtp.module';
 import { Email, EmailSchema } from './email.schema';
 import { System, SystemSchema } from 'src/system/system.schema';
 import { SystemService } from 'src/system/system.service';
+import { CryptService } from 'src/dev/crypt.service';
 
 @Module({
   imports: [
@@ -21,7 +22,7 @@ import { SystemService } from 'src/system/system.service';
     ]),
     SmtpModule,
   ],
-  providers: [EmailService, DateService, SystemService],
+  providers: [EmailService, DateService, SystemService, CryptService],
   controllers: [EmailController],
   exports: [EmailService, DateService],
 })

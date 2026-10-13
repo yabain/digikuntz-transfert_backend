@@ -2,15 +2,17 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
+// Charge .env AVANT tout autre module : les destinations multer et les
+// constantes de configuration sont évaluées au chargement des modules.
+import 'dotenv/config';
 import './common/logger/console-patch';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { join } from 'path';
-import { existsSync } from 'fs';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { AppLogger } from './common/logger';
+import { getStaticAssetsMappings } from './common/upload-dir.util';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import * as crypto from 'crypto';
 import helmet from 'helmet';
@@ -169,18 +171,6 @@ function getAllowedCorsOrigins(): string[] {
 }
 
 async function bootstrap() {
-  const nodeEnv = process.env.NODE_ENV;
-  const primaryAssetsPath =
-    nodeEnv === 'production'
-      ? '/app/assets'
-      : join(process.cwd(), 'public', 'assets');
-  const candidateAssetsPaths = [
-    primaryAssetsPath,
-    join(process.cwd(), 'public', 'assets'),
-    join(process.cwd(), 'assets'),
-    '/app/assets',
-  ];
-  const uniqueAssetsPaths = [...new Set(candidateAssetsPaths)];
   const appLogger = new AppLogger();
   appLogger.setContext('Bootstrap');
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -298,15 +288,13 @@ async function bootstrap() {
     }),
   );
 
-  // Fichiers statiques (multi-path compatibility to avoid prod/dev path drift)
-  for (const assetsPath of uniqueAssetsPaths) {
-    if (!existsSync(assetsPath)) continue;
-    app.useStaticAssets(assetsPath, {
-      prefix: '/assets',
-      index: false,
-    });
-    app.useStaticAssets(join(assetsPath, 'images'), {
-      prefix: '/uploads',
+  // Fichiers statiques — répertoire d'upload configurable via UPLOAD_DIR /
+  // UPLOAD_DIR_LOCAL (voir src/common/upload-dir.util.ts). Les prefixes
+  // publics historiques (/uploads, /assets/images) sont préservés pour ne pas
+  // casser les URLs déjà stockées en base.
+  for (const { prefix, root } of getStaticAssetsMappings()) {
+    app.useStaticAssets(root, {
+      prefix,
       index: false,
     });
   }

@@ -24,6 +24,7 @@ import { UpdateFundraisingDto } from './update-fundraising.dto';
 import { ConfigService } from '@nestjs/config';
 import { buildAssetImageUrl } from 'src/common/asset-url.util';
 import { convertToWebp, removePreviousImages } from 'src/common/image.util';
+import { getUploadRootDir } from 'src/common/upload-dir.util';
 
 @Injectable()
 export class FundraisingService {
@@ -74,13 +75,6 @@ export class FundraisingService {
     return {};
   }
 
-  private getUploadPath(): string {
-    if (process.env.NODE_ENV === 'production') {
-      return '/app/assets/images';
-    }
-    return path.join(process.cwd(), 'public', 'assets', 'images');
-  }
-
   private extractFilenameFromUrl(fileUrl: string): string | null {
     if (!fileUrl) return null;
     try {
@@ -96,7 +90,7 @@ export class FundraisingService {
     const previousFilename = this.extractFilenameFromUrl(previousUrl);
     if (!previousFilename) return;
 
-    const uploadDir = this.getUploadPath();
+    const uploadDir = getUploadRootDir();
     const previousFilePath = path.join(uploadDir, previousFilename);
 
     try {

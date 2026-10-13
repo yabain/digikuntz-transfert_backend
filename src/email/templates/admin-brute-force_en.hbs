@@ -1,0 +1,188 @@
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta content="width=device-width, initial-scale=1" name="viewport">
+    <meta content="telephone=no" name="format-detection">
+    <title>Brute-force alert — digiKUNTZ Payments</title>
+    <style type="text/css">
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #F6F6F6;
+            font-family: arial, 'helvetica neue', helvetica, sans-serif;
+        }
+        .wrapper {
+            width: 100%;
+            table-layout: fixed;
+            background-color: #F6F6F6;
+        }
+        .card {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+        }
+        .header {
+            text-align: center;
+            padding: 24px 20px 0;
+        }
+        .header h1 {
+            margin: 0;
+            color: #18078d;
+            font-size: 24px;
+        }
+        .banner {
+            background-color: #fdecea;
+            border: 1px solid #f5c6cb;
+            border-radius: 6px;
+            padding: 16px 20px;
+            margin: 16px 30px 0;
+            text-align: center;
+        }
+        .banner h2 {
+            margin: 0 0 6px;
+            color: #b02a37;
+            font-size: 18px;
+        }
+        .banner p {
+            margin: 0;
+            color: #842029;
+            font-size: 14px;
+            line-height: 21px;
+        }
+        .content {
+            padding: 20px 30px;
+        }
+        .content p {
+            color: #333333;
+            font-size: 14px;
+            line-height: 21px;
+        }
+        .section {
+            margin-top: 16px;
+        }
+        .section h3 {
+            margin: 0 0 8px;
+            color: #18078d;
+            font-size: 15px;
+        }
+        .details {
+            background-color: #f5f5fb;
+            border-radius: 6px;
+            padding: 14px 18px;
+        }
+        .details p {
+            margin: 6px 0;
+            font-size: 13px;
+            color: #444444;
+        }
+        .details .label {
+            color: #888888;
+            font-size: 12px;
+        }
+        .action {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .action a {
+            display: inline-block;
+            background-color: #0a36b4;
+            color: #ffffff;
+            text-decoration: none;
+            font-size: 15px;
+            font-weight: bold;
+            padding: 12px 28px;
+            border-radius: 6px;
+        }
+        .footer {
+            text-align: center;
+            color: #666666;
+            font-size: 12px;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <table class="wrapper" cellpadding="0" cellspacing="0" width="100%">
+        <tbody>
+            <tr>
+                <td align="center" style="padding:20px">
+                    <table class="card" cellpadding="0" cellspacing="0" width="100%">
+                        <tbody>
+                            <tr>
+                                <td class="header">
+                                    <h1>digiKUNTZ Payments</h1>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td align="center" style="padding:0 30px">
+                                    <div class="banner">
+                                        <h2>🚨 Possible brute-force attack</h2>
+                                        <p>An account has been automatically locked</p>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="content">
+                                    <p>Hello <b>Administrator</b>,</p>
+                                    <p>
+                                        The system detected <b>5 failed sign-in attempts</b> on the account below
+                                        within the last hour. The account has been automatically locked for one hour.
+                                    </p>
+
+                                    <div class="section">
+                                        <h3>Affected account</h3>
+                                        <div class="details">
+                                            <p><span class="label">User</span><br>{{userName}}</p>
+                                            <p><span class="label">Email</span><br>{{email}}</p>
+                                            <p><span class="label">User ID</span><br>{{userId}}</p>
+                                            <p><span class="label">Account type</span><br>{{accountType}}</p>
+                                            <p><span class="label">Role</span><br>{{role}}</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="section">
+                                        <h3>Sign-in attempt</h3>
+                                        <div class="details">
+                                            <p><span class="label">Date</span><br>{{attemptDate}}</p>
+                                            <p><span class="label">IP address</span><br>{{ip}}</p>
+                                            <p><span class="label">Location</span><br>{{location}}</p>
+                                            <p><span class="label">Browser</span><br>{{browser}}</p>
+                                            <p><span class="label">Operating system</span><br>{{os}}</p>
+                                            <p><span class="label">Device</span><br>{{device}}</p>
+                                            <p><span class="label">User-Agent</span><br>{{userAgent}}</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="section">
+                                        <h3>Lock details</h3>
+                                        <div class="details">
+                                            <p><span class="label">Failed attempts</span><br>{{attempts}}</p>
+                                            <p><span class="label">Locked until</span><br>{{lockedUntil}}</p>
+                                            <p><span class="label">Duration</span><br>{{duration}}</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="action">
+                                        <a href="{{frontUrl}}/admin-tracking" target="_blank">Open admin dashboard</a>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <table cellpadding="0" cellspacing="0" width="100%">
+                        <tbody>
+                            <tr>
+                                <td class="footer">
+                                    Automated email sent by digiKUNTZ Payments — no reply needed.<br>
+                                    Copyright &copy; 2025 digiKUNTZ. All rights reserved.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</body>
+</html>

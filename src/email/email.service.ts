@@ -446,6 +446,139 @@ export class EmailService {
     }
   }
 
+  /**
+   * Envoie un email HTML présentable à l'utilisateur lorsque son compte est
+   * verrouillé suite à des tentatives de connexion échouées (suspicion brute-force).
+   */
+  async sendAccountLockedEmail(
+    toEmail: string,
+    language: string,
+    details: {
+      userName: string;
+      lockedUntil: string;
+      duration: string;
+      attemptDate: string;
+      ip: string;
+      location: string;
+      browser: string;
+      os: string;
+    },
+  ): Promise<boolean> {
+    if (!this.isEmailValide(toEmail)) return false;
+    const from = this.configService.get<string>('SMTP_USER');
+    const lang = language === 'fr' ? 'fr' : 'en';
+    const subject =
+      lang === 'fr'
+        ? '🔒 Compte temporairement verrouillé — digiKUNTZ Payments'
+        : '🔒 Account temporarily locked — digiKUNTZ Payments';
+    try {
+      const templateName = 'account-lock';
+      let templatePath = path.join(
+        this.templateFolder,
+        `${templateName}_${lang}.hbs`,
+      );
+      let templateSource: string;
+      try {
+        templateSource = fs.readFileSync(templatePath, 'utf8');
+      } catch {
+        templatePath = path.join(this.templateFolder, `${templateName}_fr.hbs`);
+        templateSource = fs.readFileSync(templatePath, 'utf8');
+      }
+      const template = handlebars.compile(templateSource);
+      const html = template({
+        userName: details.userName,
+        lockedUntilDate: this.dateService.formatDate(
+          details.lockedUntil,
+          'long',
+          lang,
+        ),
+        duration: details.duration,
+        attemptDate: details.attemptDate,
+        ip: details.ip,
+        location: details.location,
+        browser: details.browser,
+        os: details.os,
+        frontUrl: this.frontUrl,
+      });
+      return await this.proceedToSendEmail(
+        toEmail,
+        subject,
+        html,
+        'Account locked notification',
+      );
+    } catch (error) {
+      console.warn("Erreur lors de l'envoi de l'email de verrouillage :", error);
+      this.saveMail({ to: toEmail, subject, from, status: false, body: error });
+      return false;
+    }
+  }
+
+  /**
+   * Envoie une alerte HTML présentable aux administrateurs lorsqu'un compte
+   * est verrouillé suite à une suspicion de brute-force.
+   */
+  async sendAdminBruteForceAlert(details: {
+    userName: string;
+    email: string;
+    userId: string;
+    accountType: string;
+    role: string;
+    attemptDate: string;
+    ip: string;
+    location: string;
+    browser: string;
+    os: string;
+    device: string;
+    userAgent: string;
+    attempts: string;
+    lockedUntil: string;
+    duration: string;
+  }): Promise<void> {
+    const to = this.getAlertDestination();
+    const templateName = 'admin-brute-force';
+    let templatePath = path.join(
+      this.templateFolder,
+      `${templateName}_fr.hbs`,
+    );
+    let templateSource: string;
+    try {
+      templateSource = fs.readFileSync(templatePath, 'utf8');
+    } catch {
+      templatePath = path.join(this.templateFolder, `${templateName}_en.hbs`);
+      templateSource = fs.readFileSync(templatePath, 'utf8');
+    }
+    const template = handlebars.compile(templateSource);
+    const html = template({
+      ...details,
+      frontUrl: this.configService.get<string>('FRONT_URL') || this.frontUrl,
+    });
+
+    const subject = `🚨 Suspicion de brute-force: ${details.email}`;
+    try {
+      for (let i = 0; i < to.length; i++) {
+        const recipients = to[i];
+        setTimeout(async () => {
+          try {
+            await this.proceedToSendEmail(
+              recipients,
+              subject,
+              html,
+              'admin/brute-force-alert',
+            );
+            console.log(`✅ Brute-force alert email sent to: ${recipients}`);
+          } catch (error) {
+            console.error(
+              `❌ Error sending brute-force alert email to: ${recipients}`,
+              error,
+            );
+          }
+        }, 1000 * i);
+      }
+    } catch (error) {
+      console.error('❌ Error sending brute-force alert email', error);
+    }
+  }
+
   // async sendPlansEmail(user: any, plansData: any): Promise<boolean> {
   //   const userName = user.name || `${user.firstName} ${user.lastName}`;
   //   const templateName = 'subscribe_MailForSubscriber';

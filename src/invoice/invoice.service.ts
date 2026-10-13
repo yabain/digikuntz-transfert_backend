@@ -10,7 +10,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
 import { existsSync } from 'fs';
 import { readFile, stat } from 'fs/promises';
-import { extname, join } from 'path';
+import { extname, join, resolve, sep } from 'path';
 import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
 import { Transaction, TransactionType, TStatus } from 'src/transaction/transaction.schema';
 import { UserService } from 'src/user/user.service';
@@ -21,6 +21,7 @@ import { Payin } from 'src/payin/payin.schema';
 import { Invoice, InvoiceItem, InvoiceStatus } from './invoice.schema';
 import { CreateInvoiceDto, MarkInvoicePaidDto, UpdateInvoiceDto } from './invoice.dto';
 import { EmailService } from 'src/email/email.service';
+import { getUploadRootDir } from 'src/common/upload-dir.util';
 
 export interface InvoiceStats {
   total: number;
@@ -198,31 +199,45 @@ export class InvoiceService {
     }
   }
 
-  private picturePaths(): string[] {
-    const nodeEnv = process.env.NODE_ENV;
+  private legacyAssetsPaths(): string[] {
     return [
-      ...new Set([
-        nodeEnv === 'production' ? '/app/assets' : join(process.cwd(), 'public', 'assets'),
-        join(process.cwd(), 'public', 'assets'),
-        join(process.cwd(), 'assets'),
-        '/app/assets',
-      ]),
+      join(process.cwd(), 'public', 'assets'),
+      join(process.cwd(), 'assets'),
+      '/app/assets',
     ];
   }
 
   private resolvePictureFile(pictureUrl: string): string | null {
     if (!pictureUrl || /^https?:\/\//i.test(pictureUrl)) return null;
+
+    let roots: string[] = [];
     let rel: string | null = null;
-    if (pictureUrl.startsWith('/uploads/')) {
-      rel = `images/${pictureUrl.slice('/uploads/'.length)}`;
+
+    if (pictureUrl.startsWith('/uploads/announcements/')) {
+      return null; // pièces jointes d'annonces : hors périmètre facture
+    } else if (pictureUrl.startsWith('/uploads/')) {
+      roots = [getUploadRootDir()];
+      rel = pictureUrl.slice('/uploads/'.length);
+    } else if (pictureUrl.startsWith('/assets/images/')) {
+      roots = [getUploadRootDir()];
+      rel = pictureUrl.slice('/assets/images/'.length);
     } else if (pictureUrl.startsWith('/assets/')) {
+      roots = this.legacyAssetsPaths();
       rel = pictureUrl.slice('/assets/'.length);
     } else if (pictureUrl.startsWith('/')) {
+      roots = this.legacyAssetsPaths();
       rel = pictureUrl.slice(1);
     }
+
     if (!rel) return null;
-    for (const base of this.picturePaths()) {
-      const file = join(base, rel);
+    for (const root of roots) {
+      // Confinement anti path-traversal : le fichier résolu doit rester
+      // sous la racine (refuse les `..` sortant du répertoire autorisé).
+      const base = resolve(root);
+      const file = resolve(base, rel);
+      // Confinement strict : le fichier doit être DANS la racine (un
+      // relatif vide ou un `..` sortant est refusé).
+      if (!file.startsWith(base + sep)) continue;
       if (existsSync(file)) return file;
     }
     return null;

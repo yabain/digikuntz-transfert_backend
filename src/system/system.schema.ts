@@ -53,6 +53,16 @@ export class System extends Document {
   @Prop({ default: true })
   emailNotificationsEnabled: boolean;
 
+  // --- Security settings ---
+  @Prop({ default: true })
+  twoFactorEnabled: boolean;
+
+  @Prop({ default: true })
+  googleLoginEnabled: boolean;
+
+  @Prop()
+  encryptedGoogleClientId: string;
+
   @Prop()
   addressLine1: string;
 

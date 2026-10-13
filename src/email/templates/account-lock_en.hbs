@@ -1,0 +1,164 @@
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta content="width=device-width, initial-scale=1" name="viewport">
+    <meta content="telephone=no" name="format-detection">
+    <title>Account temporarily locked — digiKUNTZ Payments</title>
+    <style type="text/css">
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #F6F6F6;
+            font-family: arial, 'helvetica neue', helvetica, sans-serif;
+        }
+        .wrapper {
+            width: 100%;
+            table-layout: fixed;
+            background-color: #F6F6F6;
+        }
+        .card {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+        }
+        .header {
+            text-align: center;
+            padding: 24px 20px 0;
+        }
+        .header h1 {
+            margin: 0;
+            color: #18078d;
+            font-size: 24px;
+        }
+        .banner {
+            background-color: #fdecea;
+            border: 1px solid #f5c6cb;
+            border-radius: 6px;
+            padding: 16px 20px;
+            margin: 16px 30px 0;
+            text-align: center;
+        }
+        .banner h2 {
+            margin: 0 0 6px;
+            color: #b02a37;
+            font-size: 18px;
+        }
+        .banner p {
+            margin: 0;
+            color: #842029;
+            font-size: 14px;
+            line-height: 21px;
+        }
+        .content {
+            padding: 20px 30px;
+        }
+        .content p {
+            color: #333333;
+            font-size: 14px;
+            line-height: 21px;
+        }
+        .details {
+            background-color: #f5f5fb;
+            border-radius: 6px;
+            padding: 14px 18px;
+            margin-top: 16px;
+        }
+        .details p {
+            margin: 6px 0;
+            font-size: 13px;
+            color: #444444;
+        }
+        .details .label {
+            color: #888888;
+            font-size: 12px;
+        }
+        .notice {
+            background-color: #fff8e6;
+            border-left: 4px solid #e6a700;
+            border-radius: 4px;
+            padding: 12px 16px;
+            margin-top: 16px;
+            font-size: 13px;
+            color: #664d03;
+            line-height: 19px;
+        }
+        .footer {
+            text-align: center;
+            color: #666666;
+            font-size: 12px;
+            padding: 20px;
+        }
+        .footer a {
+            color: #18078d;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <table class="wrapper" cellpadding="0" cellspacing="0" width="100%">
+        <tbody>
+            <tr>
+                <td align="center" style="padding:20px">
+                    <table class="card" cellpadding="0" cellspacing="0" width="100%">
+                        <tbody>
+                            <tr>
+                                <td class="header">
+                                    <h1>digiKUNTZ Payments</h1>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td align="center" style="padding:0 30px">
+                                    <div class="banner">
+                                        <h2>🔒 Account temporarily locked</h2>
+                                        <p>Several failed sign-in attempts were detected</p>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="content">
+                                    <p>Hello <b>{{userName}}</b>,</p>
+                                    <p>
+                                        For your security, we detected <b>5 failed sign-in attempts</b> on your
+                                        account within the last hour. Your account has therefore been temporarily
+                                        locked.
+                                    </p>
+                                    <div class="details">
+                                        <p><span class="label">Locked until</span><br>{{lockedUntilDate}}</p>
+                                        <p><span class="label">Lock duration</span><br>{{duration}}</p>
+                                        <p><span class="label">Attempt date</span><br>{{attemptDate}}</p>
+                                        <p><span class="label">IP address</span><br>{{ip}}</p>
+                                        <p><span class="label">Location</span><br>{{location}}</p>
+                                        <p><span class="label">Browser</span><br>{{browser}}</p>
+                                        <p><span class="label">Operating system</span><br>{{os}}</p>
+                                    </div>
+                                    <div class="notice">
+                                        If you are not at the origin of these attempts, we strongly recommend that you
+                                        change your password once the lock is lifted.
+                                        If it was you, you will be able to try again after the time indicated above.
+                                    </div>
+                                    <p style="margin-top:16px">
+                                        If you have any questions, contact our support team:
+                                        <a href="mailto:support@digikuntz.com">support@digikuntz.com</a>
+                                    </p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <table cellpadding="0" cellspacing="0" width="100%">
+                        <tbody>
+                            <tr>
+                                <td class="footer">
+                                    Copyright &copy; 2025 digiKUNTZ. All rights reserved.<br>
+                                    Entrée ELECAM, Bangangté, West Cameroon<br>
+                                    support@digikuntz.com
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</body>
+</html>
