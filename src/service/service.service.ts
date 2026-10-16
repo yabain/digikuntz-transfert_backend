@@ -19,6 +19,7 @@ import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
 import { AuthService } from 'src/auth/auth.service';
 import { WhatsappService } from 'src/wa/whatsapp.service';
 import { UserService } from 'src/user/user.service';
+import { CommissionResolverService } from 'src/common/services/commission-resolver.service';
 import { ServicePaymentService } from './service-payment/service-payment.service';
 import { ConfigService } from '@nestjs/config';
 import { buildAssetImageUrl } from 'src/common/asset-url.util';
@@ -35,7 +36,8 @@ export class ServiceService {
     private authService: AuthService,
     private waService: WhatsappService,
     private userService: UserService,
-    private servicePaymentService: ServicePaymentService
+    private servicePaymentService: ServicePaymentService,
+    private commissionResolver: CommissionResolverService,
   ) { }
 
   private sanitizeUser(user: any): any {
@@ -194,8 +196,13 @@ export class ServiceService {
     try {
       let created: Service;
       await session.withTransaction(async () => {
+        const requestedPayer = (plan as any)?.commissionPayer;
+        const commissionPayer =
+          requestedPayer === 'customer' || requestedPayer === 'organization'
+            ? requestedPayer
+            : await this.commissionResolver.getCommissionPayer(String(user._id));
         const [res] = await this.serviceModel.create(
-          [{ ...plan, author: user._id }],
+          [{ ...plan, author: user._id, commissionPayer }],
           { session },
         );
         await this.optionsService.creatOptions(plan.options, res._id);

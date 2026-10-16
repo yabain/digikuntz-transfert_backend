@@ -134,17 +134,17 @@ export class UpdateUserDto {
 
   @IsString()
   @IsOptional()
-  headTitlePortal: string;
+  readonly headTitlePortal: string;
 
   @IsString()
   @IsOptional()
-  headTitlePortalColor: string
+  readonly headTitlePortalColor: string;
 
   @IsString()
   @IsOptional()
-  headTextPortal: string;
+  readonly headTextPortal: string;
 
   @IsString()
   @IsOptional()
-  headTextPortalColor: string
+  readonly commissionPayer: 'customer' | 'organization';
 }

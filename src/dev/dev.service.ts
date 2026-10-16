@@ -505,6 +505,17 @@ export class DevService {
       delete transactionData.callbackUrl;
     }
 
+    // Déterminer qui paie les charges selon l'organisation propriétaire de la clé API
+    const devUser = await this.userService.getUserById(userId).catch(() => null);
+    const requestedPayer = transactionData?.commissionPayer;
+    const commissionPayer =
+      requestedPayer === 'customer' || requestedPayer === 'organization'
+        ? requestedPayer
+        : devUser?.commissionPayer === 'organization'
+          ? 'organization'
+          : 'customer';
+    transactionData.commissionPayer = commissionPayer;
+
     const createPayin = await this.fwService.createPayin(transactionData, userId);
 
     const transaction = await this.transactionService.findById(
@@ -627,6 +638,16 @@ export class DevService {
       : undefined;
 
     const txRef = this.payinService.generateTxRef('txDirect');
+
+    const directUser = await this.userService.getUserById(userId).catch(() => null);
+    const requestedDirectPayer = (data as any)?.commissionPayer;
+    const directCommissionPayer =
+      requestedDirectPayer === 'customer' || requestedDirectPayer === 'organization'
+        ? requestedDirectPayer
+        : directUser?.commissionPayer === 'organization'
+          ? 'organization'
+          : 'customer';
+
     const transactionData = {
       transactionRef: this.transactionService.generateInRef(),
       estimation: data.estimation,
@@ -645,6 +666,7 @@ export class DevService {
       receiverCurrency: data.currency,
       status: TStatus.PAYINPENDING,
       invoiceTaxes: feeRate,
+      commissionPayer: directCommissionPayer,
       ...(callbackUrl && { callbackUrl }),
       ...(webhookUrl && { callbackUrl: webhookUrl }),
     };

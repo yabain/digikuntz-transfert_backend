@@ -7,6 +7,7 @@ import { InvoiceCron } from './invoice.cron';
 import { UserModule } from 'src/user/user.module';
 import { SystemModule } from 'src/system/system.module';
 import { PaymentMethodModule } from 'src/payment-method/payment-method.module';
+import { CommissionResolverModule } from 'src/common/services/commission-resolver.module';
 import { FlutterwaveModule } from 'src/flutterwave/flutterwave.module';
 import { Transaction, TransactionSchema } from 'src/transaction/transaction.schema';
 import { Payin, PayinSchema } from 'src/payin/payin.schema';
@@ -22,6 +23,7 @@ import { EmailModule } from 'src/email/email.module';
     forwardRef(() => UserModule),
     SystemModule,
     PaymentMethodModule,
+    CommissionResolverModule,
     forwardRef(() => FlutterwaveModule),
     EmailModule,
   ],

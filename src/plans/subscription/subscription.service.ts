@@ -41,6 +41,14 @@ export class SubscriptionService {
   ) { }
 
   async subscribe(subscriptionData: CreateSubscriptionDto, transactionId = undefined) {
+    if (
+      subscriptionData?.userId &&
+      subscriptionData?.receiverId &&
+      String(subscriptionData.userId) === String(subscriptionData.receiverId)
+    ) {
+      throw new ForbiddenException('A user cannot subscribe to their own plan');
+    }
+
     const subscriptionStatus = await this.verifySubscription(
       subscriptionData.userId,
       subscriptionData.planId,

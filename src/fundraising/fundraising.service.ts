@@ -22,6 +22,7 @@ import {
 import { Donation, DonationDocument } from './donation.schema';
 import { UpdateFundraisingDto } from './update-fundraising.dto';
 import { ConfigService } from '@nestjs/config';
+import { CommissionResolverService } from 'src/common/services/commission-resolver.service';
 import { buildAssetImageUrl } from 'src/common/asset-url.util';
 import { convertToWebp, removePreviousImages } from 'src/common/image.util';
 import { getUploadRootDir } from 'src/common/upload-dir.util';
@@ -37,6 +38,7 @@ export class FundraisingService {
     private balanceService: BalanceService,
     private operationNotificationService: OperationNotificationService,
     private readonly configService: ConfigService,
+    private readonly commissionResolver: CommissionResolverService,
   ) {}
 
   private getPagination(query: any) {
@@ -148,6 +150,12 @@ export class FundraisingService {
       throw new BadRequestException('End date must be in the future');
     }
 
+    const requestedPayer = (data as any)?.commissionPayer;
+    const commissionPayer =
+      requestedPayer === 'customer' || requestedPayer === 'organization'
+        ? requestedPayer
+        : await this.commissionResolver.getCommissionPayer(String(userId));
+
     const created = await this.fundraisingModel.create({
       title: data.title,
       subTitle: data.subTitle || '',
@@ -160,6 +168,7 @@ export class FundraisingService {
       visibility: data.visibility || FundraisingVisibility.PUBLIC,
       status: typeof data.status === 'boolean' ? data.status : true,
       coverImageUrl: data.coverImageUrl || '',
+      commissionPayer,
     } as any);
 
     return created;
@@ -426,6 +435,9 @@ export class FundraisingService {
           ...(data.startDate !== undefined ? { startDate: new Date(data.startDate) } : {}),
           ...(data.visibility !== undefined ? { visibility: data.visibility } : {}),
           ...(data.coverImageUrl !== undefined ? { coverImageUrl: data.coverImageUrl } : {}),
+          ...(data.commissionPayer === 'customer' || data.commissionPayer === 'organization'
+            ? { commissionPayer: data.commissionPayer }
+            : {}),
         },
         { new: true, runValidators: true },
       )
@@ -459,6 +471,7 @@ export class FundraisingService {
       transactionRef: `PUB-DON-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
       estimation: Number(data.amount),
       transactionType: 'fundraising',
+      commissionPayer: (fundraising as any).commissionPayer || 'customer',
       fundraisingId: String(fundraising._id),
       donorVisibility: false,
       donationMessage: data.message || '',
@@ -529,6 +542,7 @@ export class FundraisingService {
       transactionRef: `DON-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
       estimation: Number(data.amount),
       transactionType: 'fundraising',
+      commissionPayer: (fundraising as any).commissionPayer || 'customer',
       fundraisingId: String(fundraising._id),
       donorVisibility: data.isAnonymous ? false : (typeof data.visibility === 'boolean' ? data.visibility : true),
       isAnonymous: data.isAnonymous === true,

@@ -8,7 +8,7 @@ export class Cities {
     { countryId: '687e4bff30550a0b4917bc77', name: 'Bali' },
     { countryId: '687e4bff30550a0b4917bc77', name: 'Bamenda' },
     { countryId: '687e4bff30550a0b4917bc77', name: 'Bandjoun' },
-    { countryId: '687e4bff30550a0b4917bc77', name: 'Bangangté' },
+    { countryId: '687e4bff30550a0b4917bc77', name: 'Douala' },
     { countryId: '687e4bff30550a0b4917bc77', name: 'Banyo' },
     { countryId: '687e4bff30550a0b4917bc77', name: 'Batouri' },
     { countryId: '687e4bff30550a0b4917bc77', name: 'Bertoua' },

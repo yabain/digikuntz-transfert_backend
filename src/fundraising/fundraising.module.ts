@@ -13,6 +13,7 @@ import { Donation, DonationSchema } from './donation.schema';
 import { Fundraising, FundraisingSchema } from './fundraising.schema';
 import { FundraisingService } from './fundraising.service';
 import { EmailModule } from 'src/email/email.module';
+import { CommissionResolverModule } from 'src/common/services/commission-resolver.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { EmailModule } from 'src/email/email.module';
     BalanceModule,
     forwardRef(() => FlutterwaveModule),
     forwardRef(() => WhatsappModule),
+    CommissionResolverModule,
     MongooseModule.forFeature([
       { name: Fundraising.name, schema: FundraisingSchema },
       { name: Donation.name, schema: DonationSchema },

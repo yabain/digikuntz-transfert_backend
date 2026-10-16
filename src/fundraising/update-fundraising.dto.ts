@@ -44,4 +44,8 @@ export class UpdateFundraisingDto {
   @IsOptional()
   @IsString()
   coverImageUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  commissionPayer?: string;
 }

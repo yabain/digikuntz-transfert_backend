@@ -31,6 +31,9 @@ export class Service extends Document {
 
   @Prop()
   currency: string;
+
+  @Prop({ trim: true, enum: ['customer', 'organization'], default: 'customer' })
+  commissionPayer?: 'customer' | 'organization';
 }
 
 export const ServiceSchema = SchemaFactory.createForClass(Service);

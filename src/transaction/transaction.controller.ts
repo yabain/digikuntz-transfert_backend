@@ -362,19 +362,16 @@ export class TransactionController {
   }
 
   @Get(':id')
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get transaction data by ID' })
+  @ApiOperation({ summary: 'Get transaction data by ID (public invoice page)' })
   @ApiParam({ name: 'id', description: 'Transaction ID', type: String })
   @ApiResponse({ status: 200, description: 'Transaction data returned.' })
   @ApiResponse({ status: 404, description: 'Transaction not found.' })
-  @UseGuards(AuthGuard('jwt'))
   async getTransactionData(
     @Param('id') transactionId: string,
-    @Req() req,
   ): Promise<any> {
     const transaction = await this.transactionService.findById(transactionId);
-    if (!req.user?.isAdmin && !this.isUserRelatedToTransaction(req.user?._id, transaction)) {
-      throw new ForbiddenException('Unauthorised');
+    if (!transaction) {
+      throw new NotFoundException('Transaction not found');
     }
     return transaction;
   }

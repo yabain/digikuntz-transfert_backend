@@ -13,6 +13,8 @@ import { UserService } from 'src/user/user.service';
 import { OptionsServiceService } from './options-service/options-service.service';
 import { EmailSchema, Email } from 'src/email/email.schema';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
+import { GatewayModule } from 'src/gateway/gateway.module';
+import { CommissionResolverModule } from 'src/common/services/commission-resolver.module';
 import { FlutterwaveModule } from 'src/flutterwave/flutterwave.module';
 import { HttpModule } from '@nestjs/axios';
 import { Payout, PayoutSchema } from 'src/payout/payout.schema';
@@ -79,6 +81,8 @@ import { EmailModule } from 'src/email/email.module';
     forwardRef(() => SubscriptionModule),
     forwardRef(() => SystemModule),
     forwardRef(() => PaymentModule),
+    GatewayModule,
+    CommissionResolverModule,
     SystemBalanceModule,
     ProspectsModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),

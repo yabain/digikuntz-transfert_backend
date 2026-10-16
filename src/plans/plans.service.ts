@@ -22,6 +22,7 @@ import { SubscriptionService } from './subscription/subscription.service';
 import { WhatsappService } from 'src/wa/whatsapp.service';
 import { UserService } from 'src/user/user.service';
 import { EmailService } from 'src/email/email.service';
+import { CommissionResolverService } from 'src/common/services/commission-resolver.service';
 import { generateFileUrl } from '../multer.config';
 import { convertToWebp, removePreviousImages } from 'src/common/image.util';
 import { randomBytes } from 'crypto';
@@ -41,6 +42,7 @@ export class PlansService {
     private waService: WhatsappService,
     private userService: UserService,
     private emailService: EmailService,
+    private commissionResolver: CommissionResolverService,
   ) { }
 
   private sanitizeUser(user: any): any {
@@ -219,8 +221,13 @@ export class PlansService {
     try {
       let created: Plans;
       await session.withTransaction(async () => {
+        const requestedPayer = (plan as any)?.commissionPayer;
+        const commissionPayer =
+          requestedPayer === 'customer' || requestedPayer === 'organization'
+            ? requestedPayer
+            : await this.commissionResolver.getCommissionPayer(String(user._id));
         const [res] = await this.plansModel.create(
-          [{ ...plan, author: user._id }],
+          [{ ...plan, author: user._id, commissionPayer }],
           { session },
         );
         await this.optionsService.creatOptions(plan.options, res._id);
@@ -257,6 +264,9 @@ export class PlansService {
       }
 
       if (selectedUserId) {
+        if (String(selectedUserId) === String(planAuthorId)) {
+          throw new ForbiddenException('A plan owner cannot subscribe to their own plan');
+        }
         newUser = { userData: await this.userService.getUserById(selectedUserId) };
         if (!newUser.userData) {
           throw new NotFoundException('User not found');

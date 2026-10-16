@@ -2,6 +2,7 @@ import {
   IsArray,
   IsDateString,
   IsEnum,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -39,6 +40,11 @@ export class CreateInvoiceDto {
   @IsOptional()
   @IsDateString()
   invoiceDate?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['customer', 'organization'])
+  commissionPayer?: 'customer' | 'organization';
 }
 
 export class UpdateInvoiceDto {
@@ -46,6 +52,11 @@ export class UpdateInvoiceDto {
   @IsString()
   @IsNotEmpty()
   name?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['customer', 'organization'])
+  commissionPayer?: 'customer' | 'organization';
 
   @IsOptional()
   @IsArray()

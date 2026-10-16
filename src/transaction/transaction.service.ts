@@ -30,6 +30,7 @@ import { Payout } from 'src/payout/payout.schema';
 import { PayinService } from 'src/payin/payin.service';
 import { UpdateTransactionDto } from './update-transaction.dto';
 import { SystemService } from 'src/system/system.service';
+import { Gateway } from 'src/gateway/gateway.schema';
 import { OperationNotificationService } from 'src/notification/operation-notification.service';
 import { PaymentRequestService } from 'src/payment-request/payment-request.service';
 import { PaymentRequestStatus } from 'src/payment-request/payment-request.schema';
@@ -39,6 +40,7 @@ import { GatewayLoaderService } from 'src/payment/gateway-loader.service';
 import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
 import { AuditLogService } from 'src/audit-log/audit-log.service';
 import { SystemBalanceService } from 'src/system-balance/system-balance.service';
+import { CommissionResolverService } from 'src/common/services/commission-resolver.service';
 
 /** Allowed previous statuses for each target status (empty = terminal / no overwrite). */
 const TRANSACTION_STATUS_FROM: Record<TStatus, TStatus[]> = {
@@ -84,6 +86,8 @@ export class TransactionService {
     private transactionModel: mongoose.Model<Transaction>,
     @InjectModel(Payout.name)
     private payoutModel: mongoose.Model<Payout>,
+    @InjectModel(Gateway.name)
+    private gatewayModel: mongoose.Model<Gateway>,
     private httpService: HttpService,
     private payinService: PayinService,
     private systemService: SystemService,
@@ -97,6 +101,7 @@ export class TransactionService {
     private flutterwaveService: FlutterwaveService,
     private auditLogService: AuditLogService,
     private systemBalanceService: SystemBalanceService,
+    private commissionResolver: CommissionResolverService,
   ) { }
 
   private async loadFwSecret(currency = 'XAF'): Promise<string> {
@@ -1530,24 +1535,108 @@ export class TransactionService {
         transactionData?.transactionType === 'apiCall' &&
         transactionData?.status === TStatus.PAYINSUCCESS
       );
-    const taxesDetails = noFees
-      ? {
-          invoiceTaxes: 0,
-          taxesAmount: 0,
-          paymentWithTaxes: this.arrondOnExeed(Number(transactionData.estimation)),
+
+    // Interdire l'auto-transaction sur les prestations (plan/service/fundraising)
+    const type = transactionData?.transactionType;
+    const senderId = transactionData?.senderId;
+    const receiverId = transactionData?.receiverId;
+    if (
+      ['subscription', 'service', 'fundraising'].includes(String(type)) &&
+      senderId &&
+      receiverId &&
+      String(senderId) === String(receiverId)
+    ) {
+      throw new HttpException(
+        { status: HttpStatus.FORBIDDEN, message: 'Self-subscription is not allowed', code: 'SELF_SUBSCRIPTION_NOT_ALLOWED' },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+    // Déterminer qui paie la commission (si transaction d'encaissement)
+    let commissionPayer: 'customer' | 'organization' = 'customer';
+    if (noFees) {
+      commissionPayer = 'customer';
+    } else if (
+      transactionData?.commissionPayer === 'customer' ||
+      transactionData?.commissionPayer === 'organization'
+    ) {
+      commissionPayer = transactionData.commissionPayer;
+    }
+
+    let gatewayCommission = 0;
+
+    if (!noFees && transactionData?.transactionType !== 'withdrawal') {
+      // Résoudre depuis l'utilisateur si la valeur n'est pas explicitement fournie
+      if (
+        transactionData?.commissionPayer !== 'customer' &&
+        transactionData?.commissionPayer !== 'organization'
+      ) {
+        const userId = transactionData.senderId || transactionData.userId;
+        if (userId) {
+          commissionPayer = await this.commissionResolver.getCommissionPayer(userId);
         }
-      : await this.calculateTaxesAmount(
-          transactionData.estimation,
-          Number(transactionData.invoiceTaxes) || undefined,
-        );
+      }
+
+      // Récupérer la commission du gateway si gatewayId fourni
+      if (transactionData.gatewayId) {
+        const gateway = await this.gatewayModel?.findById(transactionData.gatewayId).lean().exec();
+        if (gateway) {
+          gatewayCommission = Number(gateway.providerCommission) || 0;
+        }
+      }
+    }
+
+    // Calculer les montants avec gestion de la commission
+    let paymentDetails: any;
+    if (noFees) {
+      const estimation = this.arrondOnExeed(Number(transactionData.estimation));
+      const baseAmount = estimation;
+      paymentDetails = {
+        invoiceTaxes: 0,
+        taxesAmount: 0,
+        commission: 0,
+        clientAmount: estimation,
+        paymentWithTaxes: estimation,
+        invoiceTaxesRate: 0,
+        commissionPayer: 'customer', // défaut
+      };
+    } else {
+      // Récupérer le taux de taxe système
+      const systemData = await this.systemService.getSystemData();
+      const taxRate = Number(transactionData.invoiceTaxes) || systemData?.invoiceTaxes || 0;
+
+      // Récupérer la commission du gateway si pas déjà fait
+      if (!gatewayCommission && transactionData.gatewayId) {
+        const gateway = await this.gatewayModel?.findById(transactionData.gatewayId).lean().exec();
+        if (gateway) {
+          gatewayCommission = Number(gateway.providerCommission) || 0;
+        }
+      }
+
+      // Utiliser la nouvelle méthode qui gère la commission selon commissionPayer
+      const paymentDetailsCalc = await this.calculatePaymentAmount(
+        Number(transactionData.estimation),
+        gatewayCommission,
+        commissionPayer,
+        undefined, // utilise le taux système
+      );
+
+      paymentDetails = {
+        ...paymentDetailsCalc,
+        commissionPayer,
+      };
+    }
+
     const { noFees: _noFees, ...persistedTransactionData } = transactionData;
     const payload = {
       ...persistedTransactionData,
       estimation: String(transactionData.estimation),
       receiverAmount: transactionData.transactionType === 'transfer' ? String(transactionData.receiverAmount) : String(transactionData.estimation),
-      invoiceTaxes: String(taxesDetails.invoiceTaxes),
-      taxesAmount: String(taxesDetails.taxesAmount),
-      paymentWithTaxes: String(taxesDetails.paymentWithTaxes),
+      invoiceTaxes: String(paymentDetails.invoiceTaxes || 0),
+      taxesAmount: String(paymentDetails.taxesAmount || 0),
+      commission: String(paymentDetails.commission || 0),
+      commissionPayer: commissionPayer,
+      paymentWithTaxes: String(paymentDetails.clientAmount || paymentDetails.paymentWithTaxes),
     };
     return await this.transactionModel.create(payload);
   }
@@ -1682,6 +1771,56 @@ export class TransactionService {
     return true;
   }
 
+  /**
+   * Calcule le montant à payer par le client selon qui paie la commission
+   * @param price Montant de base
+   * @param gatewayCommission Pourcentage de commission du gateway (ex: 3 pour 3%)
+   * @param commissionPayer 'customer' (défaut) ou 'organization'
+   * @param taxRate Taux de taxe optionnel
+   */
+  async calculatePaymentAmount(
+    price: number,
+    gatewayCommission: number,
+    commissionPayer: 'customer' | 'organization',
+    taxRate?: number,
+  ): Promise<{
+    price: number;
+    commission: number;
+    clientAmount: number;
+    invoiceTaxes: number;
+    taxesAmount: number;
+    paymentWithTaxes: number;
+  }> {
+    const rate = (await this.systemService.getSystemData()).invoiceTaxes ?? 0;
+    const taxRateFinal = taxRate ?? rate;
+    const taxesAmount = this.arrondOnExeed(price * (taxRateFinal / 100));
+    const baseWithTaxes = this.arrondOnExeed(price + taxesAmount);
+
+    let commission = 0;
+    let clientAmount = baseWithTaxes;
+
+    if (commissionPayer === 'customer') {
+      // Client paie la commission : montant + taxes + commission
+      commission = this.arrondOnExeed(baseWithTaxes * (gatewayCommission / 100));
+      clientAmount = this.arrondOnExeed(baseWithTaxes + commission);
+    } else {
+      // Organisation paie : client paie SEULEMENT l'estimation (montant de base)
+      // L'organisation absorbe la commission ET les taxes
+      commission = this.arrondOnExeed(baseWithTaxes * (gatewayCommission / 100));
+      clientAmount = price; // Juste l'estimation de base
+    }
+
+    return {
+      price: this.arrondOnExeed(price),
+      commission,
+      clientAmount,
+      invoiceTaxes: taxRateFinal,
+      taxesAmount,
+      paymentWithTaxes: clientAmount, // Montant que le client paie réellement
+    };
+  }
+
+  // Méthode existante maintenue pour compatibilité (sans commission gateway)
   async calculateTaxesAmount(price: number, taxRate?: number): Promise<any> {
     const rate = taxRate ?? (await this.systemService.getSystemData()).invoiceTaxes ?? 0;
     const taxesAmount = this.arrondOnExeed(price * (rate / 100));

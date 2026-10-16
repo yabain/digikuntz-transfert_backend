@@ -6,6 +6,8 @@ import { Payin, PayinSchema } from './payin.schema';
 import { PayinCron } from './payin.cron';
 import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
+import { GatewayModule } from 'src/gateway/gateway.module';
+import { CommissionResolverModule } from 'src/common/services/commission-resolver.module';
 import { FlutterwaveModule } from 'src/flutterwave/flutterwave.module';
 import { Payout, PayoutSchema } from 'src/payout/payout.schema';
 import { TransactionService } from 'src/transaction/transaction.service';
@@ -64,6 +66,8 @@ import { EmailModule } from 'src/email/email.module';
     forwardRef(() => SubscriptionModule),
     forwardRef(() => SystemModule),
     forwardRef(() => PaymentModule),
+    forwardRef(() => GatewayModule),
+    CommissionResolverModule,
     SystemBalanceModule,
     AppCacheModule,
     DistributedLockModule,

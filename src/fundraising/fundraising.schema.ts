@@ -45,6 +45,9 @@ export class Fundraising {
 
   @Prop({ default: '' })
   coverImageUrl: string;
+
+  @Prop({ trim: true, enum: ['customer', 'organization'], default: 'customer' })
+  commissionPayer?: 'customer' | 'organization';
 }
 
 export type FundraisingDocument = Fundraising & Document;

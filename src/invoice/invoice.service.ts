@@ -16,6 +16,7 @@ import { Transaction, TransactionType, TStatus } from 'src/transaction/transacti
 import { UserService } from 'src/user/user.service';
 import { AuditLogService } from 'src/audit-log/audit-log.service';
 import { SystemService } from 'src/system/system.service';
+import { CommissionResolverService } from 'src/common/services/commission-resolver.service';
 import { PaymentMethodService } from 'src/payment-method/payment-method.service';
 import { Payin } from 'src/payin/payin.schema';
 import { Invoice, InvoiceItem, InvoiceStatus } from './invoice.schema';
@@ -47,6 +48,7 @@ export class InvoiceService {
     private readonly flutterwaveService: FlutterwaveService,
     private readonly auditLogService: AuditLogService,
     private readonly emailService: EmailService,
+    private readonly commissionResolver: CommissionResolverService,
   ) {}
 
   async create(userId: string, dto: CreateInvoiceDto): Promise<Invoice> {
@@ -60,6 +62,12 @@ export class InvoiceService {
     const totalAmount = this.computeTotal(items);
     await this.validateMinAmount(totalAmount, currency);
 
+    const requestedPayer = (dto as any)?.commissionPayer;
+    const commissionPayer =
+      requestedPayer === 'customer' || requestedPayer === 'organization'
+        ? requestedPayer
+        : await this.commissionResolver.getCommissionPayer(String(userId));
+
     const invoice = await this.invoiceModel.create({
       userId,
       name: dto.name,
@@ -69,6 +77,7 @@ export class InvoiceService {
       invoiceDate: dto.invoiceDate ? new Date(dto.invoiceDate) : new Date(),
       status: InvoiceStatus.DRAFT,
       payed: false,
+      commissionPayer,
     });
 
     this.auditLogService.record({
@@ -102,12 +111,18 @@ export class InvoiceService {
           configCache.set(currency, feesPercent);
         }
         const feesPercent = configCache.get(currency) || 0;
-        const feesAmount = Math.ceil((Number(invoice.totalAmount) * feesPercent) / 100);
+        const base = Number(invoice.totalAmount);
+        const feesAmount = Math.ceil((base * feesPercent) / 100);
+        const orgPays = invoice.commissionPayer === 'organization';
         return {
           ...invoice,
           feesPercent,
           feesAmount,
-          amountToPay: Number(invoice.totalAmount) + feesAmount,
+          // Customer pays the fees -> base + fees ; organisation pays them ->
+          // the customer only pays the base amount and the organisation
+          // receives the base amount minus the fees.
+          amountToPay: orgPays ? base : base + feesAmount,
+          amountToReceive: orgPays ? base - feesAmount : base,
         };
       }),
     );
@@ -127,12 +142,13 @@ export class InvoiceService {
   async findByIdForUser(userId: string, invoiceId: string): Promise<any> {
     const invoice = await this.invoiceModel.findOne({ _id: this.toObjectId(invoiceId), userId }).lean();
     if (!invoice) throw new NotFoundException('Invoice not found');
-    const fees = await this.computeFees(invoice.totalAmount, invoice.currency);
+    const fees = await this.computeFees(invoice.totalAmount, invoice.currency, invoice.commissionPayer);
     return {
       ...invoice,
       feesPercent: fees.percent,
       feesAmount: fees.amount,
       amountToPay: fees.amountToPay,
+      amountToReceive: fees.amountToReceive,
     };
   }
 
@@ -142,18 +158,22 @@ export class InvoiceService {
     if (invoice.status === InvoiceStatus.DRAFT || invoice.status === InvoiceStatus.ARCHIVED) {
       throw new NotFoundException('Invoice not found');
     }
-    if (invoice.status !== InvoiceStatus.PAYED && invoice.transactionId) {
+    // Auto-réparation à chaque consultation publique : si une tentative de
+    // paiement a réussi mais que la facture n'a pas encore été marquée payée
+    // (webhook non reçu, plusieurs tentatives…), on la finalise tout de suite.
+    if (invoice.status !== InvoiceStatus.PAYED) {
       await this.repairStuckInvoice(invoice);
     }
     const current = await this.invoiceModel.findById(this.toObjectId(invoiceId)).lean();
     const live = current ?? invoice;
-    const fees = await this.computeFees(live.totalAmount, live.currency);
+    const fees = await this.computeFees(live.totalAmount, live.currency, live.commissionPayer);
     return {
       ...this.publicView(live),
       owner: await this.getPublicOwner(live.userId),
       feesPercent: fees.percent,
       feesAmount: fees.amount,
       amountToPay: fees.amountToPay,
+      amountToReceive: fees.amountToReceive,
     };
   }
 
@@ -164,11 +184,16 @@ export class InvoiceService {
    */
   private async repairStuckInvoice(invoice: any): Promise<void> {
     try {
-      const transaction = await this.transactionModel
-        .findById(invoice.transactionId)
+      // On cherche toute transaction de paiement réussie liée à la facture,
+      // et pas seulement celle référencée par `transactionId` : le payeur peut
+      // avoir retenté le paiement (plusieurs tentatives), et la réussie n'est
+      // pas forcément la dernière tentative enregistrée sur la facture.
+      const successTx = await this.transactionModel
+        .findOne({ invoiceId: String(invoice._id), status: TStatus.PAYINSUCCESS })
+        .sort({ createdAt: -1 })
         .lean();
-      if (transaction?.status === TStatus.PAYINSUCCESS) {
-        await this.handlePaymentSuccess(transaction);
+      if (successTx) {
+        await this.handlePaymentSuccess(successTx);
       }
     } catch {
       // Non bloquant : la page publique s'affiche même si la réparation échoue.
@@ -282,7 +307,11 @@ export class InvoiceService {
     }
     if (dto.invoiceDate) invoice.invoiceDate = new Date(dto.invoiceDate);
 
-    if (dto.status) {
+    if (dto.commissionPayer === 'customer' || dto.commissionPayer === 'organization') {
+      invoice.commissionPayer = dto.commissionPayer;
+    }
+
+    if (dto.status && dto.status !== invoice.status) {
       this.assertTransition(invoice.status, dto.status);
       invoice.status = dto.status;
       if (dto.status === InvoiceStatus.DRAFT || dto.status === InvoiceStatus.ARCHIVED) {
@@ -435,6 +464,7 @@ export class InvoiceService {
       invoiceId: String(invoice._id),
       estimation: invoice.totalAmount,
       noFees: false,
+      commissionPayer: invoice.commissionPayer || await this.commissionResolver.getCommissionPayer(String(invoice.userId)),
       senderCurrency: currency,
       receiverCurrency: currency,
       senderName: payer.payerName || 'Client',
@@ -568,9 +598,9 @@ export class InvoiceService {
   /**
    * Configuration de paiement d'une devise : montant minimal et pourcentage
    * de frais de plateforme (paramètre système `invoiceTaxes`).
-   * Le montant minimal provient des méthodes de paiement actives en
-   * encaissement (`statusPayin`) de la devise ; en l'absence de méthode,
-   * on retombe sur les limites système `transactionLimits.minDeposit`.
+   * Le montant minimal provient en priorité des limites de transaction
+   * configurées par l'admin (`transactionLimits.minDeposit` pour la devise) ;
+   * à défaut on retombe sur le `minAmount` des méthodes de paiement actives.
    */
   async getPaymentConfig(currency: string): Promise<{ minAmount: number; feesPercent: number }> {
     const [system, methods] = await Promise.all([
@@ -581,14 +611,18 @@ export class InvoiceService {
     const currencyMethods = (methods || []).filter(
       (m: any) => m.currency === currency && m.statusPayin && m.minAmount != null,
     );
-    let minAmount = currencyMethods.length
-      ? Math.min(...currencyMethods.map((m: any) => Number(m.minAmount) || 0))
-      : 0;
 
-    if (!minAmount) {
-      const limit = (system?.transactionLimits || []).find((l: any) => l.currency === currency);
-      minAmount = Number(limit?.minDeposit) || 0;
-    }
+    // Les limites de transaction configurées par l'admin (minDeposit) sont
+    // la référence pour l'encaissement : elles prennent le pas sur le
+    // minAmount des méthodes de paiement, qui n'est qu'une valeur de repli.
+    const systemLimit = (system?.transactionLimits || []).find((l: any) => l.currency === currency);
+    const systemMin = Number(systemLimit?.minDeposit) || 0;
+
+    let minAmount = systemMin > 0
+      ? systemMin
+      : (currencyMethods.length
+          ? Math.min(...currencyMethods.map((m: any) => Number(m.minAmount) || 0))
+          : 0);
 
     const feesPercent = Number(system?.invoiceTaxes) || 0;
     return { minAmount, feesPercent };
@@ -613,10 +647,21 @@ export class InvoiceService {
   private async computeFees(
     totalAmount: number,
     currency: string,
-  ): Promise<{ percent: number; amount: number; amountToPay: number }> {
+    commissionPayer?: 'customer' | 'organization',
+  ): Promise<{ percent: number; amount: number; amountToPay: number; amountToReceive: number }> {
     const { feesPercent } = await this.getPaymentConfig(currency);
-    const amount = Math.ceil((Number(totalAmount) * feesPercent) / 100);
-    return { percent: feesPercent, amount, amountToPay: Number(totalAmount) + amount };
+    const base = Number(totalAmount);
+    const amount = Math.ceil((base * feesPercent) / 100);
+    const orgPays = commissionPayer === 'organization';
+    // Same rule as the frontend CommissionService:
+    // - customer pays: customer pays base + fees, organisation receives base
+    // - organisation pays: customer pays base, organisation receives base - fees
+    return {
+      percent: feesPercent,
+      amount,
+      amountToPay: orgPays ? base : base + amount,
+      amountToReceive: orgPays ? base - amount : base,
+    };
   }
 
   /**

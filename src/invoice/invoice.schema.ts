@@ -42,6 +42,9 @@ export class Invoice {
   @Prop({ default: false })
   payed: boolean;
 
+  @Prop({ trim: true, enum: ['customer', 'organization'], default: 'customer' })
+  commissionPayer?: 'customer' | 'organization';
+
   @Prop({ enum: InvoiceStatus, default: InvoiceStatus.DRAFT, index: true })
   status: InvoiceStatus;
 

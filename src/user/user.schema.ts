@@ -149,6 +149,15 @@ export class User extends Document {
 
   @Prop()
   googleId?: string;
+
+  /**
+   * Qui paie la commission sur les encaissements :
+   * - 'customer' : le client paie (montant + commission) [défaut]
+   * - 'organization' : l'organisation paie (commission prélevée sur le montant total)
+   * Seulement pertinent pour accountType === 'organisation'
+   */
+  @Prop({ default: 'customer', enum: ['customer', 'organization'] })
+  commissionPayer?: 'customer' | 'organization';
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

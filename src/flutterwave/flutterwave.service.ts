@@ -1597,6 +1597,19 @@ export class FlutterwaveService {
         }
       }
     } else if (isUserCreditType) {
+      // Déterminer qui paie la commission
+      const commissionPayer = transaction.commissionPayer || 'customer';
+      let userCreditAmount: number;
+
+      if (commissionPayer === 'organization') {
+        // Organisation paie : l'utilisateur reçoit le montant COMPLET (estimation)
+        userCreditAmount = Number(transaction.estimation);
+      } else {
+        // Client paie : l'utilisateur reçoit le montant net (estimation)
+        // La commission est implicitement dans paymentWithTaxes - estimation
+        userCreditAmount = Number(transaction.estimation);
+      }
+
       const creditKey = `payin-credit:${transactionId}`;
       try {
         const alreadyCredited =
@@ -1604,7 +1617,7 @@ export class FlutterwaveService {
         if (!alreadyCredited) {
           await this.balanceService.creditBalance(
             transaction.receiverId,
-            Number(transaction.estimation),
+            userCreditAmount,
             transaction.senderCurrency,
             creditKey,
           );
@@ -1618,56 +1631,34 @@ export class FlutterwaveService {
         );
       }
 
-      // Créditer le solde système de la MARGE sur les frais encaissés :
-      // (taxes encaissées) − (commission prélevée par le provider gateway).
-      // Idempotent (clé système unique) : relançable par le cron de
-      // réconciliation sans double écriture.
-      const feesAmount = Number(transaction.taxesAmount) || 0;
-      if (feesAmount > 0) {
+      // Créditer le solde système : différence entre ce qui a été collecté et ce qui a été crédité à l'utilisateur
+      const totalCollected = Number(transaction.paymentWithTaxes) || 0;
+      const userCredited = userCreditAmount;
+      const systemShare = Math.max(totalCollected - userCredited, 0);
+
+      if (systemShare > 0) {
         const systemKey = `system-fees-credit:${transactionId}`;
-        try {
-          const alreadyCredited =
-            await this.systemBalanceService.hasMovementKey(systemKey);
-          if (!alreadyCredited) {
-            let commission = 0;
-            try {
-              const gw = transaction.gatewayId
-                ? await this.gatewayModel
-                    .findById(transaction.gatewayId)
-                    .lean()
-                    .exec()
-                : null;
-              const rate = Number(gw?.providerCommission) || 0;
-              if (rate > 0) {
-                const base = Number(transaction.estimation) || 0;
-                commission = Math.ceil((base * rate) / 100);
-              }
-            } catch {
-              commission = 0;
-            }
-            const systemCredit = feesAmount - commission;
-            if (systemCredit > 0) {
-              await this.systemBalanceService.creditSystemBalance(
-                transaction.senderCurrency || transaction.receiverCurrency,
-                systemCredit,
-                systemKey,
-                {
-                  reference: transaction.txRef || transactionId,
-                  description: `Frais d'encaissement`,
-                  transactionId,
-                  amountCollected:
-                    Number(transaction.paymentWithTaxes) || 0,
-                  gatewayFee: feesAmount,
-                  providerCommission: commission,
-                  amountCredited: systemCredit,
-                },
-              );
-            }
-          }
-        } catch (err) {
-          this.logger.warn(
-            'processSuccessfulPayin: creditSystemBalance failed',
-            err,
+        const alreadyCredited =
+          await this.systemBalanceService.hasMovementKey(systemKey);
+        if (!alreadyCredited && systemShare > 0) {
+          await this.systemBalanceService.creditSystemBalance(
+            transaction.senderCurrency || transaction.receiverCurrency,
+            systemShare,
+            `system-fees-credit:${transactionId}`,
+            {
+              reference: transaction.txRef || transactionId,
+              description: `Répartition encaissement (commission: ${commissionPayer})`,
+              transactionId,
+              amountCollected: totalCollected,
+              gatewayFee: 0,
+              providerCommission: totalCollected - userCreditAmount,
+              amountCredited: systemShare,
+              performedBy: {
+                userId: String(transaction.senderId || transaction.userId || ''),
+                name: String(transaction.senderName || '').trim(),
+                email: String(transaction.senderEmail || '').trim(),
+              },
+            },
           );
         }
       }

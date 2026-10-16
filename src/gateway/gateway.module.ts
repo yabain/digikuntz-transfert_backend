@@ -14,6 +14,6 @@ import { DevModule } from '../dev/dev.module';
   ],
   controllers: [GatewayController],
   providers: [GatewayService],
-  exports: [GatewayService],
+  exports: [GatewayService, MongooseModule],
 })
 export class GatewayModule {}

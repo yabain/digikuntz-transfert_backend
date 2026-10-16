@@ -37,6 +37,9 @@ export class PaymentRequest {
 
   @Prop({ type: String, required: true })
   currency: string;
+
+  @Prop({ trim: true, enum: ['customer', 'organization'], default: 'customer' })
+  commissionPayer?: 'customer' | 'organization';
 }
 
 export const PaymentRequestSchema = SchemaFactory.createForClass(PaymentRequest);

@@ -62,5 +62,9 @@ export class CreatePaymentRequestDto {
   @IsOptional()
   @IsString()
   gatewayId?: string;
+
+  @IsOptional()
+  @IsString()
+  commissionPayer?: string;
 }
 

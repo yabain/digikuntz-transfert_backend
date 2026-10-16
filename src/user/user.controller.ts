@@ -69,7 +69,7 @@ export class UserController {
   @Get('get-statistics')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get user statistics by month (admin only)' })
-  @ApiResponse({ status: 200, description: 'User statistics by month.', schema: { example: [{ month: '2025-01', count: 12 }] } })
+  @ApiResponse({ status: 200, description: 'User statistics by month.', schema: { example: [{ month: '2026-01', count: 12 }] } })
   @ApiResponse({ status: 401, description: 'Authentication required.' })
   @ApiResponse({ status: 403, description: 'Admin privileges required.' })
   @UseGuards(AuthGuard('jwt'))
@@ -171,9 +171,31 @@ export class UserController {
   }
 
   /**
-   * Update the profile of the authenticated user.
+   * Update the commission payer preference (organisation only).
    */
-  @Put('update-items')
+  @Put('commission-payer')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update who pays the commission for this organisation' })
+  // @ApiBody({
+  //   schema: {
+  //     type: 'object',
+  //     properties: {
+  //       commissionPayer: { type: 'string', enum: ['customer', 'organization'] },
+  //     },
+  //   })
+  @ApiResponse({ status: 200, description: 'Commission payer updated.' })
+  @ApiResponse({ status: 401, description: 'Authentication required.' })
+  @ApiResponse({ status: 403, description: 'Only organisations can set commission payer.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async updateCommissionPayer(@Body('commissionPayer') commissionPayer: 'customer' | 'organization', @Req() req): Promise<any> {
+    const user = await this.userService.getUserById(req.user._id);
+    if (user.accountType !== 'organisation') {
+      throw new ForbiddenException('Only organisations can set commission payer');
+    }
+    return this.userService.updateUser(req.user._id, { commissionPayer } as any);
+  }
+
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update specific items of the authenticated user profile' })
   @ApiBody({ type: UpdateUserDto })

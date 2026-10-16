@@ -54,6 +54,7 @@ import { Gateway, GatewaySchema } from 'src/gateway/gateway.schema';
 import { SystemBalanceModule } from 'src/system-balance/system-balance.module';
 import { SystemBalanceService } from 'src/system-balance/system-balance.service';
 import { EmailModule } from 'src/email/email.module';
+import { CommissionResolverModule } from 'src/common/services/commission-resolver.module';
 import { CryptService } from 'src/dev/crypt.service';
 
 @Module({
@@ -73,6 +74,7 @@ import { CryptService } from 'src/dev/crypt.service';
     SystemModule,
     SystemBalanceModule,
     AppCacheModule,
+    CommissionResolverModule,
     MongooseModule.forFeature([
       { name: Payin.name, schema: PayinSchema },
       { name: Payout.name, schema: PayoutSchema },

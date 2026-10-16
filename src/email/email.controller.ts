@@ -55,7 +55,7 @@ export class EmailController {
   @ApiResponse({
     status: 200,
     description: 'Email statistics by month.',
-    schema: { example: [{ month: '2025-01', count: 42 }] },
+    schema: { example: [{ month: '2026-01', count: 42 }] },
   })
   @ApiResponse({ status: 401, description: 'Authentication required.' })
   @ApiResponse({ status: 403, description: 'Admin privileges required.' })

@@ -49,4 +49,7 @@ export class UpdateServiceDto {
   @IsOptional()
   readonly currency: string;
 
+  @IsString()
+  @IsOptional()
+  readonly commissionPayer?: string;
 }

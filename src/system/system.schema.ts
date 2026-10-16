@@ -63,6 +63,9 @@ export class System extends Document {
   @Prop()
   encryptedGoogleClientId: string;
 
+  @Prop({ default: 'customer', enum: ['customer', 'organization'] })
+  commissionPayer: string;
+
   @Prop()
   addressLine1: string;
 

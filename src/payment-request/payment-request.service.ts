@@ -77,6 +77,12 @@ export class PaymentRequestService {
       );
     }
 
+    const requestedPayer = (data as any)?.commissionPayer;
+    const commissionPayer =
+      requestedPayer === 'customer' || requestedPayer === 'organization'
+        ? requestedPayer
+        : (currentUser?.commissionPayer === 'organization' ? 'organization' : 'customer');
+
     const senderPhone =
       currency === 'KES'
         ? this.normalizeKesMsisdnStrict(data.mobile_money?.phone)
@@ -111,6 +117,7 @@ export class PaymentRequestService {
       transactionType: TransactionType.PAYMENTREQUEST,
       status: 'transaction_payin_pending',
       userId,
+      commissionPayer,
     };
 
     const initResp: any = await this.flutterwaveService.createPayin(
@@ -129,6 +136,7 @@ export class PaymentRequestService {
             status: PaymentRequestStatus.PENDING,
             amount: Number(data.amount),
             currency,
+            commissionPayer,
           },
           { upsert: true, new: true, setDefaultsOnInsert: true },
         )

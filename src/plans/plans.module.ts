@@ -12,7 +12,9 @@ import { ItemService } from './item/item.service';
 import { OptionsService } from './options/options.service';
 import { EmailSchema, Email } from 'src/email/email.schema';
 import { Smtp, SmtpSchema } from 'src/email/smtp/smtp.schema';
+import { CommissionResolverModule } from 'src/common/services/commission-resolver.module';
 import { FlutterwaveModule } from 'src/flutterwave/flutterwave.module';
+import { GatewayModule } from 'src/gateway/gateway.module';
 import { HttpModule } from '@nestjs/axios';
 import { Payout, PayoutSchema } from 'src/payout/payout.schema';
 import { Payin, PayinSchema } from 'src/payin/payin.schema';
@@ -74,6 +76,8 @@ import { EmailModule } from 'src/email/email.module';
     PaystackModule,
     MpesaModule,
     forwardRef(() => PaymentModule),
+    GatewayModule,
+    CommissionResolverModule,
     SystemBalanceModule,
     ProspectsModule,
     AppCacheModule,

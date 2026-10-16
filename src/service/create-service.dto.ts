@@ -10,6 +10,7 @@ import {
   IsBoolean,
   IsNumber,
   IsEmpty,
+  IsOptional,
 } from 'class-validator';
 
 export class CreateServiceDto {
@@ -49,4 +50,7 @@ export class CreateServiceDto {
   @IsNotEmpty()
   readonly currency: string;
 
+  @IsString()
+  @IsOptional()
+  readonly commissionPayer?: string;
 }

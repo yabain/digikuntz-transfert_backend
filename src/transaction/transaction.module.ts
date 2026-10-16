@@ -48,6 +48,8 @@ import { MpesaModule } from 'src/mpesa/mpesa.module';
 import { PaymentModule } from 'src/payment/payment.module';
 import { SystemBalanceModule } from 'src/system-balance/system-balance.module';
 import { EmailModule } from 'src/email/email.module';
+import { CommissionResolverModule } from 'src/common/services/commission-resolver.module';
+import { GatewayModule } from 'src/gateway/gateway.module';
 
 @Module({
   imports: [
@@ -64,6 +66,8 @@ import { EmailModule } from 'src/email/email.module';
     forwardRef(() => FlutterwaveModule),
     SystemBalanceModule,
     DistributedLockModule,
+    CommissionResolverModule,
+    forwardRef(() => GatewayModule),
     MongooseModule.forFeature([
       { name: Transaction.name, schema: TransactionSchema },
       { name: City.name, schema: CitySchema },

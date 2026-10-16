@@ -25,6 +25,8 @@ import { MpesaModule } from 'src/mpesa/mpesa.module';
 import { BalanceModule } from 'src/balance/balance.module';
 import { ServicePaymentModule } from 'src/service/service-payment/service-payment.module';
 import { PaymentModule } from 'src/payment/payment.module';
+import { GatewayModule } from 'src/gateway/gateway.module';
+import { CommissionResolverModule } from 'src/common/services/commission-resolver.module';
 import { FlutterwaveModule } from 'src/flutterwave/flutterwave.module';
 import { DistributedLockModule } from 'src/distributed-lock/distributed-lock.module';
 import { SystemBalanceModule } from 'src/system-balance/system-balance.module';
@@ -45,6 +47,8 @@ import { SystemBalanceModule } from 'src/system-balance/system-balance.module';
     forwardRef(() => ServicePaymentModule),
     forwardRef(() => PaymentModule),
     forwardRef(() => FlutterwaveModule),
+    forwardRef(() => GatewayModule),
+    CommissionResolverModule,
     SystemBalanceModule,
     DistributedLockModule,
     MongooseModule.forFeature([
