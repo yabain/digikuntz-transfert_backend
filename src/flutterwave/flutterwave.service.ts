@@ -53,6 +53,7 @@ import { PaymentMethodService } from 'src/payment-method/payment-method.service'
 import { AuditLogService } from 'src/audit-log/audit-log.service';
 import { InvoiceService } from 'src/invoice/invoice.service';
 import { SystemBalanceService } from 'src/system-balance/system-balance.service';
+import { sanitizeFlutterwaveError as mapFlutterwaveError } from './flutterwave-error.util';
 
 @Injectable()
 export class FlutterwaveService {
@@ -152,49 +153,13 @@ export class FlutterwaveService {
     );
   }
 
-  private isHtmlUpstreamPayload(payload: unknown): boolean {
-    if (typeof payload !== 'string') return false;
-    const value = payload.toLowerCase();
-    return value.includes('<!doctype html') || value.includes('<html');
-  }
-
+  /**
+   * Thin wrapper around the shared Flutterwave error mapper, kept so the many
+   * existing call sites of this service stay untouched. The implementation now
+   * lives in `flutterwave-error.util.ts` and is shared with FlutterwaveApiService.
+   */
   private sanitizeFlutterwaveError(error: any, fallbackMessage: string) {
-    let statusCode = Number(error?.response?.status) || HttpStatus.BAD_GATEWAY;
-    const upstreamPayload = error?.response?.data;
-
-    // Never propagate 401 from Flutterwave API (invalid key) to avoid frontend auth clear
-    if (statusCode === 401) {
-      statusCode = HttpStatus.BAD_GATEWAY;
-    }
-
-    if (this.isHtmlUpstreamPayload(upstreamPayload)) {
-      const message = 'Flutterwave temporary unavailable';
-      this.logger.error(`${message} (upstream HTML ${statusCode})`);
-      return {
-        statusCode: HttpStatus.BAD_GATEWAY,
-        payload: {
-          message,
-          provider: 'flutterwave',
-          code: 'FW_UPSTREAM_5XX',
-        },
-      };
-    }
-
-    if (upstreamPayload && typeof upstreamPayload === 'object') {
-      return {
-        statusCode,
-        payload: upstreamPayload,
-      };
-    }
-
-    const message = error?.message || fallbackMessage;
-    return {
-      statusCode: HttpStatus.BAD_GATEWAY,
-      payload: {
-        message: fallbackMessage,
-        details: message,
-      },
-    };
+    return mapFlutterwaveError(error, fallbackMessage, this.logger);
   }
 
   // ---------- Helpers ----------
@@ -282,7 +247,6 @@ export class FlutterwaveService {
       periode?: number;
     },
   ) {
-    // console.log('params: ', query?.periode);
     const defaultDate = this.getDateRangeLastMonth(query?.periode || 1);
 
     const params: any = {};
@@ -302,11 +266,15 @@ export class FlutterwaveService {
 
     const url = `${this.fwBaseUrlV3}/transactions`;
     try {
-      console.log('FW listPayinTransactions URL:', url, 'params:', JSON.stringify(params), 'key:', countryWallet === 'CM' ? 'fwSecret (FLUTTERWAVE_SECRET_KEY)' : 'fwSecretNGN (FLUTTERWAVE_SECRET_KEY_NGN)', 'len:', headers?.Authorization?.length);
       const res = await firstValueFrom(this.http.get(url, { headers, params }));
       return res.data;
     } catch (err: any) {
-      console.error('FW listPayinTransactions error:', err?.message, err?.response?.status, JSON.stringify(err?.response?.data));
+      // Operational trace only: never log the request URL, params or the upstream
+      // payload (they can carry account data and were previously dumped raw).
+      this.logger.error(
+        `Failed to list payin transactions for wallet ${countryWallet}: ` +
+          `${err?.message ?? 'unknown error'} (upstream ${err?.response?.status ?? 'n/a'})`,
+      );
       const parsed = this.sanitizeFlutterwaveError(
         err,
         'Flutterwave API connection error while listing payin transactions',

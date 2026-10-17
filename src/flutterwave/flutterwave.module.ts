@@ -3,6 +3,7 @@ import { HttpModule } from '@nestjs/axios';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule } from '@nestjs/config';
 import { FlutterwaveService } from './flutterwave.service';
+import { FlutterwaveApiService } from './flutterwave-api.service';
 import { FlutterwaveController } from './flutterwave.controller';
 import { Payin, PayinSchema } from 'src/payin/payin.schema';
 import { Payout, PayoutSchema } from 'src/payout/payout.schema';
@@ -96,6 +97,7 @@ import { CryptService } from 'src/dev/crypt.service';
   providers: [
     CryptService,
     FlutterwaveService,
+    FlutterwaveApiService,
     PayinService,
     PayoutService,
     TransactionService,
@@ -108,6 +110,6 @@ import { CryptService } from 'src/dev/crypt.service';
     ServicePaymentService,
     OperationNotificationService,
   ],
-  exports: [FlutterwaveService],
+  exports: [FlutterwaveService, FlutterwaveApiService],
 })
 export class FlutterwaveModule {}

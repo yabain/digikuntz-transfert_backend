@@ -10,7 +10,6 @@
 
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { HttpService } from '@nestjs/axios';
-import { firstValueFrom } from 'rxjs';
 import {
   Injectable,
   Inject,
@@ -36,8 +35,8 @@ import { PaymentRequestService } from 'src/payment-request/payment-request.servi
 import { PaymentRequestStatus } from 'src/payment-request/payment-request.schema';
 import { ServicePaymentService } from 'src/service/service-payment/service-payment.service';
 import { BalanceService } from 'src/balance/balance.service';
-import { GatewayLoaderService } from 'src/payment/gateway-loader.service';
 import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
+import { FlutterwaveApiService } from 'src/flutterwave/flutterwave-api.service';
 import { AuditLogService } from 'src/audit-log/audit-log.service';
 import { SystemBalanceService } from 'src/system-balance/system-balance.service';
 import { CommissionResolverService } from 'src/common/services/commission-resolver.service';
@@ -96,24 +95,13 @@ export class TransactionService {
     private paymentRequestService: PaymentRequestService,
     private servicePaymentService: ServicePaymentService,
     private balanceService: BalanceService,
-    private gatewayLoader: GatewayLoaderService,
+    private flutterwaveApi: FlutterwaveApiService,
     @Inject(forwardRef(() => FlutterwaveService))
     private flutterwaveService: FlutterwaveService,
     private auditLogService: AuditLogService,
     private systemBalanceService: SystemBalanceService,
     private commissionResolver: CommissionResolverService,
   ) { }
-
-  private async loadFwSecret(currency = 'XAF'): Promise<string> {
-    try {
-      const gwConfig = await this.gatewayLoader.getConfig(currency);
-      const secret = gwConfig?.credentials?.FLUTTERWAVE_SECRET_KEY || gwConfig?.credentials?.secretKey || '';
-      if (secret) return secret;
-    } catch {
-      this.logger.warn(`loadFwSecret: failed to load credentials for ${currency}`);
-    }
-    return '';
-  }
 
   async findAll(query: Query): Promise<Transaction[]> {
     const requestedLimit = Number((query as any)?.limit || (query as any)?.resPerPage);
@@ -829,38 +817,26 @@ export class TransactionService {
 
     // Statut non terminal : vérifier directement chez Flutterwave
     console.log(`[TransactionCron] → statut local "${payout.status}" non terminal, vérification FW...`);
-    const fwFlwTxId = payout.flwTxId || payout.raw?.data?.id || payout.raw?.id;
-    const fwSecret = await this.loadFwSecret(transactionData?.receiverCurrency || transactionData?.senderCurrency || 'XAF');
-    if (!fwSecret) {
+    const fwCurrency = transactionData?.receiverCurrency || transactionData?.senderCurrency || 'XAF';
+    if (!(await this.flutterwaveApi.hasCredentials(fwCurrency))) {
       console.log(`[TransactionCron] → aucune clé FW trouvée en base`);
       return false;
     }
-    const authHeader = { Authorization: `Bearer ${fwSecret}` };
-    const fwBaseUrl = 'https://api.flutterwave.com/v3';
+    const fwFlwTxId = payout.flwTxId || payout.raw?.data?.id || payout.raw?.id;
     let fwStatus: string | null = null;
 
     if (fwFlwTxId) {
       try {
-        const resp: any = await firstValueFrom(
-          this.httpService.get(`${fwBaseUrl}/transfers/${fwFlwTxId}`, {
-            headers: authHeader,
-          }),
-        );
-        fwStatus = resp?.data?.data?.status;
+        const transfer = await this.flutterwaveApi.getTransferById(fwFlwTxId, fwCurrency);
+        fwStatus = transfer?.status ?? null;
         console.log(`[TransactionCron] → FW numeric ID ${fwFlwTxId} → status=${fwStatus}`);
       } catch { /* ignore */ }
     }
 
     if (!fwStatus) {
       try {
-        const resp: any = await firstValueFrom(
-          this.httpService.get(`${fwBaseUrl}/transfers`, {
-            headers: authHeader,
-            params: { reference: payout.reference },
-          }),
-        );
-        const data = resp?.data?.data;
-        fwStatus = Array.isArray(data) && data.length > 0 ? data[0].status : data?.status;
+        const transfer = await this.flutterwaveApi.getTransferByReference(payout.reference, fwCurrency);
+        fwStatus = transfer?.status ?? null;
         console.log(`[TransactionCron] → FW reference fallback → status=${fwStatus}`);
       } catch { /* ignore */ }
     }
@@ -2114,12 +2090,8 @@ export class TransactionService {
       throw new NotFoundException('Invalid user ID');
     }
 
-    const fwSecret = await this.loadFwSecret();
-    if (!fwSecret) {
-      throw new NotFoundException('No Flutterwave gateway credentials found in database');
-    }
-    const authHeader = { Authorization: `Bearer ${fwSecret}` };
-    const fwBaseUrl = 'https://api.flutterwave.com/v3';
+    // Fail fast, exactly as before: reconciliation requires usable credentials.
+    await this.flutterwaveApi.assertCredentials();
 
     const transactions = await this.transactionModel
       .find({
@@ -2186,23 +2158,14 @@ export class TransactionService {
 
           // Use numeric ID endpoint when available (most reliable)
           if (effectiveFlwTxId) {
-            const resp: any = await firstValueFrom(
-              this.httpService.get(`${fwBaseUrl}/transactions/${effectiveFlwTxId}/verify`, {
-                headers: authHeader,
-              }),
-            );
-            fwStatus = resp?.data?.data?.status;
+            const fwTx = await this.flutterwaveApi.verifyPayinById(effectiveFlwTxId);
+            fwStatus = fwTx?.status ?? null;
           }
 
           // Fallback: verify by reference
           if (!fwStatus) {
-            const resp: any = await firstValueFrom(
-              this.httpService.get(`${fwBaseUrl}/transactions/verify_by_reference`, {
-                headers: authHeader,
-                params: { tx_ref: fwTxRef },
-              }),
-            );
-            fwStatus = resp?.data?.data?.status;
+            const fwTx = await this.flutterwaveApi.verifyPayinByReference(fwTxRef);
+            fwStatus = fwTx?.status ?? null;
           }
 
           if (!fwStatus) {
@@ -2273,12 +2236,8 @@ export class TransactionService {
           // Use numeric transfer ID endpoint when available (most reliable)
           if (payoutFlwTxId) {
             try {
-              const resp: any = await firstValueFrom(
-                this.httpService.get(`${fwBaseUrl}/transfers/${payoutFlwTxId}`, {
-                  headers: authHeader,
-                }),
-              );
-              fwStatus = resp?.data?.data?.status;
+              const transfer = await this.flutterwaveApi.getTransferById(payoutFlwTxId);
+              fwStatus = transfer?.status ?? null;
             } catch {
               fwStatus = null;
             }
@@ -2286,14 +2245,8 @@ export class TransactionService {
 
           // Fallback: filter by reference
           if (!fwStatus) {
-            const resp: any = await firstValueFrom(
-              this.httpService.get(`${fwBaseUrl}/transfers`, {
-                headers: authHeader,
-                params: { reference: payout.reference },
-              }),
-            );
-            const data = resp?.data?.data;
-            fwStatus = Array.isArray(data) && data.length > 0 ? data[0].status : null;
+            const transfer = await this.flutterwaveApi.getTransferByReference(payout.reference);
+            fwStatus = transfer?.status ?? null;
           }
 
           if (!fwStatus) {
