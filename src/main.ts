@@ -334,4 +334,22 @@ async function bootstrap() {
   );
 }
 
-bootstrap();
+bootstrap().catch((error: unknown) => {
+  // Sans ce catch, une erreur de démarrage (ex. UPLOAD_DIR invalide, voir
+  // `getStaticAssetsMappings`) était absorbée par le handler
+  // `unhandledRejection` ci-dessus, qui journalise sans quitter : le processus
+  // restait vivant SANS écouter le port. Un échec de démarrage doit être visible
+  // et non ambigu, donc on sort en erreur.
+  //
+  // `appLogger` est local à `bootstrap` et n'existe donc plus ici : on crée un
+  // logger dédié plutôt que de le remonter au niveau du module.
+  const bootLogger = new AppLogger();
+  bootLogger.setContext('Bootstrap');
+
+  const message =
+    error instanceof Error ? error.message : 'unknown startup error';
+  const stack = error instanceof Error ? error.stack : undefined;
+
+  bootLogger.error(`Fatal error during startup: ${message}`, stack);
+  process.exit(1);
+});

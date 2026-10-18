@@ -34,13 +34,89 @@ export class GatewayController {
   }
 
   @Get()
-  async findAll(): Promise<any> {
-    return this.gatewayService.findAll();
+  // SÉCURITÉ : `GatewayService.findAll()` renvoie les credentials DÉCHIFFRÉS
+  // (clé secrète + hash de webhook). Cet endpoint étant public, n'importe qui
+  // pouvait lire les identifiants de paiement live et forger des webhooks.
+  // L'accès est désormais authentifié, et les credentials ne sont renvoyés
+  // qu'à un administrateur — les pages utilisateur (envoi d'argent, demande de
+  // paiement) n'ont besoin que de la liste.
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'))
+  async findAll(@Req() req: unknown): Promise<any> {
+    const gateways = await this.gatewayService.findAll();
+
+    return GatewayController.isAdminRequest(req)
+      ? gateways
+      : GatewayController.scrubCredentials(gateways);
   }
 
   @Get(':id')
-  async findById(@Param('id') id: string): Promise<any> {
-    return this.gatewayService.findById(id);
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'))
+  async findById(@Param('id') id: string, @Req() req: unknown): Promise<any> {
+    const gateway = await this.gatewayService.findById(id);
+
+    return GatewayController.isAdminRequest(req)
+      ? gateway
+      : GatewayController.scrubCredentials(gateway);
+  }
+
+  /**
+   * Vrai lorsque l'appelant authentifié est un administrateur.
+   *
+   * Le contrôle est fait sur `unknown` plutôt que sur `any` : `req` vient d'un
+   * framework non typé, donc on vérifie la forme au lieu de faire confiance au
+   * type. Seul un `isAdmin === true` strict ouvre l'accès.
+   *
+   * @param {unknown} req - Requête Express.
+   * @returns {boolean} - Vrai pour un administrateur.
+   */
+  private static isAdminRequest(req: unknown): boolean {
+    if (req === null || typeof req !== 'object') return false;
+
+    const user = (req as { user?: unknown }).user;
+    if (user === null || typeof user !== 'object') return false;
+
+    return (user as { isAdmin?: unknown }).isAdmin === true;
+  }
+
+  /**
+   * Masque les credentials déchiffrés pour tout appelant non administrateur.
+   *
+   * Un booléen `hasCredentials` est conservé afin que l'interface puisse indiquer
+   * qu'une passerelle est configurée sans jamais exposer les secrets.
+   *
+   * @param {unknown} payload - Un ou plusieurs documents passerelle.
+   * @returns {unknown} - La même forme, credentials retirés.
+   */
+  private static scrubCredentials(payload: unknown): unknown {
+    if (Array.isArray(payload)) {
+      return (payload as unknown[]).map((gateway) =>
+        GatewayController.scrubGateway(gateway),
+      );
+    }
+
+    return GatewayController.scrubGateway(payload);
+  }
+
+  /**
+   * Retire `credentials` d'un document passerelle et le remplace par un booléen.
+   *
+   * @param {unknown} gateway - Document passerelle brut.
+   * @returns {unknown} - Le document sans secrets.
+   */
+  private static scrubGateway(gateway: unknown): unknown {
+    if (gateway === null || typeof gateway !== 'object') return gateway;
+
+    const { credentials, ...rest } = gateway as { credentials?: unknown };
+
+    return {
+      ...rest,
+      hasCredentials:
+        credentials !== null &&
+        typeof credentials === 'object' &&
+        Object.keys(credentials).length > 0,
+    };
   }
 
   @Put(':id')

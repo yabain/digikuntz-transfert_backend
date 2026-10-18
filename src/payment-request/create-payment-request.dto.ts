@@ -1,5 +1,6 @@
 import {
   IsEmail,
+  IsIn,
   IsNotEmpty,
   IsNumber,
   IsObject,
@@ -66,5 +67,38 @@ export class CreatePaymentRequestDto {
   @IsOptional()
   @IsString()
   commissionPayer?: string;
-}
 
+  /**
+   * Payment route chosen by the payer.
+   *
+   * - `mobile_money` (default): direct charge — USSD / app push on the payer's
+   *   phone, no checkout link to open;
+   * - `card`: reserved for the upcoming card integration (falls back to the
+   *   hosted checkout for now).
+   *
+   * Omitted entirely → the historical hosted-checkout behaviour, unchanged.
+   */
+  @ApiPropertyOptional({
+    enum: ['mobile_money', 'card'],
+    example: 'mobile_money',
+  })
+  @IsOptional()
+  @IsIn(['mobile_money', 'card'])
+  paymentMethod?: 'mobile_money' | 'card';
+
+  /**
+   * Optional operator override (`MTN`, `ORANGEMONEY`, `AIRTEL`, ...). Normally
+   * omitted: the operator is derived from the payer's phone number and this is
+   * only honoured when the prefix cannot be resolved.
+   */
+  @ApiPropertyOptional({ example: 'MTN' })
+  @IsOptional()
+  @IsString()
+  network?: string;
+
+  /** Opaque device identifier forwarded to Flutterwave for fraud scoring. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  deviceFingerprint?: string;
+}

@@ -12,6 +12,7 @@ import {
   ValidationPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { resolveClientIp } from 'src/common/client-ip.util';
 import { InvoiceService } from './invoice.service';
 import {
   CreateInvoiceDto,
@@ -88,7 +89,17 @@ export class InvoiceController {
   @Post(':id/pay')
   @HttpCode(200)
   @UsePipes(ValidationPipe)
-  initiatePayment(@Param('id') id: string, @Body() dto: InitiateInvoicePaymentDto) {
-    return this.invoiceService.initiatePayment(id, dto);
+  initiatePayment(
+    @Param('id') id: string,
+    @Body() dto: InitiateInvoicePaymentDto,
+    @Req() req: unknown,
+  ) {
+    // `trust proxy` est activé dans `main.ts`, donc `req.ip` reflète déjà la chaîne
+    // de proxys. L'IP est transmise à Flutterwave pour la notation de fraude, et
+    // provient exclusivement de la requête (jamais du corps appelant).
+    return this.invoiceService.initiatePayment(id, {
+      ...dto,
+      clientIp: resolveClientIp(req),
+    });
   }
 }

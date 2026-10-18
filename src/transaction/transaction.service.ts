@@ -1539,6 +1539,12 @@ export class TransactionService {
       commissionPayer = transactionData.commissionPayer;
     }
 
+    // Pour un transfert : la charge est TOUJOURS supportée par le client,
+    // indépendamment du paramètre par défaut de l'organisation.
+    if (transactionData?.transactionType === 'transfer' || transactionData?.transactionType === 'TRANSFER') {
+      commissionPayer = 'customer';
+    }
+
     let gatewayCommission = 0;
 
     if (!noFees && transactionData?.transactionType !== 'withdrawal') {

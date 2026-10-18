@@ -1,9 +1,11 @@
 import {
+  BadGatewayException,
   BadRequestException,
   ConflictException,
   forwardRef,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -11,8 +13,16 @@ import mongoose from 'mongoose';
 import { existsSync } from 'fs';
 import { readFile, stat } from 'fs/promises';
 import { extname, join, resolve, sep } from 'path';
-import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
-import { Transaction, TransactionType, TStatus } from 'src/transaction/transaction.schema';
+import {
+  isPreChargeRejection,
+  readChargeOutcome,
+} from 'src/flutterwave/mobile-money-charge.builder';
+import { PayinRouteService } from 'src/flutterwave/payin-route.service';
+import {
+  Transaction,
+  TransactionType,
+  TStatus,
+} from 'src/transaction/transaction.schema';
 import { UserService } from 'src/user/user.service';
 import { AuditLogService } from 'src/audit-log/audit-log.service';
 import { SystemService } from 'src/system/system.service';
@@ -20,7 +30,11 @@ import { CommissionResolverService } from 'src/common/services/commission-resolv
 import { PaymentMethodService } from 'src/payment-method/payment-method.service';
 import { Payin } from 'src/payin/payin.schema';
 import { Invoice, InvoiceItem, InvoiceStatus } from './invoice.schema';
-import { CreateInvoiceDto, MarkInvoicePaidDto, UpdateInvoiceDto } from './invoice.dto';
+import {
+  CreateInvoiceDto,
+  MarkInvoicePaidDto,
+  UpdateInvoiceDto,
+} from './invoice.dto';
 import { EmailService } from 'src/email/email.service';
 import { getUploadRootDir } from 'src/common/upload-dir.util';
 
@@ -34,6 +48,7 @@ export interface InvoiceStats {
 
 @Injectable()
 export class InvoiceService {
+  private readonly logger = new Logger(InvoiceService.name);
   constructor(
     @InjectModel(Invoice.name)
     private readonly invoiceModel: mongoose.Model<Invoice>,
@@ -44,8 +59,11 @@ export class InvoiceService {
     private readonly userService: UserService,
     private readonly systemService: SystemService,
     private readonly paymentMethodService: PaymentMethodService,
-    @Inject(forwardRef(() => FlutterwaveService))
-    private readonly flutterwaveService: FlutterwaveService,
+    // La voie d'encaissement (directe / hébergée) n'est plus décida ici : voir
+    // `PayinRouteService`. `InvoiceService` n'appelle donc plus directement la
+    // passerelle, ce qui supprime la copie locale de cette règle monétaire.
+    @Inject(forwardRef(() => PayinRouteService))
+    private readonly payinRoute: PayinRouteService,
     private readonly auditLogService: AuditLogService,
     private readonly emailService: EmailService,
     private readonly commissionResolver: CommissionResolverService,
@@ -56,7 +74,9 @@ export class InvoiceService {
     const currency = user?.countryId?.currency || 'XAF';
     const items = this.normalizeItems(dto.items || []);
     if (!items.length) {
-      throw new BadRequestException('Invoice must contain at least one line item.');
+      throw new BadRequestException(
+        'Invoice must contain at least one line item.',
+      );
     }
 
     const totalAmount = this.computeTotal(items);
@@ -91,7 +111,11 @@ export class InvoiceService {
       method: 'POST',
       path: '/invoices',
       statusCode: 201,
-      metadata: { status: invoice.status, totalAmount: invoice.totalAmount, currency: invoice.currency },
+      metadata: {
+        status: invoice.status,
+        totalAmount: invoice.totalAmount,
+        currency: invoice.currency,
+      },
     });
 
     return invoice;
@@ -131,18 +155,31 @@ export class InvoiceService {
   async getStats(userId: string): Promise<InvoiceStats> {
     const [total, pending, payed, disabled, drafts] = await Promise.all([
       this.invoiceModel.countDocuments({ userId }),
-      this.invoiceModel.countDocuments({ userId, payed: false, status: { $in: [InvoiceStatus.COMPLETED, InvoiceStatus.PAYING] } }),
+      this.invoiceModel.countDocuments({
+        userId,
+        payed: false,
+        status: { $in: [InvoiceStatus.COMPLETED, InvoiceStatus.PAYING] },
+      }),
       this.invoiceModel.countDocuments({ userId, payed: true }),
-      this.invoiceModel.countDocuments({ userId, status: InvoiceStatus.ARCHIVED }),
+      this.invoiceModel.countDocuments({
+        userId,
+        status: InvoiceStatus.ARCHIVED,
+      }),
       this.invoiceModel.countDocuments({ userId, status: InvoiceStatus.DRAFT }),
     ]);
     return { total, pending, payed, disabled, drafts };
   }
 
   async findByIdForUser(userId: string, invoiceId: string): Promise<any> {
-    const invoice = await this.invoiceModel.findOne({ _id: this.toObjectId(invoiceId), userId }).lean();
+    const invoice = await this.invoiceModel
+      .findOne({ _id: this.toObjectId(invoiceId), userId })
+      .lean();
     if (!invoice) throw new NotFoundException('Invoice not found');
-    const fees = await this.computeFees(invoice.totalAmount, invoice.currency, invoice.commissionPayer);
+    const fees = await this.computeFees(
+      invoice.totalAmount,
+      invoice.currency,
+      invoice.commissionPayer,
+    );
     return {
       ...invoice,
       feesPercent: fees.percent,
@@ -153,9 +190,14 @@ export class InvoiceService {
   }
 
   async getPublic(invoiceId: string): Promise<any> {
-    const invoice = await this.invoiceModel.findById(this.toObjectId(invoiceId)).lean();
+    const invoice = await this.invoiceModel
+      .findById(this.toObjectId(invoiceId))
+      .lean();
     if (!invoice) throw new NotFoundException('Invoice not found');
-    if (invoice.status === InvoiceStatus.DRAFT || invoice.status === InvoiceStatus.ARCHIVED) {
+    if (
+      invoice.status === InvoiceStatus.DRAFT ||
+      invoice.status === InvoiceStatus.ARCHIVED
+    ) {
       throw new NotFoundException('Invoice not found');
     }
     // Auto-réparation à chaque consultation publique : si une tentative de
@@ -164,9 +206,15 @@ export class InvoiceService {
     if (invoice.status !== InvoiceStatus.PAYED) {
       await this.repairStuckInvoice(invoice);
     }
-    const current = await this.invoiceModel.findById(this.toObjectId(invoiceId)).lean();
+    const current = await this.invoiceModel
+      .findById(this.toObjectId(invoiceId))
+      .lean();
     const live = current ?? invoice;
-    const fees = await this.computeFees(live.totalAmount, live.currency, live.commissionPayer);
+    const fees = await this.computeFees(
+      live.totalAmount,
+      live.currency,
+      live.commissionPayer,
+    );
     return {
       ...this.publicView(live),
       owner: await this.getPublicOwner(live.userId),
@@ -189,7 +237,10 @@ export class InvoiceService {
       // avoir retenté le paiement (plusieurs tentatives), et la réussie n'est
       // pas forcément la dernière tentative enregistrée sur la facture.
       const successTx = await this.transactionModel
-        .findOne({ invoiceId: String(invoice._id), status: TStatus.PAYINSUCCESS })
+        .findOne({
+          invoiceId: String(invoice._id),
+          status: TStatus.PAYINSUCCESS,
+        })
         .sort({ createdAt: -1 })
         .lean();
       if (successTx) {
@@ -200,7 +251,9 @@ export class InvoiceService {
     }
   }
 
-  private async getPublicOwner(userId: string): Promise<Record<string, any> | null> {
+  private async getPublicOwner(
+    userId: string,
+  ): Promise<Record<string, any> | null> {
     try {
       const user = await this.userService.getUserById(userId);
       if (!user) return null;
@@ -275,14 +328,18 @@ export class InvoiceService {
       const fileStat = await stat(file);
       if (fileStat.size > 500 * 1024) return null;
       const buf = await readFile(file);
-      const mime = extname(file).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
+      const mime =
+        extname(file).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
       return `data:${mime};base64,${buf.toString('base64')}`;
     } catch {
       return null;
     }
   }
 
-  async findTransactionsForUser(userId: string, invoiceId: string): Promise<Transaction[]> {
+  async findTransactionsForUser(
+    userId: string,
+    invoiceId: string,
+  ): Promise<Transaction[]> {
     await this.findByIdForUser(userId, invoiceId);
     return this.transactionModel
       .find({ invoiceId })
@@ -290,31 +347,48 @@ export class InvoiceService {
       .lean();
   }
 
-  async update(userId: string, invoiceId: string, dto: UpdateInvoiceDto): Promise<Invoice> {
-    const invoice = await this.invoiceModel.findOne({ _id: this.toObjectId(invoiceId), userId });
+  async update(
+    userId: string,
+    invoiceId: string,
+    dto: UpdateInvoiceDto,
+  ): Promise<Invoice> {
+    const invoice = await this.invoiceModel.findOne({
+      _id: this.toObjectId(invoiceId),
+      userId,
+    });
     if (!invoice) throw new NotFoundException('Invoice not found');
-    if (invoice.payed) throw new ConflictException('A paid invoice cannot be modified.');
+    if (invoice.payed)
+      throw new ConflictException('A paid invoice cannot be modified.');
 
     if (dto.name !== undefined) {
       invoice.name = dto.name.trim();
     }
     if (dto.items !== undefined) {
       const items = this.normalizeItems(dto.items);
-      if (!items.length) throw new BadRequestException('Invoice must contain at least one line item.');
+      if (!items.length)
+        throw new BadRequestException(
+          'Invoice must contain at least one line item.',
+        );
       invoice.items = items;
       invoice.totalAmount = this.computeTotal(items);
       await this.validateMinAmount(invoice.totalAmount, invoice.currency);
     }
     if (dto.invoiceDate) invoice.invoiceDate = new Date(dto.invoiceDate);
 
-    if (dto.commissionPayer === 'customer' || dto.commissionPayer === 'organization') {
+    if (
+      dto.commissionPayer === 'customer' ||
+      dto.commissionPayer === 'organization'
+    ) {
       invoice.commissionPayer = dto.commissionPayer;
     }
 
     if (dto.status && dto.status !== invoice.status) {
       this.assertTransition(invoice.status, dto.status);
       invoice.status = dto.status;
-      if (dto.status === InvoiceStatus.DRAFT || dto.status === InvoiceStatus.ARCHIVED) {
+      if (
+        dto.status === InvoiceStatus.DRAFT ||
+        dto.status === InvoiceStatus.ARCHIVED
+      ) {
         invoice.payed = false;
       }
     }
@@ -416,25 +490,43 @@ export class InvoiceService {
    */
   async initiatePayment(
     invoiceId: string,
-    payer: { payerName: string; payerPhone: string; payerEmail?: string; redirectUrl?: string },
+    payer: {
+      payerName: string;
+      payerPhone: string;
+      payerEmail?: string;
+      redirectUrl?: string;
+      paymentMethod?: 'mobile_money' | 'card';
+      network?: string;
+      deviceFingerprint?: string;
+      clientIp?: string;
+    },
   ): Promise<any> {
-    const invoice = await this.invoiceModel.findById(this.toObjectId(invoiceId));
+    const invoice = await this.invoiceModel.findById(
+      this.toObjectId(invoiceId),
+    );
     if (!invoice) throw new NotFoundException('Invoice not found');
     if (invoice.payed) {
       throw new ConflictException('This invoice is already paid.');
     }
-    if (invoice.status !== InvoiceStatus.COMPLETED && invoice.status !== InvoiceStatus.PAYING) {
+    if (
+      invoice.status !== InvoiceStatus.COMPLETED &&
+      invoice.status !== InvoiceStatus.PAYING
+    ) {
       throw new ConflictException('This invoice is not payable.');
     }
 
     // Nouvelle tentative pendant qu'un paiement est déjà en cours :
     // on réutilise le lien de paiement existant sans créer de transaction.
     if (invoice.status === InvoiceStatus.PAYING && invoice.transactionId) {
-      const existing = await this.transactionModel.findById(invoice.transactionId).lean();
+      const existing = await this.transactionModel
+        .findById(invoice.transactionId)
+        .lean();
       if (existing) {
         let link = invoice.paymentLink || '';
         if (!link && existing.txRef) {
-          const payin = await this.payinModel.findOne({ txRef: existing.txRef }).lean();
+          const payin = await this.payinModel
+            .findOne({ txRef: existing.txRef })
+            .lean();
           link = payin?.raw?.data?.link || '';
         }
         return {
@@ -456,6 +548,38 @@ export class InvoiceService {
       throw new ConflictException('This invoice is not payable.');
     }
 
+    // Revendication ATOMIQUE avant toute charge.
+    //
+    // Deux requêtes parallèles passaient toutes deux le contrôle de statut
+    // ci-dessus et déclenchaient deux tentatives de paiement. Sur le chemin
+    // hébergé cela n'ouvrait que deux pages de paiement ; depuis l'ajout du
+    // débit direct, cela pousse DEUX vraies demandes de paiement sur le
+    // téléphone du payeur, donc un risque de double débit. Celui qui perd la
+    // course s'arrête ici, sans rien émettre.
+    const claim = await this.invoiceModel.findOneAndUpdate(
+      {
+        _id: invoice._id,
+        status: InvoiceStatus.COMPLETED,
+        payed: { $ne: true },
+      },
+      {
+        $set: {
+          status: InvoiceStatus.PAYING,
+          paymentStartedAt: new Date(),
+          payerName: payer.payerName,
+          payerPhone: payer.payerPhone,
+          payerEmail: payer.payerEmail || undefined,
+        },
+      },
+      { new: true },
+    );
+
+    if (!claim) {
+      throw new ConflictException(
+        'A payment is already in progress for this invoice.',
+      );
+    }
+
     const owner = await this.userService.getUserById(String(invoice.userId));
     const currency = invoice.currency || owner?.countryId?.currency || 'XAF';
 
@@ -464,14 +588,20 @@ export class InvoiceService {
       invoiceId: String(invoice._id),
       estimation: invoice.totalAmount,
       noFees: false,
-      commissionPayer: invoice.commissionPayer || await this.commissionResolver.getCommissionPayer(String(invoice.userId)),
+      commissionPayer:
+        invoice.commissionPayer ||
+        (await this.commissionResolver.getCommissionPayer(
+          String(invoice.userId),
+        )),
       senderCurrency: currency,
       receiverCurrency: currency,
       senderName: payer.payerName || 'Client',
       senderContact: payer.payerPhone || '',
-      senderEmail: payer.payerEmail || `${String(invoice._id)}@invoice.digikuntz.com`,
+      senderEmail:
+        payer.payerEmail || `${String(invoice._id)}@invoice.digikuntz.com`,
       receiverId: String(invoice.userId),
-      receiverName: owner?.name || owner?.firstName || owner?.lastName || 'Merchant',
+      receiverName:
+        owner?.name || owner?.firstName || owner?.lastName || 'Merchant',
       receiverEmail: owner?.email || '',
       receiverContact: owner?.phone || '',
       raisonForTransfer: `Invoice ${String(invoice._id)}`,
@@ -479,11 +609,91 @@ export class InvoiceService {
       status: 'transaction_payin_pending',
     };
 
-    const payinResult = await this.flutterwaveService.createPayin(transactionData, undefined) as any;
+    let payinResult: any;
+    try {
+      // Aiguillage unique (direct / hébergé) : la décision n'existe plus en double
+      // ici, elle vit dans `PayinRouteService`.
+      payinResult = await this.payinRoute.resolve(
+        transactionData,
+        {
+          method: payer.paymentMethod,
+          phone: payer.payerPhone,
+          email: payer.payerEmail,
+          name: payer.payerName,
+          network: payer.network,
+          deviceFingerprint: payer.deviceFingerprint,
+          clientIp: payer.clientIp,
+        },
+        {
+          flow: 'invoice',
+          meta: { invoiceId: String(transactionData.invoiceId ?? '') },
+          fallbackEmail: transactionData.senderEmail,
+          label: `Invoice ${String(transactionData.invoiceId ?? '')}`,
+        },
+      );
+    } catch (error) {
+      // Libération de la revendication, avec un prédicat volontairement prudent.
+      //
+      // - Voie HÉBERGÉE : on restaure exactement le comportement d'avant (la
+      //   facture redevenait payable), car une session de paiement en double est
+      //   sans danger.
+      // - Voie DIRECTE : on ne libère que si RIEN n'est parti (rejet pré-charge)
+      //   ou si aucune transaction n'a été persistée. Sinon un débit peut être en
+      //   vol : libérer permettrait une seconde charge, donc un double débit.
+      //   Dans ce cas la facture reste PAYING et se résout par le cron (le payin
+      //   est laissé `pending` exprès), ce qui évite le blocage de 8 h sans
+      //   jamais risquer de re-débiter le payeur.
+      const isDirectRoute = payer.paymentMethod === 'mobile_money';
+
+      const created = await this.transactionModel
+        .findOne({ invoiceId: String(invoice._id) })
+        .lean();
+
+      const safeToRelease =
+        !isDirectRoute || isPreChargeRejection(error) || !created;
+
+      if (safeToRelease) {
+        await this.invoiceModel.updateOne(
+          { _id: invoice._id, status: InvoiceStatus.PAYING },
+          {
+            $set: { status: InvoiceStatus.COMPLETED },
+            $unset: { paymentStartedAt: 1 },
+          },
+        );
+      }
+
+      throw error;
+    }
+
+    // Échec synchrone : la charge est revenue, mais refusée. La facture ne doit
+    // pas rester PAYING avec une transaction morte, sinon le payeur ne peut plus
+    // réessayer (la branche de réutilisation lui renverrait un txRef inutilisable).
+    //
+    // `envelope` re-type la réponse (non typée à la source) en lecture sûre : les
+    // valeurs restent `unknown` et ne sont jamais coercées.
+    const envelope = payinResult as Record<string, unknown> | null | undefined;
+    const chargeOutcome = readChargeOutcome(envelope?.chargeStatus);
+
+    if (chargeOutcome === 'failed' || chargeOutcome === 'cancelled') {
+      await this.invoiceModel.updateOne(
+        { _id: invoice._id, status: InvoiceStatus.PAYING },
+        {
+          $set: { status: InvoiceStatus.COMPLETED },
+          $unset: { paymentStartedAt: 1 },
+        },
+      );
+
+      throw new BadGatewayException(
+        typeof envelope?.message === 'string'
+          ? envelope.message
+          : 'The mobile money charge was refused. Please try again.',
+      );
+    }
 
     invoice.status = InvoiceStatus.PAYING;
     invoice.paymentStartedAt = new Date();
-    invoice.paymentLink = payinResult?.redirect_url || payinResult?.link || payinResult?.url || '';
+    invoice.paymentLink =
+      payinResult?.redirect_url || payinResult?.link || payinResult?.url || '';
     invoice.transactionId = payinResult?.transactionId || undefined;
     invoice.payerName = payer.payerName;
     invoice.payerPhone = payer.payerPhone;
@@ -499,7 +709,11 @@ export class InvoiceService {
       method: 'POST',
       path: `/invoices/${invoiceId}/pay`,
       statusCode: 200,
-      metadata: { payerName: payer.payerName, payerPhone: payer.payerPhone, status: invoice.status },
+      metadata: {
+        payerName: payer.payerName,
+        payerPhone: payer.payerPhone,
+        status: invoice.status,
+      },
     });
 
     return {
@@ -553,16 +767,23 @@ export class InvoiceService {
    * email client ; il ne doit jamais être persisté sur la facture ni envoyé.
    */
   private isPlaceholderPayerEmail(email?: string): boolean {
-    return typeof email === 'string' && email.endsWith('@invoice.digikuntz.com');
+    return (
+      typeof email === 'string' && email.endsWith('@invoice.digikuntz.com')
+    );
   }
 
   /**
    * Notifie par email le payeur (si son email réel est connu) et le
    * propriétaire de la facture après un paiement réussi.
    */
-  private async notifyPaymentSuccess(invoice: any, transaction: any): Promise<void> {
+  private async notifyPaymentSuccess(
+    invoice: any,
+    transaction: any,
+  ): Promise<void> {
     try {
-      const owner = await this.userService.getUserById(String(invoice.userId)).catch(() => null);
+      const owner = await this.userService
+        .getUserById(String(invoice.userId))
+        .catch(() => null);
       const payerEmail = invoice.payerEmail;
       const ownerEmail = owner?.email;
 
@@ -583,7 +804,8 @@ export class InvoiceService {
       if (ownerEmail) {
         await this.emailService.sendInvoicePaidEmail(
           {
-            name: owner?.name || owner?.firstName || owner?.lastName || 'Client',
+            name:
+              owner?.name || owner?.firstName || owner?.lastName || 'Client',
             email: ownerEmail,
             language: owner?.language,
           },
@@ -602,40 +824,53 @@ export class InvoiceService {
    * configurées par l'admin (`transactionLimits.minDeposit` pour la devise) ;
    * à défaut on retombe sur le `minAmount` des méthodes de paiement actives.
    */
-  async getPaymentConfig(currency: string): Promise<{ minAmount: number; feesPercent: number }> {
+  async getPaymentConfig(
+    currency: string,
+  ): Promise<{ minAmount: number; feesPercent: number }> {
     const [system, methods] = await Promise.all([
       this.systemService.getSystemData(),
       this.paymentMethodService.findAll({ limit: 1000 } as any),
     ]);
 
     const currencyMethods = (methods || []).filter(
-      (m: any) => m.currency === currency && m.statusPayin && m.minAmount != null,
+      (m: any) =>
+        m.currency === currency && m.statusPayin && m.minAmount != null,
     );
 
     // Les limites de transaction configurées par l'admin (minDeposit) sont
     // la référence pour l'encaissement : elles prennent le pas sur le
     // minAmount des méthodes de paiement, qui n'est qu'une valeur de repli.
-    const systemLimit = (system?.transactionLimits || []).find((l: any) => l.currency === currency);
+    const systemLimit = (system?.transactionLimits || []).find(
+      (l: any) => l.currency === currency,
+    );
     const systemMin = Number(systemLimit?.minDeposit) || 0;
 
-    let minAmount = systemMin > 0
-      ? systemMin
-      : (currencyMethods.length
-          ? Math.min(...currencyMethods.map((m: any) => Number(m.minAmount) || 0))
-          : 0);
+    let minAmount =
+      systemMin > 0
+        ? systemMin
+        : currencyMethods.length
+          ? Math.min(
+              ...currencyMethods.map((m: any) => Number(m.minAmount) || 0),
+            )
+          : 0;
 
     const feesPercent = Number(system?.invoiceTaxes) || 0;
     return { minAmount, feesPercent };
   }
 
-  async getPaymentMetaForUser(userId: string): Promise<{ currency: string; minAmount: number; feesPercent: number }> {
+  async getPaymentMetaForUser(
+    userId: string,
+  ): Promise<{ currency: string; minAmount: number; feesPercent: number }> {
     const user = await this.userService.getUserById(userId);
     const currency = user?.countryId?.currency || 'XAF';
     const { minAmount, feesPercent } = await this.getPaymentConfig(currency);
     return { currency, minAmount, feesPercent };
   }
 
-  private async validateMinAmount(totalAmount: number, currency: string): Promise<void> {
+  private async validateMinAmount(
+    totalAmount: number,
+    currency: string,
+  ): Promise<void> {
     const { minAmount } = await this.getPaymentConfig(currency);
     if (minAmount > 0 && totalAmount < minAmount) {
       throw new BadRequestException(
@@ -648,7 +883,12 @@ export class InvoiceService {
     totalAmount: number,
     currency: string,
     commissionPayer?: 'customer' | 'organization',
-  ): Promise<{ percent: number; amount: number; amountToPay: number; amountToReceive: number }> {
+  ): Promise<{
+    percent: number;
+    amount: number;
+    amountToPay: number;
+    amountToReceive: number;
+  }> {
     const { feesPercent } = await this.getPaymentConfig(currency);
     const base = Number(totalAmount);
     const amount = Math.ceil((base * feesPercent) / 100);
@@ -698,11 +938,19 @@ export class InvoiceService {
         if (tx.status === TStatus.PAYINSUCCESS) {
           await this.handlePaymentSuccess(tx);
           adjusted++;
-        } else if (tx.status === TStatus.PAYINCLOSED || tx.status === TStatus.PAYINERROR) {
+        } else if (
+          tx.status === TStatus.PAYINCLOSED ||
+          tx.status === TStatus.PAYINERROR
+        ) {
           await this.invoiceModel.updateOne(
             { _id: invoice._id },
             {
-              $set: { status: InvoiceStatus.COMPLETED, payed: false, paymentStartedAt: undefined, paymentLink: undefined },
+              $set: {
+                status: InvoiceStatus.COMPLETED,
+                payed: false,
+                paymentStartedAt: undefined,
+                paymentLink: undefined,
+              },
               $unset: { transactionId: 1 },
             },
           );
@@ -726,14 +974,22 @@ export class InvoiceService {
           designation,
           unitPrice,
           quantity,
-          totalPrice: Number(item.totalPrice) > 0 ? Number(item.totalPrice) : unitPrice * quantity,
+          totalPrice:
+            Number(item.totalPrice) > 0
+              ? Number(item.totalPrice)
+              : unitPrice * quantity,
         };
       })
       .filter(Boolean) as InvoiceItem[];
   }
 
   private computeTotal(items: InvoiceItem[]): number {
-    return Math.round(items.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0) * 100) / 100;
+    return (
+      Math.round(
+        items.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0) *
+          100,
+      ) / 100
+    );
   }
 
   private assertTransition(from: InvoiceStatus, to: InvoiceStatus): void {
@@ -745,7 +1001,9 @@ export class InvoiceService {
       [InvoiceStatus.ARCHIVED]: [InvoiceStatus.DRAFT, InvoiceStatus.COMPLETED],
     };
     if (!allowed[from]?.includes(to)) {
-      throw new BadRequestException(`Invalid invoice status transition: ${from} -> ${to}`);
+      throw new BadRequestException(
+        `Invalid invoice status transition: ${from} -> ${to}`,
+      );
     }
   }
 

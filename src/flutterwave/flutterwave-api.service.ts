@@ -11,6 +11,13 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { GatewayLoaderService } from 'src/payment/gateway-loader.service';
 import { sanitizeFlutterwaveError } from './flutterwave-error.util';
+import { FlutterwaveChargeType } from './mobile-money-network.util';
+
+/**
+ * Default upstream timeout. Deliberately generous because a mobile-money charge
+ * can take a while to be acknowledged by the operator.
+ */
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
 /**
  * Low-level HTTP client for the Flutterwave API.
@@ -100,6 +107,7 @@ export class FlutterwaveApiService {
     currency?: string;
     params?: Record<string, any>;
     data?: any;
+    timeoutMs?: number;
     fallbackMessage: string;
   }): Promise<T> {
     // Credential resolution happens outside the try block on purpose: a missing
@@ -113,6 +121,7 @@ export class FlutterwaveApiService {
           headers,
           params: config.params,
           data: config.data,
+          timeout: config.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
         }),
       );
       return res.data as T;
@@ -222,5 +231,40 @@ export class FlutterwaveApiService {
       fallbackMessage: 'Flutterwave pay-in verification failed',
     });
     return body?.data;
+  }
+
+  // ---------- Charges (direct mobile money) ----------
+
+  /**
+   * POST /v3/charges?type={chargeType} — initiates a direct mobile-money charge
+   * (USSD/app push to the payer) instead of a hosted checkout session.
+   *
+   * Credentials are resolved for the requested currency, so this no longer
+   * depends on whichever `setCredentials` call happened last — that shared
+   * mutable state is what made direct charges fail with an empty Bearer token.
+   *
+   * The request is deliberately NOT retried: a charge POST is not idempotent at
+   * the transport layer. Retry safety is provided one level up, by the unique
+   * `Payin.txRef` and its reuse guard.
+   *
+   * @param {FlutterwaveChargeType} chargeType - Flutterwave charge type (e.g. mobile_money_franco).
+   * @param {Record<string, any>} body - Charge payload built for the operator.
+   * @param {string} currency - Currency used to resolve credentials.
+   * @returns {Promise<any>} - The FULL envelope `{ status, message, data, meta }`;
+   *   `meta.authorization.redirect_url` must stay reachable for the caller.
+   */
+  async chargeMobileMoney(
+    chargeType: FlutterwaveChargeType,
+    body: Record<string, any>,
+    currency: string,
+  ): Promise<any> {
+    return this.request({
+      method: 'post',
+      path: `/charges?type=${chargeType}`,
+      currency,
+      data: body,
+      timeoutMs: DEFAULT_REQUEST_TIMEOUT_MS,
+      fallbackMessage: 'Flutterwave direct charge failed',
+    });
   }
 }

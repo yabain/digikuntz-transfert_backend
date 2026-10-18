@@ -10,13 +10,20 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
+import type { FilterQuery, UpdateQuery } from 'mongoose';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { randomBytes } from 'crypto';
 import type { AxiosError } from 'axios';
 import type { Request } from 'express';
 
-import { Payin, PayinDocument, PayinProvider, PayinStatus } from './payin.schema';
+import {
+  Payin,
+  PayinDocument,
+  PayinProvider,
+  PayinStatus,
+  WebhookVerificationResult,
+} from './payin.schema';
 import { CreatePayinDto } from './payin.dto';
 import { ConfigService } from '@nestjs/config';
 import { Query } from 'express-serve-static-core';
@@ -31,6 +38,19 @@ type InitPayinPayload = {
   txRef: string;
   meta?: Record<string, unknown>;
 };
+
+/**
+ * `meta.flow` values written by the direct mobile-money charge path.
+ *
+ * Kept as one list so the cron queries cannot drift apart: `findPending`
+ * (hosted) must exclude exactly what `findPendingDirectCharges` includes,
+ * otherwise a direct payin gets polled by both windows.
+ */
+export const DIRECT_CHARGE_FLOWS = [
+  'direct_charge',
+  'payment_request',
+  'invoice',
+] as const;
 
 /* ===== Types minimalistes FW (ce qui nous intéresse) ===== */
 type FWBaseResp<T = any> = {
@@ -259,6 +279,145 @@ export class PayinService {
       }
       throw error;
     }
+  }
+
+  /* ===== Direct mobile-money charges ===== */
+
+  /**
+   * Persists a `pending` payin BEFORE any charge is issued.
+   *
+   * Order matters: persisting first means the unique `txRef` index becomes the
+   * idempotency key, so a retried request can reuse the row instead of firing a
+   * second charge — and a crash after the charge can never leave an untracked
+   * payment on Flutterwave's side.
+   *
+   * `status` is always written explicitly so a row is never created with an
+   * invalid value (which would make it invisible to `findPending`).
+   *
+   * @param {object} dto - Payin fields; `meta.flow` identifies the product surface.
+   * @returns {Promise<PayinDocument>} - The created (or already existing) payin.
+   */
+  async createPendingPayin(dto: {
+    txRef: string;
+    amount: number;
+    currency: string;
+    customerEmail: string;
+    customerName?: string;
+    transactionId: string | mongoose.Types.ObjectId;
+    userId?: string;
+    channel?: string;
+    provider?: PayinProvider;
+    redirectUrl?: string;
+    meta?: Record<string, any>;
+  }): Promise<PayinDocument> {
+    try {
+      return await this.payinModel.create({
+        txRef: dto.txRef,
+        amount: dto.amount,
+        currency: dto.currency,
+        customerEmail: dto.customerEmail,
+        customerName: dto.customerName,
+        transactionId: dto.transactionId,
+        userId: dto.userId,
+        channel: dto.channel,
+        provider: dto.provider ?? PayinProvider.FLUTTERWAVE,
+        redirectUrl: dto.redirectUrl,
+        meta: dto.meta ?? {},
+        status: PayinStatus.PENDING,
+      });
+    } catch (error: any) {
+      // Duplicate txRef → this attempt already exists; return it so the caller
+      // can decide whether a charge still has to happen.
+      if (error?.code === 11000) {
+        const existing = await this.payinModel
+          .findOne({ txRef: dto.txRef })
+          .exec();
+        if (existing) return existing;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Records the outcome of a charge attempt (Flutterwave id, raw envelope,
+   * mapped status).
+   *
+   * The `transactionId` is part of the WRITE FILTER, not just bookkeeping: it
+   * makes it structurally impossible to attach a charge result to a payin that
+   * belongs to another transaction, even if the `txRef` used to look the row up
+   * were wrong. Without this, a charge could land on a foreign payin and later be
+   * credited against that other transaction's amount.
+   *
+   * Never downgrades a payin that already reached a terminal state, so a late or
+   * replayed charge response cannot resurrect it.
+   *
+   * @param {string} txRef - Local reference of the attempt (server-generated).
+   * @param {string|mongoose.Types.ObjectId} transactionId - Owning transaction.
+   * @param {object} patch - Fields to persist; `undefined` values are skipped.
+   * @returns {Promise<PayinDocument|null>} - The updated payin, or null when
+   *   nothing matched (ownership mismatch, terminal state, or nothing to write).
+   */
+  async attachChargeResult(
+    txRef: string,
+    transactionId: string | mongoose.Types.ObjectId,
+    patch: {
+      flwTxId?: string | number;
+      raw?: any;
+      status?: PayinStatus;
+      channel?: string;
+      redirectUrl?: string;
+      error?: any;
+    },
+  ): Promise<PayinDocument | null> {
+    const update: UpdateQuery<Payin> = {};
+
+    if (patch.flwTxId !== undefined) update.flwTxId = String(patch.flwTxId);
+    if (patch.raw !== undefined) update.raw = patch.raw;
+    if (patch.channel !== undefined) update.channel = patch.channel;
+    if (patch.redirectUrl !== undefined) update.redirectUrl = patch.redirectUrl;
+    if (patch.error !== undefined) update.error = patch.error;
+    if (patch.status !== undefined) update.status = patch.status;
+
+    const filter: FilterQuery<Payin> = { txRef, transactionId };
+
+    if (Object.keys(update).length === 0) {
+      return this.payinModel.findOne(filter).exec();
+    }
+
+    // Only guard when writing a non-terminal status: keeping a payin `pending`
+    // after the webhook finalised it would replay the charge.
+    if (patch.status === PayinStatus.PENDING) {
+      filter.status = {
+        $nin: [
+          PayinStatus.SUCCESSFUL,
+          PayinStatus.FAILED,
+          PayinStatus.CANCELLED,
+        ],
+      };
+    }
+
+    return this.payinModel
+      .findOneAndUpdate(filter, update, { new: true })
+      .exec();
+  }
+
+  /**
+   * Pending payins started by the direct-charge path, oldest first. Lets the
+   * cron apply the shorter direct-charge close window without touching the
+   * existing hosted `findPending` contract.
+   *
+   * @param {number} [limit] - Maximum number of rows to inspect.
+   * @returns {Promise<PayinDocument[]>} - Pending direct-charge payins.
+   */
+  async findPendingDirectCharges(limit = 100): Promise<PayinDocument[]> {
+    return this.payinModel
+      .find({
+        status: PayinStatus.PENDING,
+        'meta.flow': { $in: DIRECT_CHARGE_FLOWS },
+      })
+      .sort({ createdAt: 1 })
+      .limit(limit)
+      .exec();
   }
 
   // Hosted Payment (V3) — Flutterwave only
@@ -861,9 +1020,24 @@ export class PayinService {
     return { status: data.status };
   }
 
+  /**
+   * Pending payins of the HOSTED route, oldest first.
+   *
+   * Direct-charge flows are excluded on purpose: they are verified by their own
+   * cron on a much shorter window, and including them here made each direct payin
+   * be polled twice per cycle (double upstream calls, double quota). A payin with
+   * no `meta.flow` — every hosted one — still matches, because `$nin` also
+   * matches documents where the path is missing.
+   *
+   * @param {number} [limit] - Maximum number of rows.
+   * @returns {Promise<PayinDocument[]>} - Pending hosted payins.
+   */
   async findPending(limit = 1000) {
     return this.payinModel
-      .find({ status: PayinStatus.PENDING })
+      .find({
+        status: PayinStatus.PENDING,
+        'meta.flow': { $nin: DIRECT_CHARGE_FLOWS },
+      })
       .limit(limit)
       .exec();
   }
@@ -928,8 +1102,26 @@ export class PayinService {
       .exec();
   }
 
-  hasExpiredInMinutes(inputDate: string | Date, duration: number = 15): boolean {
+  /**
+   * Whether a payin has been pending longer than `duration` minutes.
+   *
+   * An unknown or unparseable date returns `false` (fail-safe: a payin we cannot
+   * date is never force-closed). This also matches the previous behaviour, where
+   * `NaN > x` was already false.
+   *
+   * @param {string|Date} [inputDate] - Creation date of the record.
+   * @param {number} [duration] - Window in minutes. Defaults to 15.
+   * @returns {boolean} - True when the record is past the window.
+   */
+  hasExpiredInMinutes(
+    inputDate?: string | Date,
+    duration: number = 15,
+  ): boolean {
+    if (!inputDate) return false;
+
     const target = new Date(inputDate).getTime();
+    if (Number.isNaN(target)) return false;
+
     const now = Date.now();
     const diff = now - target;
     return diff > duration * 60 * 1000;
@@ -1163,39 +1355,144 @@ export class PayinService {
   }
 
   /**
-   * Webhook verification using configured secret hash
+   * Verifies a Flutterwave webhook and applies the resulting status transition.
+   *
+   * Hardening over the previous implementation:
+   * - the `verif-hash` header is compared against the configured hash AND every
+   *   alternate hash supplied by the caller (`extraHashes`). A multi-currency
+   *   merchant account can notify with any of its gateways' hashes, and after a
+   *   restart `secretHash` is only populated once a charge has run — this made
+   *   early webhooks fail with 401 and silently drop a real payment;
+   * - `charge.completed` is now handled for `successful` AND `failed`/
+   *   `cancelled`. Previously a failed charge was acknowledged and ignored, so
+   *   the payin stayed `pending` until the cron closed it;
+   * - the write is a single conditional `findOneAndUpdate` guarded on a
+   *   non-terminal status, so duplicate deliveries are idempotent and a late
+   *   success can never overwrite a terminal state.
+   *
+   * @param {Request & {body?: any; headers?: any}} req - Raw webhook request.
+   * @param {string[]} [extraHashes] - Additional accepted secret hashes.
+   * @returns {Promise<WebhookVerificationResult>} - Resolves for
+   *   every accepted delivery; throws 401 only when the signature is unknown.
    */
-  async verifyWebhook(req: Request & { body?: any; headers?: any }) {
+  async verifyWebhook(
+    req: Request & { body?: any; headers?: any },
+    extraHashes: string[] = [],
+  ): Promise<WebhookVerificationResult> {
     const signature = (req.headers as any)['verif-hash'] as string | undefined;
     const body = req.body ?? {};
 
-    if (!signature || signature !== this.secretHash) {
+    if (!this.isAcceptedSignature(signature, extraHashes)) {
       this.logger.warn('Invalid Flutterwave webhook signature');
       throw new UnauthorizedException('Invalid Flutterwave webhook signature');
     }
 
-    if (body.event === 'charge.completed' && body.data?.status === 'successful') {
-      const txRef = body.data.tx_ref;
-      const flwTxId = body.data.id;
-
-      const payin = await this.payinModel
-        .findOneAndUpdate(
-          {
-            $or: [
-              { flwTxId },
-              { txRef },
-            ],
-            status: { $nin: ['successful', 'failed', 'cancelled'] },
-          },
-          { status: PayinStatus.SUCCESSFUL, flwTxId },
-          { new: true },
-        )
-        .exec();
-
-      return { status: 'ok', payin };
+    if (body.event !== 'charge.completed') {
+      return { status: 'ok', ignored: `event:${body.event ?? 'unknown'}` };
     }
 
-    return { status: 'ok' };
+    const txRef = body.data?.tx_ref;
+    const flwTxId = body.data?.id;
+    const mapped = this.mapWebhookStatus(body.data?.status);
+
+    if (!mapped) {
+      return {
+        status: 'ok',
+        ignored: `status:${body.data?.status ?? 'unknown'}`,
+      };
+    }
+
+    const or: Record<string, any>[] = [];
+    if (flwTxId !== undefined && flwTxId !== null) or.push({ flwTxId });
+    if (txRef) or.push({ txRef });
+
+    if (or.length === 0) {
+      return { status: 'ok', ignored: 'missing_identifiers' };
+    }
+
+    const update: Record<string, any> = { status: mapped };
+    if (flwTxId !== undefined && flwTxId !== null) update.flwTxId = flwTxId;
+
+    if (mapped === PayinStatus.FAILED) {
+      // Store WHY it failed, without echoing the whole upstream payload.
+      update.error = {
+        source: 'flutterwave-webhook',
+        message:
+          body.data?.processor_response ??
+          body.data?.narration ??
+          'Charge failed',
+        status: body.data?.status,
+      };
+    }
+
+    const payin = await this.payinModel
+      .findOneAndUpdate(
+        {
+          $or: or,
+          status: {
+            $nin: [
+              PayinStatus.SUCCESSFUL,
+              PayinStatus.FAILED,
+              PayinStatus.CANCELLED,
+            ],
+          },
+        },
+        update,
+        { new: true },
+      )
+      .exec();
+
+    return { status: 'ok', payin };
+  }
+
+  /**
+   * True when `signature` matches the configured hash or one of the accepted
+   * alternates. Blank candidates are dropped so a missing configuration can
+   * never be satisfied by an empty header.
+   *
+   * @param {string|undefined} signature - Raw `verif-hash` header value.
+   * @param {string[]} extraHashes - Additional accepted hashes.
+   * @returns {boolean} - Whether the delivery is trusted.
+   */
+  private isAcceptedSignature(
+    signature: string | undefined,
+    extraHashes: string[],
+  ): boolean {
+    if (!signature || typeof signature !== 'string') return false;
+
+    const accepted = new Set(
+      [this.secretHash, ...extraHashes].filter(
+        (value): value is string =>
+          typeof value === 'string' && value.length > 0,
+      ),
+    );
+
+    return accepted.has(signature);
+  }
+
+  /**
+   * Maps a Flutterwave webhook `data.status` onto a local `PayinStatus`.
+   *
+   * @param {unknown} status - The upstream status value.
+   * @returns {PayinStatus|null} - null when the delivery is not actionable.
+   */
+  private mapWebhookStatus(status: unknown): PayinStatus | null {
+    // Explicit narrowing: stringifying an unexpected object would yield
+    // '[object Object]' and could never match a known status.
+    const value =
+      typeof status === 'string' || typeof status === 'number'
+        ? String(status).trim().toLowerCase()
+        : '';
+
+    if (value === 'successful' || value === 'success') {
+      return PayinStatus.SUCCESSFUL;
+    }
+    if (value === 'failed' || value === 'error') return PayinStatus.FAILED;
+    if (value === 'cancelled' || value === 'canceled') {
+      return PayinStatus.CANCELLED;
+    }
+
+    return null;
   }
 
   async getAllPayinTransactoins(query: Query): Promise<any[]> {

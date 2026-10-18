@@ -1,14 +1,16 @@
 import {
-  Injectable,
-  NotFoundException,
+  BadGatewayException,
   BadRequestException,
-  Inject,
-  forwardRef,
+  Injectable,
+  Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
-import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
-import { TransactionType } from 'src/transaction/transaction.schema';
+import { readChargeOutcome } from 'src/flutterwave/mobile-money-charge.builder';
+import { PayinRouteService } from 'src/flutterwave/payin-route.service';
+import { TransactionType, TStatus } from 'src/transaction/transaction.schema';
+import { GATEWAY_CURRENCIES } from 'src/gateway/gateway.schema';
 import { UserService } from 'src/user/user.service';
 import { BalanceService } from 'src/balance/balance.service';
 import { CreatePaymentRequestDto } from './create-payment-request.dto';
@@ -21,6 +23,8 @@ import { Transaction } from 'src/transaction/transaction.schema';
 
 @Injectable()
 export class PaymentRequestService {
+  private readonly logger = new Logger(PaymentRequestService.name);
+
   constructor(
     @InjectModel(PaymentRequest.name)
     private readonly paymentRequestModel: mongoose.Model<PaymentRequestDocument>,
@@ -28,9 +32,10 @@ export class PaymentRequestService {
     private readonly transactionModel: mongoose.Model<any>,
     private readonly userService: UserService,
     private readonly balanceService: BalanceService,
-    @Inject(forwardRef(() => FlutterwaveService))
-    private readonly flutterwaveService: FlutterwaveService,
-  ) { }
+    // La voie d'encaissement (directe / hébergée) n'est plus décidée ici : voir
+    // `PayinRouteService`.
+    private readonly payinRoute: PayinRouteService,
+  ) {}
 
   private getPagination(query: any) {
     const page = Number(query?.page) > 0 ? Number(query.page) : 1;
@@ -41,7 +46,9 @@ export class PaymentRequestService {
   }
 
   private normalizePhoneForDisplay(value: string): string {
-    return String(value || '').replace(/\s+/g, '').trim();
+    return String(value || '')
+      .replace(/\s+/g, '')
+      .trim();
   }
 
   private normalizeKesMsisdnStrict(value: string): string {
@@ -51,8 +58,12 @@ export class PaymentRequestService {
     }
 
     if (digits.startsWith('254') && digits.length === 12) return digits;
-    if (digits.startsWith('0') && digits.length === 10) return `254${digits.slice(1)}`;
-    if (digits.length === 9 && (digits.startsWith('7') || digits.startsWith('1'))) {
+    if (digits.startsWith('0') && digits.length === 10)
+      return `254${digits.slice(1)}`;
+    if (
+      digits.length === 9 &&
+      (digits.startsWith('7') || digits.startsWith('1'))
+    ) {
       return `254${digits}`;
     }
 
@@ -61,17 +72,27 @@ export class PaymentRequestService {
     );
   }
 
-  async createCurrentUserPaymentRequest(userId: string, data: CreatePaymentRequestDto) {
+  async createCurrentUserPaymentRequest(
+    userId: string,
+    data: CreatePaymentRequestDto,
+  ) {
     const currentUser: any = await this.userService.getUserById(userId);
     if (!currentUser) {
       throw new NotFoundException('User not found');
     }
 
-    const currency = String(currentUser?.countryId?.currency || '').toUpperCase();
+    const currency = String(
+      currentUser?.countryId?.currency || '',
+    ).toUpperCase();
     if (!currency) {
       throw new BadRequestException('Current user currency is not configured');
     }
-    if (!['XAF', 'NGN', 'KES'].includes(currency)) {
+    // Règle : la devise de la demande de paiement est celle du pays de
+    // l'utilisateur, limitée aux devises qu'une passerelle peut réellement
+    // encaisser (source unique `GATEWAY_CURRENCIES`). XOF en fait partie : un
+    // utilisateur sénégalais/ivoirien doit pouvoir créer une demande de paiement,
+    // et le chemin de charge directe le supporte déjà (`mobile_money_franco`).
+    if (!(GATEWAY_CURRENCIES as readonly string[]).includes(currency)) {
       throw new BadRequestException(
         `Unsupported currency "${currency}" for payment request`,
       );
@@ -81,7 +102,9 @@ export class PaymentRequestService {
     const commissionPayer =
       requestedPayer === 'customer' || requestedPayer === 'organization'
         ? requestedPayer
-        : (currentUser?.commissionPayer === 'organization' ? 'organization' : 'customer');
+        : currentUser?.commissionPayer === 'organization'
+          ? 'organization'
+          : 'customer';
 
     const senderPhone =
       currency === 'KES'
@@ -120,12 +143,81 @@ export class PaymentRequestService {
       commissionPayer,
     };
 
-    const initResp: any = await this.flutterwaveService.createPayin(
+    // L'IP est validée par le contrôleur puis rétrécie ici : le paramètre d'entrée
+    // est non typé, on ne fait donc pas confiance à sa forme.
+    const providedIp = (data as { clientIp?: unknown }).clientIp;
+    const clientIp = typeof providedIp === 'string' ? providedIp : undefined;
+
+    const initResp: any = await this.payinRoute.resolve(
       transactionData,
-      userId,
+      {
+        method: data.paymentMethod,
+        phone: senderPhone,
+        email: data.email,
+        name: senderName,
+        // `mobile_money.provider` is only a hint; the phone number wins whenever
+        // its prefix can be resolved.
+        network: data.network || data.mobile_money?.provider,
+        deviceFingerprint: data.deviceFingerprint,
+        clientIp,
+      },
+      {
+        // Aiguillage unique (direct / hébergé) : la décision n'existe plus en
+        // double ici, elle vit dans `PayinRouteService`.
+        flow: 'payment_request',
+        userId,
+        label: 'Payment request',
+      },
     );
 
     const transactionId = String(initResp?.transactionId || '');
+
+    // Échec synchrone de la charge directe : Flutterwave a explicitement refusé,
+    // donc aucun argent n'a bougé. Sans cette clôture immédiate, la transaction
+    // restait `transaction_payin_pending` et l'interface tournait jusqu'à son
+    // délai maximal d'attente (~10 minutes) avant d'afficher l'échec, alors que le
+    // résultat était déjà connu.
+    //
+    // `initEnvelope` re-type la réponse (non typée à la source) en lecture sûre :
+    // aucune valeur n'est coercée.
+    const initEnvelope = initResp as Record<string, unknown> | null | undefined;
+    const chargeStatus = readChargeOutcome(initEnvelope?.chargeStatus);
+
+    if (chargeStatus === 'failed' || chargeStatus === 'cancelled') {
+      if (mongoose.Types.ObjectId.isValid(transactionId)) {
+        // Transition conditionnelle et idempotente : on ne réécrit jamais un état
+        // déjà terminal.
+        await this.transactionModel
+          .updateOne(
+            {
+              _id: transactionId,
+              status: {
+                $nin: [
+                  TStatus.PAYINSUCCESS,
+                  TStatus.PAYINERROR,
+                  TStatus.PAYINCLOSED,
+                ],
+              },
+            },
+            {
+              $set: {
+                status:
+                  chargeStatus === 'cancelled'
+                    ? TStatus.PAYINCLOSED
+                    : TStatus.PAYINERROR,
+              },
+            },
+          )
+          .exec();
+      }
+
+      throw new BadGatewayException(
+        chargeStatus === 'cancelled'
+          ? 'The mobile money charge was cancelled.'
+          : 'The mobile money charge was refused. Please try again.',
+      );
+    }
+
     if (mongoose.Types.ObjectId.isValid(transactionId)) {
       await this.paymentRequestModel
         .findOneAndUpdate(
@@ -165,7 +257,6 @@ export class PaymentRequestService {
 
     return id;
   }
-
 
   // Helper function to pad numbers with leading zeros
   private padNumber(num: number, size: number): string {
@@ -219,11 +310,7 @@ export class PaymentRequestService {
       return null;
     }
     return this.paymentRequestModel
-      .findOneAndUpdate(
-        { transactionId },
-        { status },
-        { new: true },
-      )
+      .findOneAndUpdate({ transactionId }, { status }, { new: true })
       .lean()
       .exec();
   }
@@ -237,10 +324,22 @@ export class PaymentRequestService {
   }> {
     const [total, pending, success, canceled, failed] = await Promise.all([
       this.paymentRequestModel.countDocuments({ userId }),
-      this.paymentRequestModel.countDocuments({ userId, status: PaymentRequestStatus.PENDING }),
-      this.paymentRequestModel.countDocuments({ userId, status: PaymentRequestStatus.SUCCESS }),
-      this.paymentRequestModel.countDocuments({ userId, status: PaymentRequestStatus.CANCELED }),
-      this.paymentRequestModel.countDocuments({ userId, status: PaymentRequestStatus.FAILED }),
+      this.paymentRequestModel.countDocuments({
+        userId,
+        status: PaymentRequestStatus.PENDING,
+      }),
+      this.paymentRequestModel.countDocuments({
+        userId,
+        status: PaymentRequestStatus.SUCCESS,
+      }),
+      this.paymentRequestModel.countDocuments({
+        userId,
+        status: PaymentRequestStatus.CANCELED,
+      }),
+      this.paymentRequestModel.countDocuments({
+        userId,
+        status: PaymentRequestStatus.FAILED,
+      }),
     ]);
     return { total, pending, success, canceled, failed };
   }
@@ -254,10 +353,18 @@ export class PaymentRequestService {
   }> {
     const [total, pending, success, canceled, failed] = await Promise.all([
       this.paymentRequestModel.countDocuments(),
-      this.paymentRequestModel.countDocuments({ status: PaymentRequestStatus.PENDING }),
-      this.paymentRequestModel.countDocuments({ status: PaymentRequestStatus.SUCCESS }),
-      this.paymentRequestModel.countDocuments({ status: PaymentRequestStatus.CANCELED }),
-      this.paymentRequestModel.countDocuments({ status: PaymentRequestStatus.FAILED }),
+      this.paymentRequestModel.countDocuments({
+        status: PaymentRequestStatus.PENDING,
+      }),
+      this.paymentRequestModel.countDocuments({
+        status: PaymentRequestStatus.SUCCESS,
+      }),
+      this.paymentRequestModel.countDocuments({
+        status: PaymentRequestStatus.CANCELED,
+      }),
+      this.paymentRequestModel.countDocuments({
+        status: PaymentRequestStatus.FAILED,
+      }),
     ]);
     return { total, pending, success, canceled, failed };
   }

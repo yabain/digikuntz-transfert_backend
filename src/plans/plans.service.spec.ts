@@ -10,6 +10,7 @@ import { SubscriptionService } from './subscription/subscription.service';
 import { WhatsappService } from 'src/wa/whatsapp.service';
 import { UserService } from 'src/user/user.service';
 import { EmailService } from 'src/email/email.service';
+import { CommissionResolverService } from 'src/common/services/commission-resolver.service';
 
 const mockPlansModel = {
   find: jest.fn(),
@@ -29,6 +30,7 @@ const mockSubscriptionService = {};
 const mockWhatsappService = {};
 const mockUserService = {};
 const mockEmailService = {};
+const mockCommissionResolverService = {};
 
 describe('PlansService', () => {
   let service: PlansService;
@@ -72,6 +74,12 @@ describe('PlansService', () => {
         {
           provide: EmailService,
           useValue: mockEmailService,
+        },
+        {
+          // Ajouté : `PlansService` a gagné cette dépendance depuis l'écriture du
+          // test, sans quoi le module de test ne compile plus du tout.
+          provide: CommissionResolverService,
+          useValue: mockCommissionResolverService,
         },
       ],
     }).compile();

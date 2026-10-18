@@ -29,6 +29,26 @@ function isProductionEnv(): boolean {
   );
 }
 
+/**
+ * Nom de la variable d'environnement qui a réellement fourni le chemin.
+ *
+ * Distinguer les deux variables permet à un message d'erreur de nommer celle que
+ * l'exploitant doit corriger, plutôt que de le laisser chercher laquelle des deux
+ * est en cause.
+ *
+ * @returns {'UPLOAD_DIR'|'UPLOAD_DIR_LOCAL'|undefined} - La variable active.
+ */
+function configuredUploadDirSource():
+  | 'UPLOAD_DIR'
+  | 'UPLOAD_DIR_LOCAL'
+  | undefined {
+  if (isProductionEnv()) {
+    return process.env.UPLOAD_DIR ? 'UPLOAD_DIR' : undefined;
+  }
+  if (process.env.UPLOAD_DIR_LOCAL) return 'UPLOAD_DIR_LOCAL';
+  return process.env.UPLOAD_DIR ? 'UPLOAD_DIR' : undefined;
+}
+
 /** Valeur configurée dans l'environnement, ou undefined si absente. */
 function configuredUploadDir(): string | undefined {
   if (isProductionEnv()) return process.env.UPLOAD_DIR;
@@ -48,13 +68,24 @@ function ensureDir(dirPath: string): boolean {
 /**
  * Racine du répertoire d'upload (images).
  *
- * Priorité (identique au projet seed) :
+ * Priorité :
  *  1. `UPLOAD_DIR` (production) / `UPLOAD_DIR_LOCAL` (hors production) si défini.
- *     → on tente de créer le répertoire ; en cas d'échec (permissions, parent manquant…)
- *       on bascule silencieusement vers la cascade historique.
- *  2. Comportement historique (cascade de chemins prod/dev).
+ *     → on tente de créer le répertoire ; si c'est impossible, on **lève une
+ *       erreur explicite** (voir plus bas).
+ *  2. Sinon, comportement historique (cascade de chemins prod/dev).
  *
- * Le répertoire est créé automatiquement s'il n'existe pas.
+ * Échec explicite plutôt que repli silencieux : un repli écrirait les fichiers
+ * ailleurs que là où l'exploitant croit les avoir configurés. Dans un conteneur,
+ * cet emplacement de repli est hors volume persistant — les fichiers seraient
+ * perdus au redéploiement, et l'erreur ne se verrait qu'après coup, sous forme
+ * d'images manquantes. Un démarrage qui échoue est bruyant, donc réparable.
+ *
+ * La cascade historique reste en revanche **inchangée** tant qu'aucune variable
+ * n'est définie : pas de configuration ⇒ aucune nouvelle erreur.
+ *
+ * @throws {Error} - Si une variable est définie mais que le répertoire ne peut pas
+ *   être créé ou n'est pas inscriptible.
+ * @returns {string} - Le répertoire racine, créé si nécessaire.
  */
 export function getUploadRootDir(): string {
   const configured = configuredUploadDir();
@@ -63,7 +94,13 @@ export function getUploadRootDir(): string {
     if (ensureDir(root)) {
       return root;
     }
-    // Échec silencieux → on bascule vers la cascade historique (comportement seed)
+
+    const variable = configuredUploadDirSource() ?? 'UPLOAD_DIR';
+
+    throw new Error(
+      `${variable} is set to "${configured}" but the directory "${root}" could not be created or is not writable. ` +
+        `Fix ${variable} (or unset it to fall back to the historic default) and restart.`,
+    );
   }
 
   const isProd = isProductionEnv();

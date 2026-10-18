@@ -3,6 +3,23 @@ import { Document } from 'mongoose';
 
 export type GatewayType = 'flutterwave' | 'paystack' | 'mpesa';
 
+/**
+ * Devises qu'une passerelle peut encaisser.
+ *
+ * Source unique : le schéma Mongoose, le DTO de création/mise à jour et le
+ * formulaire d'administration s'y réfèrent au lieu de répéter la liste. Trois
+ * copies divergentes étaient un risque de dérive — `XOF` manquait dans deux
+ * d'entre elles alors que tout le chemin de charge directe le supporte déjà
+ * (`DIRECT_CHARGE_CURRENCIES`, `mobile_money_franco` pour SN/CI/BF/ML).
+ *
+ * Ajouter une devise ici ne suffit PAS à l'exploiter : il faut aussi un document
+ * `Gateway` actif pour cette devise, sinon la résolution des credentials échoue
+ * explicitement (`No gateway found for currency "..."`).
+ */
+export const GATEWAY_CURRENCIES = ['XAF', 'XOF', 'NGN', 'KES'] as const;
+
+export type GatewayCurrency = (typeof GATEWAY_CURRENCIES)[number];
+
 export interface MpesaSubAccountBalance {
   currentBalance: number;
   availableBalance: number;
@@ -31,7 +48,7 @@ export class Gateway extends Document {
   @Prop({ required: true, enum: ['flutterwave', 'paystack', 'mpesa'] })
   type: GatewayType;
 
-  @Prop({ required: true, enum: ['XAF', 'NGN', 'KES'] })
+  @Prop({ required: true, enum: [...GATEWAY_CURRENCIES] })
   currency: string;
 
   @Prop({ required: true })

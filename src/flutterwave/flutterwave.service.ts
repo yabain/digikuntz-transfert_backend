@@ -12,6 +12,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
   Inject,
   forwardRef,
@@ -26,7 +27,14 @@ import { CreatePayinDto, VerifyPayinDto } from 'src/payin/payin.dto';
 import { Payout, PayoutDocument } from 'src/payout/payout.schema';
 import { CreatePayoutDto } from 'src/payout/payout.dto';
 import { PayinService } from 'src/payin/payin.service';
-import { PayinProvider } from 'src/payin/payin.schema';
+import { PayinProvider, PayinStatus } from 'src/payin/payin.schema';
+import { FlutterwaveApiService } from './flutterwave-api.service';
+import {
+  DirectChargeFlow,
+  buildMobileMoneyCharge,
+  isPreChargeRejection,
+} from './mobile-money-charge.builder';
+import { isDirectChargeEnabled } from './direct-charge.config';
 import { PayoutService } from 'src/payout/payout.service';
 import { PaystackService } from 'src/paystack/paystack.service';
 import { MpesaService } from 'src/mpesa/mpesa.service';
@@ -38,6 +46,7 @@ import {
   TStatus,
   TransactionType,
 } from 'src/transaction/transaction.schema';
+import { GatewayLoaderService } from 'src/payment/gateway-loader.service';
 import { BalanceService } from 'src/balance/balance.service';
 import { SubscriptionService } from 'src/plans/subscription/subscription.service';
 import { ServicePaymentService } from 'src/service/service-payment/service-payment.service';
@@ -69,6 +78,8 @@ export class FlutterwaveService {
 
   constructor(
     private readonly http: HttpService,
+    private readonly flutterwaveApi: FlutterwaveApiService,
+    private readonly gatewayLoader: GatewayLoaderService,
     @InjectModel(Payout.name) private payoutModel: Model<PayoutDocument>,
     private payinService: PayinService,
     private payoutService: PayoutService,
@@ -105,7 +116,10 @@ export class FlutterwaveService {
     if (hash) this.secretHash = hash;
   }
 
-  async loadDbCredentials(currency?: string, gatewayId?: string): Promise<void> {
+  async loadDbCredentials(
+    currency?: string,
+    gatewayId?: string,
+  ): Promise<void> {
     let gateway;
     if (gatewayId) {
       this.logger.log(`loadDbCredentials: loading gateway by id=${gatewayId}`);
@@ -113,25 +127,39 @@ export class FlutterwaveService {
     } else {
       const cur = currency || 'XAF';
       this.logger.log(`loadDbCredentials: loading gateway by currency=${cur}`);
-      gateway = await this.gatewayModel.findOne({ type: 'flutterwave', currency: cur, isActive: true }).exec();
+      gateway = await this.gatewayModel
+        .findOne({ type: 'flutterwave', currency: cur, isActive: true })
+        .exec();
       if (!gateway) {
-        this.logger.log(`loadDbCredentials: no flutterwave gateway for ${cur}, trying any active gateway`);
-        gateway = await this.gatewayModel.findOne({ currency: cur, isActive: true }).exec();
+        this.logger.log(
+          `loadDbCredentials: no flutterwave gateway for ${cur}, trying any active gateway`,
+        );
+        gateway = await this.gatewayModel
+          .findOne({ currency: cur, isActive: true })
+          .exec();
       }
     }
     if (!gateway) {
-      this.logger.warn(`loadDbCredentials: no gateway found (gatewayId=${gatewayId}, currency=${currency})`);
+      this.logger.warn(
+        `loadDbCredentials: no gateway found (gatewayId=${gatewayId}, currency=${currency})`,
+      );
       return;
     }
     try {
-      const decrypted = this.cryptService.decryptWithPassphrase(gateway.credentials);
+      const decrypted = this.cryptService.decryptWithPassphrase(
+        gateway.credentials,
+      );
       const creds = JSON.parse(decrypted);
-      this.logger.log(`loadDbCredentials: gateway type=${gateway.type}, credentials loaded`);
+      this.logger.log(
+        `loadDbCredentials: gateway type=${gateway.type}, credentials loaded`,
+      );
       this.setCredentials(creds);
       this.payinService.setCredentials(creds);
       this.mpesaService.setCredentials(creds);
     } catch (e) {
-      this.logger.error(`loadDbCredentials: failed to decrypt/set credentials: ${e.message}`);
+      this.logger.error(
+        `loadDbCredentials: failed to decrypt/set credentials: ${e.message}`,
+      );
     }
   }
 
@@ -139,10 +167,10 @@ export class FlutterwaveService {
     const code = String(details?.code || '').toLowerCase();
     const message = String(
       details?.message ||
-      details?.data?.message ||
-      details?.error ||
-      details ||
-      '',
+        details?.data?.message ||
+        details?.error ||
+        details ||
+        '',
     ).toLowerCase();
 
     return (
@@ -190,7 +218,10 @@ export class FlutterwaveService {
     return raw;
   }
 
-  private normalizeProviderFullName(value?: string, fieldName = 'name'): string {
+  private normalizeProviderFullName(
+    value?: string,
+    fieldName = 'name',
+  ): string {
     const raw = String(value || '')
       .trim()
       .replace(/\s+/g, ' ');
@@ -215,12 +246,13 @@ export class FlutterwaveService {
       headers = this.authHeaderNGN();
     }
     try {
-      const res = await firstValueFrom(
-        this.http.get(url, { headers }),
-      );
+      const res = await firstValueFrom(this.http.get(url, { headers }));
       return res.data;
     } catch (err: any) {
-      const parsed = this.sanitizeFlutterwaveError(err, 'Failed to fetch Flutterwave balance');
+      const parsed = this.sanitizeFlutterwaveError(
+        err,
+        'Failed to fetch Flutterwave balance',
+      );
       throw new HttpException(parsed.payload, parsed.statusCode);
     }
   }
@@ -365,7 +397,9 @@ export class FlutterwaveService {
       noFees: true,
     };
     // console.log('withdrawal raw: ', raw);
-    const balance = await this.balanceService.getBalanceByUserId(String(userId));
+    const balance = await this.balanceService.getBalanceByUserId(
+      String(userId),
+    );
     if (!Number.isFinite(withdrawalAmount) || withdrawalAmount <= 0) {
       throw new HttpException(
         {
@@ -397,16 +431,15 @@ export class FlutterwaveService {
       if (!savedTransaction) {
         throw new NotFoundException('Error to save transaction details');
       }
-      
 
-    if (
-      transactionData?.transactionType === 'transfer' ||
-      transactionData?.transactionType === 'withdrawal'
-    ) {
-      void this.operationNotificationService
-        .notifyAdminPayoutPending(savedTransaction)
-        .catch(() => undefined);
-    }
+      if (
+        transactionData?.transactionType === 'transfer' ||
+        transactionData?.transactionType === 'withdrawal'
+      ) {
+        void this.operationNotificationService
+          .notifyAdminPayoutPending(savedTransaction)
+          .catch(() => undefined);
+      }
 
       return { status: 'pending' };
     } catch (error) {
@@ -431,7 +464,8 @@ export class FlutterwaveService {
   }
 
   // ---------- Pay-In (Hosted Payment) ----------
-  async createSystemPayin(body: any, user: any) {    const userId = String(user?._id || '');
+  async createSystemPayin(body: any, user: any) {
+    const userId = String(user?._id || '');
     if (!userId) {
       throw new HttpException(
         { status: HttpStatus.BAD_REQUEST, error: 'User not found' },
@@ -574,7 +608,10 @@ export class FlutterwaveService {
     const balance = await this.systemBalanceService.getSystemBalance(currency);
     if (Number(balance?.balance ?? 0) < amount) {
       throw new HttpException(
-        { status: HttpStatus.BAD_REQUEST, error: 'Insufficient system balance' },
+        {
+          status: HttpStatus.BAD_REQUEST,
+          error: 'Insufficient system balance',
+        },
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -658,12 +695,17 @@ export class FlutterwaveService {
   ) {
     let selectedGatewayType: string | undefined;
     if (transactionData.gatewayId) {
-      const gw = await this.gatewayModel.findById(transactionData.gatewayId).lean().exec();
+      const gw = await this.gatewayModel
+        .findById(transactionData.gatewayId)
+        .lean()
+        .exec();
       if (gw) selectedGatewayType = gw.type;
     }
 
     await this.loadDbCredentials(
-      transactionData.senderCurrency || transactionData.receiverCurrency || 'XAF',
+      transactionData.senderCurrency ||
+        transactionData.receiverCurrency ||
+        'XAF',
       transactionData.gatewayId,
     );
 
@@ -680,13 +722,15 @@ export class FlutterwaveService {
     if (Number.isFinite(depositAmount) && depositAmount > 0) {
       await this.transactionService.validateTransactionLimit(
         depositAmount,
-        transactionData.senderCurrency || transactionData.receiverCurrency || 'XAF',
+        transactionData.senderCurrency ||
+          transactionData.receiverCurrency ||
+          'XAF',
         'deposit',
       );
     }
 
     transactionData.userId = userId;
-    const txRef = this.payinService.generateTxRef('txPayin')
+    const txRef = this.payinService.generateTxRef('txPayin');
     const raw = {
       ...transactionData,
       userId,
@@ -758,16 +802,23 @@ export class FlutterwaveService {
     const txRef = this.payinService.generateTxRef('txPayin');
 
     // Load Paystack credentials from the selected gateway
-    const gateway = await this.gatewayModel.findById(transactionData.gatewayId).exec();
+    const gateway = await this.gatewayModel
+      .findById(transactionData.gatewayId)
+      .exec();
     if (!gateway) {
       throw new NotFoundException('Gateway not found');
     }
     try {
-      const decrypted = this.cryptService.decryptWithPassphrase(gateway.credentials);
+      const decrypted = this.cryptService.decryptWithPassphrase(
+        gateway.credentials,
+      );
       const creds = JSON.parse(decrypted);
       this.paystackService.setCredentials(creds);
     } catch {
-      throw new HttpException('Invalid gateway credentials', HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(
+        'Invalid gateway credentials',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
 
     // Validate deposit limits
@@ -787,7 +838,8 @@ export class FlutterwaveService {
       status: TStatus.PAYINPENDING,
     };
 
-    const savedTransaction = await this.transactionService.createTransaction(raw);
+    const savedTransaction =
+      await this.transactionService.createTransaction(raw);
     if (!savedTransaction) {
       throw new NotFoundException('Error to save transaction details');
     }
@@ -800,7 +852,8 @@ export class FlutterwaveService {
       );
     }
 
-    const backendUrl = this.config.get<string>('BACK_URL') ?? 'https://api.digikuntz.com';
+    const backendUrl =
+      this.config.get<string>('BACK_URL') ?? 'https://api.digikuntz.com';
     const callbackUrl = `${backendUrl}/paystack/payin-callback?txRef=${txRef}`;
 
     const paystackResp = await this.paystackService.initializeKesMpesaPayment({
@@ -876,7 +929,8 @@ export class FlutterwaveService {
       status: TStatus.PAYINPENDING,
     };
 
-    const savedTransaction = await this.transactionService.createTransaction(raw);
+    const savedTransaction =
+      await this.transactionService.createTransaction(raw);
     if (!savedTransaction) {
       throw new NotFoundException('Error to save transaction details');
     }
@@ -910,19 +964,6 @@ export class FlutterwaveService {
     return payinResult;
   }
 
-  private getCountryForCurrency(currency: string): string | undefined {
-    const map: Record<string, string> = {
-      XAF: 'CM',
-      XOF: 'CI',
-      NGN: 'NG',
-      KES: 'KE',
-      GHS: 'GH',
-      UGX: 'UG',
-      RWF: 'RW',
-    };
-    return map[currency];
-  }
-
   private validateDirectChargePayload(dto: {
     amount: number;
     currency: string;
@@ -937,7 +978,10 @@ export class FlutterwaveService {
 
     if (!Number.isFinite(amount) || amount <= 0) {
       throw new HttpException(
-        { status: HttpStatus.BAD_REQUEST, error: 'Invalid amount: must be a positive number' },
+        {
+          status: HttpStatus.BAD_REQUEST,
+          error: 'Invalid amount: must be a positive number',
+        },
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -951,7 +995,10 @@ export class FlutterwaveService {
 
     if (!dto.phone || String(dto.phone).replace(/\s+/g, '').length < 5) {
       throw new HttpException(
-        { status: HttpStatus.BAD_REQUEST, error: 'A valid phone number is required' },
+        {
+          status: HttpStatus.BAD_REQUEST,
+          error: 'A valid phone number is required',
+        },
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -965,28 +1012,116 @@ export class FlutterwaveService {
 
     if (currency === 'NGN' && !dto.network) {
       throw new HttpException(
-        { status: HttpStatus.BAD_REQUEST, error: 'network is required for NGN mobile money (MTN, AIRTEL, GLO, 9MOBILE)' },
+        {
+          status: HttpStatus.BAD_REQUEST,
+          error:
+            'network is required for NGN mobile money (MTN, AIRTEL, GLO, 9MOBILE)',
+        },
         HttpStatus.BAD_REQUEST,
       );
     }
 
     if (currency === 'GHS' && !dto.network) {
       throw new HttpException(
-        { status: HttpStatus.BAD_REQUEST, error: 'network is required for GHS mobile money (MTN, VODAFONE, AIRTELTIGO)' },
+        {
+          status: HttpStatus.BAD_REQUEST,
+          error:
+            'network is required for GHS mobile money (MTN, VODAFONE, AIRTELTIGO)',
+        },
         HttpStatus.BAD_REQUEST,
       );
     }
 
-    const supportedCurrencies = ['XAF', 'XOF', 'NGN', 'KES', 'GHS', 'UGX', 'RWF'];
+    const supportedCurrencies = [
+      'XAF',
+      'XOF',
+      'NGN',
+      'KES',
+      'GHS',
+      'UGX',
+      'RWF',
+    ];
     if (!supportedCurrencies.includes(currency)) {
       throw new HttpException(
-        { status: HttpStatus.BAD_REQUEST, error: `Unsupported currency: ${currency}. Supported: ${supportedCurrencies.join(', ')}` },
+        {
+          status: HttpStatus.BAD_REQUEST,
+          error: `Unsupported currency: ${currency}. Supported: ${supportedCurrencies.join(', ')}`,
+        },
         HttpStatus.BAD_REQUEST,
       );
     }
   }
 
+  /**
+   * Initiates a direct mobile-money charge (USSD/app push, no hosted checkout).
+   *
+   * Two live defects are fixed here:
+   * 1. the payload is now built by `buildMobileMoneyCharge`, which derives
+   *    `country`/`network` from the payer's phone number. The previous
+   *    currency→country shortcut emitted invalid networks (`MOMO`,
+   *    `ORANGEMONEY`) and omitted `client_ip`/`device_fingerprint`;
+   * 2. credentials are resolved per currency by `FlutterwaveApiService` instead
+   *    of the shared `fwSecret` field, which was still empty whenever no other
+   *    call had run `loadDbCredentials` first — turning a 401 into a 502.
+   *
+   * Kenya (`KES`) deliberately keeps its previous code path: that rail has its
+   * own gateway and its own MSISDN authority, and must not regress.
+   *
+   * @param {object} dto - Charge inputs. `txRef` MUST already be persisted so the
+   *   charge can always be reconciled back to a local payin.
+   * @returns {Promise<any>} - Flutterwave's full envelope. `meta.authorization.redirect_url`
+   *   must stay reachable: some operators still require a redirect even here.
+   */
   async directMobileMoneyCharge(dto: {
+    amount: number;
+    currency: string;
+    phone: string;
+    email: string;
+    name?: string;
+    network?: string;
+    country?: string;
+    txRef: string;
+    clientIp?: string;
+    deviceFingerprint?: string;
+    flow?: DirectChargeFlow;
+  }): Promise<any> {
+    const currency = String(dto.currency || '')
+      .trim()
+      .toUpperCase();
+
+    if (currency === 'KES') {
+      return this.legacyKesDirectCharge(dto);
+    }
+
+    const built = buildMobileMoneyCharge({
+      txRef: dto.txRef,
+      amount: dto.amount,
+      currency,
+      phone: dto.phone,
+      email: dto.email,
+      fullname: dto.name,
+      network: dto.network,
+      country: dto.country,
+      clientIp: dto.clientIp,
+      deviceFingerprint: dto.deviceFingerprint,
+      flow: dto.flow ?? 'direct_charge',
+    });
+
+    return this.flutterwaveApi.chargeMobileMoney(
+      built.chargeType,
+      built.body,
+      built.resolved.currency,
+    );
+  }
+
+  /**
+   * Kenya mobile-money charge.
+   *
+   * Preserved from the original implementation (payload shape, `meta`, optional
+   * uppercased `network`) with ONE change: credentials are now resolved for KES
+   * explicitly instead of relying on the shared `fwSecret` field.
+   */
+  private async legacyKesDirectCharge(dto: {
     amount: number;
     currency: string;
     phone: string;
@@ -997,15 +1132,12 @@ export class FlutterwaveService {
   }): Promise<any> {
     this.validateDirectChargePayload(dto);
 
-    const currency = String(dto.currency || '').toUpperCase();
-    const phone = dto.phone.replace(/\s+/g, '').trim();
-
     const payload: any = {
       tx_ref: dto.txRef,
       amount: Number(dto.amount),
-      currency,
+      currency: 'KES',
       email: dto.email,
-      phone_number: phone,
+      phone_number: dto.phone.replace(/\s+/g, '').trim(),
       fullname: dto.name || 'Customer',
       meta: { app: 'digikuntz-payments', flow: 'direct_charge' },
     };
@@ -1014,50 +1146,46 @@ export class FlutterwaveService {
       payload.network = dto.network.toUpperCase();
     }
 
-    const countryOverride = this.getCountryForCurrency(currency);
-    if (countryOverride && (currency === 'XAF' || currency === 'XOF')) {
-      payload.country = countryOverride;
-    }
-
-    let chargeType: string;
-    switch (currency) {
-      case 'KES':
-        chargeType = 'mpesa';
-        break;
-      case 'XAF':
-      case 'XOF':
-        chargeType = 'mobile_money_franco';
-        break;
-      case 'GHS':
-        chargeType = 'mobile_money_ghana';
-        break;
-      case 'NGN':
-        chargeType = 'mobile_money_nigeria';
-        break;
-      case 'UGX':
-        chargeType = 'mobile_money_uganda';
-        break;
-      case 'RWF':
-        chargeType = 'mobile_money_rwanda';
-        break;
-      default:
-        chargeType = 'mobile_money';
-    }
-
-    const res = await firstValueFrom(
-      this.http.post(
-        `${this.fwBaseUrlV3}/charges?type=${chargeType}`,
-        payload,
-        {
-          headers: this.authHeader(),
-          timeout: 30000,
-        },
-      ),
-    );
-    return res.data;
+    return this.flutterwaveApi.chargeMobileMoney('mpesa', payload, 'KES');
   }
 
+  /**
+   * Creates a transaction + a local pending payin, THEN charges Flutterwave.
+   *
+   * Order is the whole point of this rewrite. The previous version charged first
+   * and then called `payinService.createPayin(...)` — which is the HOSTED method
+   * (`POST /v3/payments`). Every "direct charge" therefore ALSO created a hosted
+   * checkout session at Flutterwave, and the charge's `flwTxId` and raw response
+   * were never stored.
+   *
+   * Now:
+   *  1. the transaction is created (`PAYINPENDING`);
+   *  2. a local `pending` payin is persisted, so the unique `txRef` index becomes
+   *     the reconciliation anchor and a crash after the charge can never leave an
+   *     untracked payment on Flutterwave's side;
+   *  3. the charge is issued;
+   *  4. `flwTxId`, the raw envelope, the mapped status and any redirect URL are
+   *     attached to the payin, and `flwTxId` is copied onto the transaction.
+   *
+   * When Flutterwave answers `successful` synchronously, the canonical
+   * `processSuccessfulPayin` claim path is reused so the credit happens exactly
+   * once even if the webhook or the cron fires at the same time.
+   *
+   * @param {any} data - Charge request (estimation, currency, phone, email, name, network...).
+   * @param {any} userId - Owner of the transaction.
+   * @returns {Promise<any>} - Polling contract consumed by the frontend.
+   */
   async createDirectCharge(data: any, userId: any): Promise<any> {
+    // Master rollback lever. This endpoint exists ONLY to issue a direct charge,
+    // so there is no hosted route to fall back to: it fails closed with 503
+    // rather than silently doing something else with money.
+    if (!isDirectChargeEnabled(this.config)) {
+      throw new ServiceUnavailableException({
+        message: 'Direct mobile-money charge is currently disabled.',
+        code: 'DIRECT_CHARGE_DISABLED',
+      });
+    }
+
     const depositAmount = Number(data.estimation);
     if (Number.isFinite(depositAmount) && depositAmount > 0) {
       await this.transactionService.validateTransactionLimit(
@@ -1067,7 +1195,38 @@ export class FlutterwaveService {
       );
     }
 
+    // SÉCURITÉ : le `txRef` n'est JAMAIS repris du corps de la requête.
+    // L'accepter permettait de faire écrire le résultat d'une charge sur un
+    // payin préexistant appartenant à une autre transaction (confusion de
+    // montant, voire double crédit), et une tentative de rejeu renvoyait le
+    // `transactionId` d'autrui. Il est donc toujours généré côté serveur, ce qui
+    // rend le `txRef` unique par tentative et supprime toute course entre deux
+    // requêtes concurrentes.
+    //
+    // L'idempotence de cet endpoint reste à la charge de l'appelant côté API
+    // (comme le flux développeur, via `IdempotencyService`) ; le flux facture est
+    // protégé par la revendication atomique de la facture.
     const txRef = this.payinService.generateTxRef('txDirect');
+
+    // Précondition AVANT toute écriture, même raisonnement que
+    // `createDirectPayin` : sans credentials pour la devise, la charge échouerait
+    // après la création de la transaction et du payin, laissant des lignes
+    // orphelines qu'aucun cron ne peut résoudre.
+    //
+    // KES est volontairement EXCLU : il emprunte `legacyKesDirectCharge`, dont la
+    // source de credentials n'est pas `FlutterwaveApiService`. Mieux vaut ne pas
+    // couvrir ce chemin que risquer de bloquer une voie qui fonctionne
+    // aujourd'hui.
+    const preconditionCurrency = String(data.currency || 'XAF').toUpperCase();
+    if (
+      preconditionCurrency !== 'KES' &&
+      !(await this.flutterwaveApi.hasCredentials(preconditionCurrency))
+    ) {
+      throw new NotFoundException(
+        `No Flutterwave gateway credentials configured for currency "${preconditionCurrency}"`,
+      );
+    }
+
     const transactionData = {
       transactionRef: this.transactionService.generateInRef(),
       estimation: data.estimation,
@@ -1094,27 +1253,75 @@ export class FlutterwaveService {
       throw new NotFoundException('Error to save transaction details');
     }
 
-    const chargeResult = await this.directMobileMoneyCharge({
-      amount: Number(savedTransaction.paymentWithTaxes),
-      currency: data.currency,
-      phone: data.phone,
-      email: data.email || '',
-      name: data.name,
-      network: data.network,
-      txRef,
-    });
+    const amount = Number(savedTransaction.paymentWithTaxes);
 
-    await this.payinService.createPayin({
-      amount: Number(savedTransaction.paymentWithTaxes),
+    await this.payinService.createPendingPayin({
       txRef,
-      transactionId: savedTransaction._id,
+      amount,
       currency: data.currency,
       customerEmail: data.email || '',
       customerName: data.name || 'Customer',
-      customerPhone: data.phone,
-      status: 'pending',
+      transactionId: savedTransaction._id,
       userId,
+      channel: 'mobile_money',
+      meta: { flow: 'direct_charge' },
     });
+
+    let chargeResult: any;
+    try {
+      chargeResult = await this.directMobileMoneyCharge({
+        amount,
+        currency: data.currency,
+        phone: data.phone,
+        email: data.email || '',
+        name: data.name,
+        network: data.network,
+        country: data.country,
+        txRef,
+        clientIp: data.clientIp,
+        deviceFingerprint: data.deviceFingerprint,
+        flow: 'direct_charge',
+      });
+    } catch (error: any) {
+      // The charge never reached Flutterwave (validation, credentials or
+      // upstream failure). Finalise the payin so it is not polled forever, then
+      // rethrow the original error so the caller keeps its contract.
+      await this.recordChargeFailure(
+        txRef,
+        String(savedTransaction._id),
+        error,
+      );
+      throw error;
+    }
+
+    const { status: payinStatus, flwTxId } = await this.recordChargeResult(
+      txRef,
+      String(savedTransaction._id),
+      chargeResult,
+    );
+
+    if (flwTxId) {
+      try {
+        await this.transactionService.updateTransactionFlwTxId(
+          String(savedTransaction._id),
+          flwTxId,
+        );
+      } catch (error: any) {
+        this.logger.warn(
+          `Could not attach Flutterwave id ${flwTxId} to transaction ${String(
+            savedTransaction._id,
+          )}: ${error?.message ?? 'unknown error'}`,
+        );
+      }
+    }
+
+    if (payinStatus === PayinStatus.SUCCESSFUL) {
+      // Same guarded, idempotent claim path as the webhook.
+      await this.processSuccessfulPayin(
+        savedTransaction,
+        String(savedTransaction._id),
+      );
+    }
 
     return {
       status: 'payin_pending',
@@ -1125,6 +1332,359 @@ export class FlutterwaveService {
       taxesAmount: savedTransaction.taxesAmount,
       paymentWithTaxes: savedTransaction.paymentWithTaxes,
       chargeResponse: chargeResult,
+    };
+  }
+
+  /**
+   * Persists the outcome of a charge envelope against an already-created payin
+   * (Flutterwave id, raw envelope, mapped status, operator-imposed redirect URL).
+   *
+   * Shared by the public API flow and the developer API flow so the mapping
+   * exists in exactly one place.
+   *
+   * @param {string} txRef - Local reference of the attempt.
+   * @param {any} chargeResult - Flutterwave's full response envelope.
+   * @returns {Promise<{status: PayinStatus; flwTxId?: string}>} - Mapped status and upstream id.
+   */
+  /**
+   * Records the outcome of a charge attempt on the payin that OWNS it.
+   *
+   * @param {string} txRef - Local reference of the attempt (server-generated).
+   * @param {string} transactionId - Owning transaction, added to the write filter
+   *   so a charge result can never land on another transaction's payin.
+   * @param {any} chargeResult - Flutterwave charge envelope.
+   * @returns {Promise<{status: PayinStatus; flwTxId?: string}>} - Mapped outcome.
+   */
+  async recordChargeResult(
+    txRef: string,
+    transactionId: string,
+    chargeResult: any,
+  ): Promise<{ status: PayinStatus; flwTxId?: string }> {
+    const chargeData = chargeResult?.data ?? {};
+    const flwTxId =
+      chargeData?.id !== undefined && chargeData?.id !== null
+        ? String(chargeData.id)
+        : undefined;
+    const status = this.mapChargeStatusToPayinStatus(chargeData?.status);
+    const redirectUrl = chargeResult?.meta?.authorization?.redirect_url;
+
+    const attached = await this.payinService.attachChargeResult(
+      txRef,
+      transactionId,
+      {
+        flwTxId,
+        raw: chargeResult,
+        status,
+        ...(redirectUrl ? { redirectUrl: String(redirectUrl) } : {}),
+        ...(status === PayinStatus.FAILED
+          ? { error: this.describeChargeError(chargeResult) }
+          : {}),
+      },
+    );
+
+    // A miss means the payin is not ours or is already terminal. The charge still
+    // happened, so this must be visible: the webhook/cron will reconcile it by
+    // `flwTxId`.
+    if (!attached) {
+      this.logger.warn(
+        `Charge result not attached for txRef=${txRef} (payin missing, ownership mismatch or already final)`,
+      );
+    }
+
+    return { status, flwTxId };
+  }
+
+  /**
+   * Finalises a payin after a charge attempt that failed locally.
+   *
+   * CRITICAL: a transport/upstream failure is AMBIGUOUS — the charge may well
+   * have reached Flutterwave and succeeded while the response was lost. Writing a
+   * terminal `FAILED` in that case used to lose the payment for good: the cron
+   * only scans `pending` payins, and the webhook ignores terminal ones, so the
+   * real success could never be credited. Only a **pre-charge rejection** (proven
+   * to have happened before any request left this process) is written as terminal;
+   * everything else stays `pending` so `verifyPayin` resumes it against
+   * `verify_by_reference` and lets the outcome be decided by Flutterwave.
+   *
+   * @param {string} txRef - Local reference of the attempt.
+   * @param {string} transactionId - Owning transaction (write-filter guard).
+   * @param {any} error - The original failure.
+   * @returns {Promise<void>}
+   */
+  async recordChargeFailure(
+    txRef: string,
+    transactionId: string,
+    error: any,
+  ): Promise<void> {
+    const preCharge = isPreChargeRejection(error);
+
+    if (!preCharge) {
+      // `describeChargeError` renvoie `Record<string, any>` : on ne l'interpole pas
+      // tel quel (stringification d'objet) et on lit son message en le rétrécissant.
+      const described: { message?: unknown } = this.describeChargeError(error);
+      const reason =
+        typeof described.message === 'string'
+          ? described.message
+          : 'unknown error';
+
+      this.logger.warn(
+        `Charge attempt ${txRef} failed ambiguously (${reason}); leaving the payin pending for upstream reconciliation`,
+      );
+      return;
+    }
+
+    const attached = await this.payinService.attachChargeResult(
+      txRef,
+      transactionId,
+      {
+        status: PayinStatus.FAILED,
+        error: this.describeChargeError(error),
+      },
+    );
+
+    if (!attached) {
+      this.logger.warn(
+        `Charge failure not attached for txRef=${txRef} (payin missing or already final)`,
+      );
+    }
+  }
+
+  /**
+   * Direct mobile-money charge for a caller-built transaction.
+   *
+   * Used by the invoice and payment-request flows: each builds its own
+   * transaction (different type, fees and commission payer) but shares the same
+   * charge orchestration. The return envelope mirrors the hosted `createPayin`
+   * contract so callers can treat both routes identically.
+   *
+   * Persist-then-charge ordering applies here too (see `createDirectCharge`), so
+   * a crash after the charge always leaves a locally reconcilable payin.
+   *
+   * @param {any} transactionData - Transaction to create before charging.
+   * @param {object} charge - Charge inputs and the originating flow.
+   * @returns {Promise<object>} - `{ status, transactionId, txRef, redirect_url, network, ... }`.
+   */
+  async createDirectPayin(
+    transactionData: any,
+    charge: {
+      phone: string;
+      email: string;
+      name?: string;
+      network?: string;
+      country?: string;
+      clientIp?: string;
+      deviceFingerprint?: string;
+      flow: DirectChargeFlow;
+      meta?: Record<string, any>;
+    },
+  ): Promise<any> {
+    // Master rollback lever. With the flag off, nothing is sent upstream and the
+    // rejection is a PRE-CHARGE code, so the invoice / payment-request callers
+    // transparently use the hosted checkout they used before this feature.
+    if (!isDirectChargeEnabled(this.config)) {
+      throw this.preChargeRejection(
+        'DIRECT_CHARGE_DISABLED',
+        'Direct mobile-money charge is currently disabled.',
+      );
+    }
+
+    const txRef = this.payinService.generateTxRef('txDirect');
+    const amount = Number(transactionData?.estimation);
+    const currency = String(
+      transactionData.senderCurrency ||
+        transactionData.receiverCurrency ||
+        'XAF',
+    ).toUpperCase();
+
+    // Build (and validate) BEFORE creating anything: a route that cannot be
+    // attempted must not leave an orphan transaction + payin behind for the
+    // caller's fallback to trip over. `buildMobileMoneyCharge` is pure.
+    const built = buildMobileMoneyCharge({
+      txRef,
+      amount,
+      currency,
+      phone: charge.phone,
+      email: charge.email,
+      fullname: charge.name,
+      network: charge.network,
+      country: charge.country,
+      clientIp: charge.clientIp,
+      deviceFingerprint: charge.deviceFingerprint,
+      flow: charge.flow,
+      meta: charge.meta,
+    });
+
+    // Précondition AVANT toute écriture : sans credentials pour cette devise, la
+    // charge échouerait après la création de la transaction et du payin, laissant
+    // des lignes orphelines et — sur la facture — un `PAYING` que le cron ne peut
+    // jamais réconcilier (il lui faudrait les mêmes credentials). Échouer ici
+    // n'écrit rien : l'appelant peut donc libérer sa revendication et réessayer.
+    //
+    // Concerne particulièrement XOF : la devise est acceptée (cf.
+    // `GATEWAY_CURRENCIES`) mais n'est exploitable que si un document `Gateway`
+    // actif existe pour elle.
+    if (!(await this.flutterwaveApi.hasCredentials(built.resolved.currency))) {
+      throw new NotFoundException(
+        `No Flutterwave gateway credentials configured for currency "${built.resolved.currency}"`,
+      );
+    }
+
+    const savedTransaction =
+      await this.transactionService.createTransaction(transactionData);
+    if (!savedTransaction) {
+      throw new NotFoundException('Error to save transaction details');
+    }
+
+    await this.payinService.createPendingPayin({
+      txRef,
+      amount: Number(savedTransaction.paymentWithTaxes),
+      currency,
+      customerEmail: charge.email || '',
+      customerName: charge.name || 'Customer',
+      transactionId: savedTransaction._id,
+      userId: transactionData.senderId
+        ? String(transactionData.senderId)
+        : undefined,
+      channel: 'mobile_money',
+      meta: { flow: charge.flow, ...(charge.meta ?? {}) },
+    });
+
+    let chargeResult: any;
+    try {
+      chargeResult = await this.flutterwaveApi.chargeMobileMoney(
+        built.chargeType,
+        built.body,
+        built.resolved.currency,
+      );
+    } catch (error: any) {
+      await this.recordChargeFailure(
+        txRef,
+        String(savedTransaction._id),
+        error,
+      );
+      throw error;
+    }
+
+    const { status: payinStatus, flwTxId } = await this.recordChargeResult(
+      txRef,
+      String(savedTransaction._id),
+      chargeResult,
+    );
+
+    if (flwTxId) {
+      try {
+        await this.transactionService.updateTransactionFlwTxId(
+          String(savedTransaction._id),
+          flwTxId,
+        );
+      } catch (error: any) {
+        this.logger.warn(
+          `Could not attach Flutterwave id ${flwTxId} to transaction ${String(
+            savedTransaction._id,
+          )}: ${error?.message ?? 'unknown error'}`,
+        );
+      }
+    }
+
+    if (payinStatus === PayinStatus.SUCCESSFUL) {
+      // Same guarded, idempotent claim path as the webhook.
+      await this.processSuccessfulPayin(
+        savedTransaction,
+        String(savedTransaction._id),
+      );
+    }
+
+    return {
+      status: 'pending',
+      transactionId: String(savedTransaction._id),
+      txRef,
+      amount: Number(savedTransaction.paymentWithTaxes),
+      currency,
+      provider: PayinProvider.FLUTTERWAVE,
+      network: built.resolved.network,
+      chargeStatus: payinStatus,
+      redirect_url: chargeResult?.meta?.authorization?.redirect_url || '',
+    };
+  }
+
+  /**
+   * Builds a rejection that happened BEFORE any Flutterwave request was issued.
+   *
+   * The `code` is what `isPreChargeRejection` keys on, so callers can safely fall
+   * back to another payment route. It must never be used once a charge call has
+   * been made — that is exactly how a double charge happens.
+   *
+   * @param {string} code - Machine-readable reason.
+   * @param {string} message - Human-readable reason.
+   * @returns {HttpException} - 400 with the pre-charge `code`.
+   */
+  private preChargeRejection(code: string, message: string): HttpException {
+    return new HttpException({ message, code }, HttpStatus.BAD_REQUEST);
+  }
+
+  /**
+   * Maps a Flutterwave charge status onto the local `PayinStatus`.
+   *
+   * Unknown or absent statuses stay `pending` ON PURPOSE: the webhook and the
+   * reconciliation cron are the authority, and defaulting to `failed` would mark
+   * a payment the payer may still approve on their phone.
+   *
+   * @param {unknown} status - `data.status` from the charge envelope.
+   * @returns {PayinStatus} - The local status.
+   */
+  private mapChargeStatusToPayinStatus(status: unknown): PayinStatus {
+    const value = String(status ?? '')
+      .trim()
+      .toLowerCase();
+
+    if (value === 'successful' || value === 'success') {
+      return PayinStatus.SUCCESSFUL;
+    }
+    if (value === 'failed' || value === 'error') {
+      return PayinStatus.FAILED;
+    }
+    if (value === 'cancelled' || value === 'canceled') {
+      return PayinStatus.CANCELLED;
+    }
+
+    return PayinStatus.PENDING;
+  }
+
+  /**
+   * Reduces a charge failure to a persistable, secret-free description.
+   *
+   * Flutterwave error payloads can embed request context, so only the message,
+   * the machine-readable code and the upstream status are kept — never headers
+   * or credentials.
+   *
+   * @param {any} error - Anything thrown by the charge path.
+   * @returns {Record<string, any>} - Safe description for the `Payin.error` field.
+   */
+  private describeChargeError(error: any): Record<string, any> {
+    if (error instanceof HttpException) {
+      const response = error.getResponse();
+      const payload =
+        response && typeof response === 'object'
+          ? (response as Record<string, any>)
+          : { message: String(response) };
+
+      const description: Record<string, any> = {
+        source: 'flutterwave',
+        message:
+          payload.message ??
+          payload.error ??
+          error.message ??
+          'Direct charge failed',
+        upstreamStatus: error.getStatus(),
+      };
+      if (payload.code !== undefined) description.code = payload.code;
+
+      return description;
+    }
+
+    return {
+      source: 'flutterwave',
+      message: error?.message ? String(error.message) : 'Direct charge failed',
     };
   }
 
@@ -1148,7 +1708,10 @@ export class FlutterwaveService {
     }
 
     const customRate = Number(transactionData?.invoiceTaxes) || undefined;
-    const taxesDetails = await this.transactionService.calculateTaxesAmount(amount, customRate);
+    const taxesDetails = await this.transactionService.calculateTaxesAmount(
+      amount,
+      customRate,
+    );
     const totalToDebit = Number(taxesDetails.paymentWithTaxes);
     if (!senderCurrency) {
       throw new HttpException(
@@ -1191,7 +1754,11 @@ export class FlutterwaveService {
         action: 'transfer.from_balance',
         resourceType: 'transaction',
         resourceId: String(savedTransaction._id),
-        metadata: { amount: totalToDebit, currency: senderCurrency, txRef: raw.txRef },
+        metadata: {
+          amount: totalToDebit,
+          currency: senderCurrency,
+          txRef: raw.txRef,
+        },
       });
 
       return {
@@ -1204,7 +1771,12 @@ export class FlutterwaveService {
         ? `transfer-rollback:${String(savedTransaction._id)}`
         : undefined;
       await this.balanceService
-        .creditBalance(String(userId), totalToDebit, senderCurrency, rollbackKey)
+        .creditBalance(
+          String(userId),
+          totalToDebit,
+          senderCurrency,
+          rollbackKey,
+        )
         .catch((rollbackError) => {
           this.logger.error(
             `Balance transfer rollback failed: ${rollbackError?.message || rollbackError}`,
@@ -1219,7 +1791,11 @@ export class FlutterwaveService {
   }
 
   async verifyPayin(txRef: string, flwTxId?: string) {
-    const payin: any = await this.payinService.verifyPayin(txRef, false, flwTxId);
+    const payin: any = await this.payinService.verifyPayin(
+      txRef,
+      false,
+      flwTxId,
+    );
     if (!payin) {
       throw new NotFoundException('Payin not found');
     }
@@ -1266,7 +1842,10 @@ export class FlutterwaveService {
           return { message: 'Payin already successful', status: 'successful' };
         }
 
-        await this.processSuccessfulPayin(transaction, String(payin.transactionId));
+        await this.processSuccessfulPayin(
+          transaction,
+          String(payin.transactionId),
+        );
         return { message: 'Payin already successful', status: 'successful' };
       } catch (err) {
         return {
@@ -1280,7 +1859,7 @@ export class FlutterwaveService {
         and if the status is no longer in this "pending" state,
         the cron will no longer update it with checks. The "payin cron"
         will take care of closing after 15 minutes. */
-        
+
       // if (transaction.status !== this.tStatus.PAYINPENDING) {
       //   await this.transactionService.updateTransactionStatus(
       //     String(payin.transactionId),
@@ -1292,7 +1871,11 @@ export class FlutterwaveService {
   }
 
   async verifyAndClosePayin(txRef: string, flwTxId?: string) {
-    const payin: any = await this.payinService.verifyPayin(txRef, true, flwTxId);
+    const payin: any = await this.payinService.verifyPayin(
+      txRef,
+      true,
+      flwTxId,
+    );
     if (!payin) {
       throw new NotFoundException('Payin not found');
     }
@@ -1379,7 +1962,10 @@ export class FlutterwaveService {
           return { message: 'Payin already successful', status: 'successful' };
         }
 
-        await this.processSuccessfulPayin(transaction, String(payin.transactionId));
+        await this.processSuccessfulPayin(
+          transaction,
+          String(payin.transactionId),
+        );
         return { message: 'Payin already successful', status: 'successful' };
       } catch (err) {
         return {
@@ -1418,7 +2004,9 @@ export class FlutterwaveService {
   }
 
   async notifyAdminPayoutPending(transaction: any): Promise<void> {
-    await this.operationNotificationService.notifyAdminPayoutPending(transaction);
+    await this.operationNotificationService.notifyAdminPayoutPending(
+      transaction,
+    );
   }
 
   /**
@@ -1451,10 +2039,7 @@ export class FlutterwaveService {
         );
       }
     } catch (err) {
-      this.logger.error(
-        'repairInvoiceFinalizationByTxRef: failed',
-        err,
-      );
+      this.logger.error('repairInvoiceFinalizationByTxRef: failed', err);
     }
     return payin;
   }
@@ -1474,7 +2059,8 @@ export class FlutterwaveService {
         // `processSuccessfulPayin` est idempotent (claim, crédit via clé
         // unique, finalisation facture) : on l'appelle même si la transaction
         // est déjà `PAYINSUCCESS` afin de réparer un crédit de solde manquant.
-        const transaction = await this.transactionService.findById(transactionId);
+        const transaction =
+          await this.transactionService.findById(transactionId);
         if (transaction) {
           await this.processSuccessfulPayin(transaction, transactionId);
           adjusted++;
@@ -1535,7 +2121,8 @@ export class FlutterwaveService {
             commission = 0;
           }
           const amountCredited = Math.max(systemAmount - commission, 0);
-          const collected = Number(transaction.paymentWithTaxes) || systemAmount;
+          const collected =
+            Number(transaction.paymentWithTaxes) || systemAmount;
           if (amountCredited > 0) {
             await this.systemBalanceService.creditSystemBalance(
               transaction.senderCurrency || transaction.receiverCurrency,
@@ -1550,7 +2137,9 @@ export class FlutterwaveService {
                 providerCommission: commission,
                 amountCredited,
                 performedBy: {
-                  userId: String(transaction.senderId || transaction.userId || ''),
+                  userId: String(
+                    transaction.senderId || transaction.userId || '',
+                  ),
                   name: String(transaction.senderName || '').trim(),
                   email: String(transaction.senderEmail || '').trim(),
                 },
@@ -1593,10 +2182,7 @@ export class FlutterwaveService {
       } catch (err) {
         // Un échec de crédit du solde ne doit pas empêcher la finalisation
         // du paiement (ex. devise non conforme, pays non renseigné).
-        this.logger.warn(
-          'processSuccessfulPayin: creditBalance failed',
-          err,
-        );
+        this.logger.warn('processSuccessfulPayin: creditBalance failed', err);
       }
 
       // Créditer le solde système : différence entre ce qui a été collecté et ce qui a été crédité à l'utilisateur
@@ -1622,7 +2208,9 @@ export class FlutterwaveService {
               providerCommission: totalCollected - userCreditAmount,
               amountCredited: systemShare,
               performedBy: {
-                userId: String(transaction.senderId || transaction.userId || ''),
+                userId: String(
+                  transaction.senderId || transaction.userId || '',
+                ),
                 name: String(transaction.senderName || '').trim(),
                 email: String(transaction.senderEmail || '').trim(),
               },
@@ -1679,10 +2267,7 @@ export class FlutterwaveService {
       await this.invoiceService.handlePaymentSuccess(transaction);
       transaction.payed = true;
     } catch (err) {
-      this.logger.error(
-        'handleInvoice: invoice finalize failed',
-        err,
-      );
+      this.logger.error('handleInvoice: invoice finalize failed', err);
     }
   }
 
@@ -1710,10 +2295,8 @@ export class FlutterwaveService {
       // console.log('handleSubscription - userId: ', subscriberId);
       // console.log('handleSubscription - planId: ', planId);
 
-      const subscriptionStatus = await this.subscriptionService.verifySubscription(
-        subscriberId,
-        planId,
-      );
+      const subscriptionStatus =
+        await this.subscriptionService.verifySubscription(subscriberId, planId);
       // console.log('handleSubscription - subscriptionStatus: ', subscriptionStatus);
 
       let resp: any = '';
@@ -1725,8 +2308,12 @@ export class FlutterwaveService {
         );
       } else {
         // Missing subscription: create then subscribe
-        const payload = this.subscriptionService.parseTransactionToSubscription(transaction);
-        resp = await this.subscriptionService.createSubscriptionWithTransaction(payload, transaction._id);
+        const payload =
+          this.subscriptionService.parseTransactionToSubscription(transaction);
+        resp = await this.subscriptionService.createSubscriptionWithTransaction(
+          payload,
+          transaction._id,
+        );
       }
 
       // Send notification
@@ -1749,11 +2336,14 @@ export class FlutterwaveService {
         await this.createServicePayment(transaction);
       }
 
-      void this.operationNotificationService.notifyServicePaymentSuccess(transaction);
-
+      void this.operationNotificationService.notifyServicePaymentSuccess(
+        transaction,
+      );
     } catch (err) {
       return {
-        message: '(fw service: handleService) Error operationNotificationService: ' + err,
+        message:
+          '(fw service: handleService) Error operationNotificationService: ' +
+          err,
         status: 'error',
       };
     }
@@ -1822,12 +2412,14 @@ export class FlutterwaveService {
   }
 
   async createSubscriptionOfTransaction(transaction) {
-    const payload = this.subscriptionService.parseTransactionToSubscription(transaction)
+    const payload =
+      this.subscriptionService.parseTransactionToSubscription(transaction);
     await this.subscriptionService.subscribe(payload, transaction._id);
   }
 
   async createServicePayment(transaction) {
-    const payload = this.servicePaymentService.parseTransactionToServicePayment(transaction)
+    const payload =
+      this.servicePaymentService.parseTransactionToServicePayment(transaction);
     await this.servicePaymentService.createServicePayment(payload);
   }
 
@@ -1883,12 +2475,16 @@ export class FlutterwaveService {
 
   // ---------- Payouts ----------
   async payout(transactionId: string, userId: any, retrying: boolean = false) {
-    const tx = await this.transactionService.findById(transactionId).catch(() => null);
+    const tx = await this.transactionService
+      .findById(transactionId)
+      .catch(() => null);
     const currency = tx?.receiverCurrency || tx?.senderCurrency || 'XAF';
 
     let methodGwId: string | undefined;
     if (tx?.paymentMethod) {
-      const method = await this.paymentMethodService.findByCode(tx.paymentMethod).catch(() => null);
+      const method = await this.paymentMethodService
+        .findByCode(tx.paymentMethod)
+        .catch(() => null);
       const gw = method?.gatewayId as any;
       methodGwId = gw?._id ? String(gw._id) : gw ? String(gw) : undefined;
     }
@@ -1907,9 +2503,8 @@ export class FlutterwaveService {
       }
     }
 
-    const transaction = await this.transactionService.claimTransactionForPayout(
-      transactionId,
-    );
+    const transaction =
+      await this.transactionService.claimTransactionForPayout(transactionId);
     if (!transaction) {
       const current = await this.transactionService.findById(transactionId);
       if (!current) {
@@ -1926,7 +2521,10 @@ export class FlutterwaveService {
     const payloadPayout = {
       accountBankCode: transaction.bankCode,
       accountNumber: transaction.bankAccountNumber,
-      amount: transaction.transactionType === 'transfer' ? transaction.receiverAmount : transaction.estimation,
+      amount:
+        transaction.transactionType === 'transfer'
+          ? transaction.receiverAmount
+          : transaction.estimation,
       destinationCurrency: transaction.receiverCurrency,
       sourceCurrency: transaction.receiverCurrency,
       reference: newTxRef,
@@ -1939,7 +2537,11 @@ export class FlutterwaveService {
 
     // Flutterwave exige l'indicatif pays pour les comptes mobile money
     const cc = transaction.receiverCountryCode || '237';
-    if (payloadPayout.type === 'mobile_money' && payloadPayout.accountNumber && !payloadPayout.accountNumber.startsWith(cc)) {
+    if (
+      payloadPayout.type === 'mobile_money' &&
+      payloadPayout.accountNumber &&
+      !payloadPayout.accountNumber.startsWith(cc)
+    ) {
       payloadPayout.accountNumber = cc + payloadPayout.accountNumber;
     }
 
@@ -1956,9 +2558,9 @@ export class FlutterwaveService {
         const errorPayload =
           typeof err?.getResponse === 'function'
             ? err.getResponse()
-            : err?.response?.data ?? {
+            : (err?.response?.data ?? {
                 message: err?.message ?? 'M-Pesa payout initiation failed',
-              };
+              });
         await this.transactionService
           .updateTransactionStatus(
             transactionId,
@@ -2029,7 +2631,10 @@ export class FlutterwaveService {
       );
 
       // console.log('res of fw: ', res);
-      const doc = await this.payoutService.createPayout(payloadPayout, res.data);
+      const doc = await this.payoutService.createPayout(
+        payloadPayout,
+        res.data,
+      );
 
       const resp = { api: 'v3', ...res.data, saved: doc };
       // const update = await this.transactionService.updateTransactionStatus(
@@ -2043,7 +2648,7 @@ export class FlutterwaveService {
         this.normalizeStatus(res.data?.data?.status),
         resp,
       );
-      
+
       await this.transactionService.updateTransactionTxRef(
         transactionId,
         newTxRef,
@@ -2090,7 +2695,9 @@ export class FlutterwaveService {
     const transaction = await this.transactionService.findById(transactionId);
     // console.log('transactionData', transaction);
     if (!transaction || transaction.status !== TStatus.PAYOUTERROR) {
-      throw new NotFoundException('Transaction not found or not payin success or not in payout error');
+      throw new NotFoundException(
+        'Transaction not found or not payin success or not in payout error',
+      );
     }
 
     try {
@@ -2125,8 +2732,16 @@ export class FlutterwaveService {
     else return 'wallet';
   }
 
-  async verifyPayout(reference: string, verifyPayout = false, flwTxId?: string) {
-    return await this.payoutService.verifyPayout(reference, verifyPayout, flwTxId);
+  async verifyPayout(
+    reference: string,
+    verifyPayout = false,
+    flwTxId?: string,
+  ) {
+    return await this.payoutService.verifyPayout(
+      reference,
+      verifyPayout,
+      flwTxId,
+    );
   }
 
   /**
@@ -2143,6 +2758,56 @@ export class FlutterwaveService {
     return map[status] || TStatus.PAYOUTPENDING;
   }
 
+  /**
+   * Every secret hash accepted for a Flutterwave webhook delivery.
+   *
+   * A multi-currency merchant account owns one gateway row per currency, each
+   * with its own `secretHash`, and Flutterwave can notify with any of them. It
+   * also makes the webhook work right after a restart, before any charge has run
+   * `loadDbCredentials` on this process — a window in which `secretHash` is
+   * still empty and a real payment used to be rejected with 401.
+   *
+   * SECURITY: only `flutterwave` gateways contribute. Accepting the credentials of
+   * every gateway row (any provider, active or not) would lower webhook trust to
+   * the weakest stored value — e.g. a leftover sandbox hash — and Flutterwave's
+   * `verif-hash` is a merchant-level secret, not a per-row one.
+   *
+   * @returns {Promise<string[]>} - Non-empty secret hashes. Never the keys.
+   */
+  private async collectAcceptedWebhookHashes(): Promise<string[]> {
+    try {
+      const configs = await this.gatewayLoader.loadAllConfigs();
+      const hashes = new Set<string>();
+
+      for (const config of configs.values()) {
+        if (String((config as any)?.type) !== 'flutterwave') continue;
+
+        const credentials: any = (config as any)?.credentials ?? {};
+        const hash =
+          credentials.secretHash || credentials.FLUTTERWAVE_SECRET_HASH;
+
+        if (typeof hash === 'string' && hash.length > 0) {
+          hashes.add(hash);
+        }
+      }
+
+      if (typeof this.secretHash === 'string' && this.secretHash.length > 0) {
+        hashes.add(this.secretHash);
+      }
+
+      return [...hashes];
+    } catch (error: any) {
+      // Never reject a valid delivery because the gateway cache is unreachable:
+      // the callee still compares against this instance's configured hash.
+      this.logger.warn(
+        `Could not load webhook hashes from gateways: ${
+          error?.message ?? 'unknown error'
+        }`,
+      );
+      return [];
+    }
+  }
+
   async verifyWebhookPayin(req) {
     const body = req.body ?? {};
     const event = body?.event;
@@ -2152,12 +2817,21 @@ export class FlutterwaveService {
 
     let result: any;
     try {
-      result = await this.payinService.verifyWebhook(req);
+      result = await this.payinService.verifyWebhook(
+        req,
+        await this.collectAcceptedWebhookHashes(),
+      );
     } catch (err: any) {
       void this.auditLogService.record({
         action: 'webhook.flutterwave.rejected',
         resourceType: 'webhook',
-        metadata: { event, txRef, flwStatus, reason: err?.message || 'invalid_signature', signaturePresent: !!signature },
+        metadata: {
+          event,
+          txRef,
+          flwStatus,
+          reason: err?.message || 'invalid_signature',
+          signaturePresent: !!signature,
+        },
         method: 'POST',
         path: '/fw/webhook',
         statusCode: err?.status || 401,
@@ -2165,14 +2839,18 @@ export class FlutterwaveService {
       throw err;
     }
 
-    const payinSuccess = result?.payin?.status === 'successful' && result.payin.transactionId;
+    const payinSuccess =
+      result?.payin?.status === 'successful' && result.payin.transactionId;
     if (payinSuccess) {
       try {
         const transaction = await this.transactionService.findById(
           String(result.payin.transactionId),
         );
         if (transaction) {
-          await this.processSuccessfulPayin(transaction, String(result.payin.transactionId));
+          await this.processSuccessfulPayin(
+            transaction,
+            String(result.payin.transactionId),
+          );
         }
       } catch (err) {
         this.logger.error('Webhook processSuccessfulPayin failed', err);
@@ -2215,9 +2893,13 @@ export class FlutterwaveService {
     }
 
     void this.auditLogService.record({
-      action: payinSuccess ? 'webhook.flutterwave.processed' : 'webhook.flutterwave.ignored',
+      action: payinSuccess
+        ? 'webhook.flutterwave.processed'
+        : 'webhook.flutterwave.ignored',
       resourceType: 'webhook',
-      resourceId: result?.payin?.transactionId ? String(result.payin.transactionId) : undefined,
+      resourceId: result?.payin?.transactionId
+        ? String(result.payin.transactionId)
+        : undefined,
       metadata: { event, txRef, flwStatus, txId: result?.payin?.transactionId },
       method: 'POST',
       path: '/fw/webhook',
@@ -2397,7 +3079,9 @@ export class FlutterwaveService {
     }
     if (!planDto?.interval || !allowedIntervals.has(planDto.interval)) {
       throw new HttpException(
-        { message: `Interval must be one of: ${[...allowedIntervals].join(', ')}` },
+        {
+          message: `Interval must be one of: ${[...allowedIntervals].join(', ')}`,
+        },
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -2672,8 +3356,6 @@ export class FlutterwaveService {
     }
   }
 
-
-
   // Virtual cards -----------------------
 
   // Create a virtual card
@@ -2722,7 +3404,10 @@ export class FlutterwaveService {
           err.response?.status || HttpStatus.BAD_GATEWAY,
         );
       }
-      console.error('Unexpected createVirtualCard error: ', err?.message ?? err);
+      console.error(
+        'Unexpected createVirtualCard error: ',
+        err?.message ?? err,
+      );
       throw err;
     }
   }
@@ -2757,7 +3442,10 @@ export class FlutterwaveService {
   }
 
   // get the list of cards
-  async getVirtualCards(countryWallet: string, params?: { page?: number; per_page?: number }) {
+  async getVirtualCards(
+    countryWallet: string,
+    params?: { page?: number; per_page?: number },
+  ) {
     let headers: any;
     if (countryWallet === 'CM') {
       headers = this.authHeader();
@@ -2783,12 +3471,12 @@ export class FlutterwaveService {
   }
 
   /**
- * Fund a virtual card from the main wallet
- * @param countryWallet 'CM' | 'NG' | ...
- * @param cardId ID of the virtual card to fund
- * @param amount Amount to fund
- * @param currency Currency code, e.g. 'USD'
- */
+   * Fund a virtual card from the main wallet
+   * @param countryWallet 'CM' | 'NG' | ...
+   * @param cardId ID of the virtual card to fund
+   * @param amount Amount to fund
+   * @param currency Currency code, e.g. 'USD'
+   */
   async fundVirtualCard(
     countryWallet: string,
     cardId: string,
@@ -2796,7 +3484,11 @@ export class FlutterwaveService {
     currency: string = 'USD',
   ) {
     if (!cardId) throw new NotFoundException('cardId required');
-    if (!amount || amount <= 0) throw new HttpException('Amount must be greater than 0', HttpStatus.BAD_REQUEST);
+    if (!amount || amount <= 0)
+      throw new HttpException(
+        'Amount must be greater than 0',
+        HttpStatus.BAD_REQUEST,
+      );
 
     // Choisir la clé selon le wallet
     let headers: any;
@@ -2815,7 +3507,9 @@ export class FlutterwaveService {
         currency,
       };
 
-      const res = await firstValueFrom(this.http.post(url, payload, { headers }));
+      const res = await firstValueFrom(
+        this.http.post(url, payload, { headers }),
+      );
       // res.data contient le JSON renvoyé par Flutterwave
       return res.data;
     } catch (err: any) {
@@ -2839,17 +3533,22 @@ export class FlutterwaveService {
   toAlphanumeric(text) {
     if (typeof text !== 'string') return '';
 
-    return text
-      // 1. Supprimer les accents et normaliser
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '') // retire les diacritiques
-      // 2. Remplacer les caractères non alphanumériques par rien
-      .replace(/[^a-zA-Z0-9]/g, '')
-      // 3. Supprimer les espaces (facultatif selon besoin)
-      .trim();
+    return (
+      text
+        // 1. Supprimer les accents et normaliser
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '') // retire les diacritiques
+        // 2. Remplacer les caractères non alphanumériques par rien
+        .replace(/[^a-zA-Z0-9]/g, '')
+        // 3. Supprimer les espaces (facultatif selon besoin)
+        .trim()
+    );
   }
 
-  async checkPayinStatusOnFlutterwave(txRef: string, flwTxId?: string): Promise<string | null> {
+  async checkPayinStatusOnFlutterwave(
+    txRef: string,
+    flwTxId?: string,
+  ): Promise<string | null> {
     try {
       // Use numeric ID endpoint when available (most reliable)
       if (flwTxId) {
@@ -2874,7 +3573,10 @@ export class FlutterwaveService {
     }
   }
 
-  async checkPayoutStatusOnFlutterwave(reference: string, flwTxId?: string): Promise<string | null> {
+  async checkPayoutStatusOnFlutterwave(
+    reference: string,
+    flwTxId?: string,
+  ): Promise<string | null> {
     try {
       // Use numeric transfer ID endpoint when available (most reliable)
       if (flwTxId) {

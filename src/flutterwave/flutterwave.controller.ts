@@ -19,6 +19,7 @@ import {
 } from '@nestjs/common';
 import { FlutterwaveService } from './flutterwave.service';
 import { AuthGuard } from '@nestjs/passport';
+import { Throttle } from '@nestjs/throttler';
 import { Query as ExpressQuery } from 'express-serve-static-core';
 import {
   ApiBearerAuth,
@@ -36,6 +37,7 @@ import { Gateway } from 'src/gateway/gateway.schema';
 import { CryptService } from 'src/dev/crypt.service';
 import { PaymentRouterService } from 'src/payment/payment-router.service';
 import { TransactionService } from 'src/transaction/transaction.service';
+import { resolveClientIp } from 'src/common/client-ip.util';
 
 @ApiTags('flutterwave')
 @Controller('fw')
@@ -214,7 +216,6 @@ export class FlutterwaveController {
   @UsePipes(ValidationPipe)
   async createDirectCharge(@Body() data: any, @Req() req) {
     let feeRate: number | undefined;
-    let network: string | undefined;
 
     if (data.paymentMethodCode) {
       const code = String(data.paymentMethodCode).toUpperCase();
@@ -222,31 +223,52 @@ export class FlutterwaveController {
       if (!method) {
         throw new NotFoundException(`Payment method '${code}' not found`);
       }
-      if (String(method.currency).toUpperCase() !== String(data.currency).toUpperCase()) {
+      if (
+        String(method.currency).toUpperCase() !==
+        String(data.currency).toUpperCase()
+      ) {
         throw new BadRequestException(
           `Currency mismatch: method '${code}' is for ${method.currency}, not ${data.currency}`,
         );
       }
       if (!method.statusPayin) {
-        throw new BadRequestException(`Payment method '${code}' is not available for payin`);
+        throw new BadRequestException(
+          `Payment method '${code}' is not available for payin`,
+        );
       }
       const amount = Number(data.estimation);
       if (Number.isFinite(amount)) {
         if (method.minAmount > 0 && amount < method.minAmount) {
-          throw new BadRequestException(`Amount ${amount} is below minimum ${method.minAmount} for method '${code}'`);
+          throw new BadRequestException(
+            `Amount ${amount} is below minimum ${method.minAmount} for method '${code}'`,
+          );
         }
         if (method.maxAmount > 0 && amount > method.maxAmount) {
-          throw new BadRequestException(`Amount ${amount} exceeds maximum ${method.maxAmount} for method '${code}'`);
+          throw new BadRequestException(
+            `Amount ${amount} exceeds maximum ${method.maxAmount} for method '${code}'`,
+          );
         }
       }
       feeRate = Number(method.taxesTransfer) || undefined;
-      network = String(method.code).toUpperCase();
-    } else {
-      network = data.network ? String(data.network).toUpperCase() : undefined;
     }
 
+    // `method.code` (MOMO, ORANGEMONEY, ...) is NOT a Flutterwave network token,
+    // and sending it made Flutterwave reject the charge. The operator is now
+    // derived from the payer's phone number; an explicit `data.network` is only
+    // used as a fallback hint when the prefix cannot be resolved.
+    const network = data.network
+      ? String(data.network).toUpperCase()
+      : undefined;
+
     return this.fw.createDirectCharge(
-      { ...data, invoiceTaxes: feeRate, network },
+      {
+        ...data,
+        invoiceTaxes: feeRate,
+        network,
+        // L'IP vient de la REQUÊTE uniquement : elle était auparavant écrasable par
+        // `data.clientIp`, donc l'attaquant choisissait le champ censé l'identifier.
+        clientIp: resolveClientIp(req as unknown),
+      },
       req.user._id,
     );
   }
@@ -463,6 +485,12 @@ export class FlutterwaveController {
   // Webhook: this route must be PUBLIC (override guard upstream if needed)
   @Post('webhook')
   @HttpCode(200) // FW attend 200 sinon il retente
+  // Le ThrottlerGuard global (100 req/min/IP) rejetait en 429 les rafales de
+  // webhooks (backlog ou rejeu Flutterwave après incident), et Flutterwave
+  // rejouait alors la livraison : un pic de notifications devenait une tempête.
+  // La route reste protégée : la signature `verif-hash` est vérifiée avant tout
+  // traitement, et l'enveloppe autorisée ici reste bornée.
+  @Throttle({ default: { limit: 600, ttl: 60_000 } })
   @ApiOperation({ summary: 'Flutterwave webhook endpoint' })
   @ApiBody({
     description: 'Webhook payload from Flutterwave.',

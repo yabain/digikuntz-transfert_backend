@@ -103,4 +103,34 @@ export class InitiateInvoicePaymentDto {
   @IsOptional()
   @IsString()
   redirectUrl?: string;
+
+  /**
+   * Payment route chosen by the payer.
+   *
+   * - `mobile_money`: direct charge — the payer approves a USSD / app push on
+   *   their phone, no checkout link is opened;
+   * - `card`: reserved for the upcoming card integration (falls back to the
+   *   hosted checkout for now).
+   *
+   * Omitted entirely → the historical hosted-checkout behaviour, unchanged.
+   */
+  @IsOptional()
+  @IsIn(['mobile_money', 'card'])
+  paymentMethod?: 'mobile_money' | 'card';
+
+  /**
+   * Optional operator override (`MTN`, `ORANGEMONEY`, `AIRTEL`, ...).
+   *
+   * Normally omitted: the operator is derived from the payer's phone number. It
+   * is only honoured when the prefix cannot be resolved, which lets the UI offer
+   * an explicit operator picker without ever contradicting a clear number.
+   */
+  @IsOptional()
+  @IsString()
+  network?: string;
+
+  /** Opaque device identifier forwarded to Flutterwave for fraud scoring. */
+  @IsOptional()
+  @IsString()
+  deviceFingerprint?: string;
 }

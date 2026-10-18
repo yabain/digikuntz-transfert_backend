@@ -20,6 +20,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { CreatePaymentRequestDto } from './create-payment-request.dto';
+import { resolveClientIp } from 'src/common/client-ip.util';
 import { PaymentRequestService } from './payment-request.service';
 
 @ApiTags('payment-request')
@@ -85,9 +86,12 @@ export class PaymentRequestController {
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async createPaymentRequest(@Req() req, @Body() dto: CreatePaymentRequestDto) {
+    // `trust proxy` est activé dans `main.ts`, donc `req.ip` reflète déjà la chaîne
+    // de proxys. L'IP provient exclusivement de la requête (jamais du corps
+    // appelant), sinon l'attaquant choisirait le champ censé l'identifier.
     return this.paymentRequestService.createCurrentUserPaymentRequest(
       String(req.user._id),
-      dto,
+      { ...dto, clientIp: resolveClientIp(req as unknown) } as CreatePaymentRequestDto,
     );
   }
 

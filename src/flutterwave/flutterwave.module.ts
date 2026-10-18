@@ -4,6 +4,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule } from '@nestjs/config';
 import { FlutterwaveService } from './flutterwave.service';
 import { FlutterwaveApiService } from './flutterwave-api.service';
+import { PayinRouteService } from './payin-route.service';
 import { FlutterwaveController } from './flutterwave.controller';
 import { Payin, PayinSchema } from 'src/payin/payin.schema';
 import { Payout, PayoutSchema } from 'src/payout/payout.schema';
@@ -98,6 +99,11 @@ import { CryptService } from 'src/dev/crypt.service';
     CryptService,
     FlutterwaveService,
     FlutterwaveApiService,
+    // Aiguillage des encaissements (direct / hébergé). Fourni DANS ce module pour
+    // qu'il partage l'instance de `FlutterwaveService` — et donc le `PayinService`
+    // de ce module, celui qui reçoit `setCredentials` (il existe une seconde
+    // instance de `PayinService` côté `PayinModule`).
+    PayinRouteService,
     PayinService,
     PayoutService,
     TransactionService,
@@ -110,6 +116,6 @@ import { CryptService } from 'src/dev/crypt.service';
     ServicePaymentService,
     OperationNotificationService,
   ],
-  exports: [FlutterwaveService, FlutterwaveApiService],
+  exports: [FlutterwaveService, FlutterwaveApiService, PayinRouteService],
 })
 export class FlutterwaveModule {}

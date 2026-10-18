@@ -1,12 +1,24 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsIn, IsOptional, IsBoolean, IsObject, IsNumber, Min } from 'class-validator';
+import {
+  IsString,
+  IsIn,
+  IsOptional,
+  IsBoolean,
+  IsObject,
+  IsNumber,
+  Min,
+} from 'class-validator';
+import { GATEWAY_CURRENCIES } from './gateway.schema';
 
 export class CreateGatewayDto {
   @ApiProperty({ example: 'Flutterwave XAF' })
   @IsString()
   name: string;
 
-  @ApiProperty({ example: 'Payment gateway for XAF transactions', required: false })
+  @ApiProperty({
+    example: 'Payment gateway for XAF transactions',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   description?: string;
@@ -21,12 +33,14 @@ export class CreateGatewayDto {
   @IsIn(['flutterwave', 'paystack', 'mpesa'])
   type: string;
 
-  @ApiProperty({ enum: ['XAF', 'NGN', 'KES'] })
+  @ApiProperty({ enum: [...GATEWAY_CURRENCIES] })
   @IsString()
-  @IsIn(['XAF', 'NGN', 'KES'])
+  @IsIn([...GATEWAY_CURRENCIES])
   currency: string;
 
-  @ApiProperty({ description: 'Credentials object specific to the gateway type' })
+  @ApiProperty({
+    description: 'Credentials object specific to the gateway type',
+  })
   @IsObject()
   credentials: Record<string, any>;
 

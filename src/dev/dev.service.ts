@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import { BadRequestException, ConflictException, HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, HttpException, HttpStatus, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { randomBytes } from 'crypto';
 import { Dev } from './dev.schema';
@@ -13,10 +13,14 @@ import { BalanceService } from 'src/balance/balance.service';
 import { PayoutService } from 'src/payout/payout.service';
 import { PaymentMethodService } from 'src/payment-method/payment-method.service';
 import { TStatus } from 'src/transaction/transaction.schema';
+import { PayinStatus } from 'src/payin/payin.schema';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { isDirectChargeEnabled } from 'src/flutterwave/direct-charge.config';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class DevService {
+  private readonly logger = new Logger(DevService.name);
 
   constructor(
     @InjectModel(Dev.name)
@@ -30,6 +34,7 @@ export class DevService {
     private payoutService: PayoutService,
     private paymentMethodService: PaymentMethodService,
     private auditLog: AuditLogService,
+    private readonly config: ConfigService,
   ) { }
 
   async getDevDataById(devId): Promise<any> {
@@ -561,6 +566,17 @@ export class DevService {
   }
 
   async createDirectPayinTransaction(data: any, userId): Promise<any> {
+    // Le flux développeur pousse une VRAIE demande de débit : il doit donc être
+    // fermé par le même levier que le reste. Sans ce contrôle,
+    // `DIRECT_CHARGE_ENABLED=false` ne « tuait » pas réellement les débits
+    // directs tant que la route de test restait joignable.
+    if (!isDirectChargeEnabled(this.config)) {
+      throw new ServiceUnavailableException({
+        message: 'Direct mobile-money charge is currently disabled.',
+        code: 'DIRECT_CHARGE_DISABLED',
+      });
+    }
+
     const depositAmount = Number(data.estimation);
     if (Number.isFinite(depositAmount) && depositAmount > 0) {
       try {
@@ -674,27 +690,74 @@ export class DevService {
     const savedTransaction =
       await this.transactionService.createTransaction(transactionData);
 
-    const chargeResult = await this.fwService.directMobileMoneyCharge({
-      amount: Number(savedTransaction.paymentWithTaxes),
-      currency: data.currency,
-      phone: data.phone,
-      email: data.email || '',
-      name: data.name,
-      network,
-      txRef,
-    });
+    const amount = Number(savedTransaction.paymentWithTaxes);
 
-    await this.payinService.createPayin({
-      amount: Number(savedTransaction.paymentWithTaxes),
+    // Persist the pending payin BEFORE charging. The hosted `createPayin` used
+    // here previously also opened a checkout session at Flutterwave
+    // (`POST /v3/payments`), so one direct charge produced TWO payment intents
+    // and the charge's id was never stored.
+    await this.payinService.createPendingPayin({
       txRef,
-      transactionId: savedTransaction._id,
+      amount,
       currency: data.currency,
       customerEmail: data.email || '',
       customerName: data.name || 'Customer',
-      customerPhone: data.phone,
-      status: 'pending',
+      transactionId: savedTransaction._id,
       userId,
+      channel: 'mobile_money',
+      meta: { flow: 'direct_charge' },
     });
+
+    let chargeResult: any;
+    try {
+      chargeResult = await this.fwService.directMobileMoneyCharge({
+        amount,
+        currency: data.currency,
+        phone: data.phone,
+        email: data.email || '',
+        name: data.name,
+        network,
+        txRef,
+        flow: 'direct_charge',
+      });
+    } catch (error: any) {
+      await this.fwService.recordChargeFailure(
+        txRef,
+        String(savedTransaction._id),
+        error,
+      );
+      throw error;
+    }
+
+    const { status: chargePayinStatus, flwTxId } =
+      await this.fwService.recordChargeResult(
+        txRef,
+        String(savedTransaction._id),
+        chargeResult,
+      );
+
+    if (flwTxId) {
+      try {
+        await this.transactionService.updateTransactionFlwTxId(
+          String(savedTransaction._id),
+          flwTxId,
+        );
+      } catch (error: any) {
+        this.logger.warn(
+          `Could not attach Flutterwave id ${flwTxId} to transaction ${String(
+            savedTransaction._id,
+          )}: ${error?.message ?? 'unknown error'}`,
+        );
+      }
+    }
+
+    if (chargePayinStatus === PayinStatus.SUCCESSFUL) {
+      // Same guarded, idempotent claim path as the webhook and the public API.
+      await this.fwService.processSuccessfulPayin(
+        savedTransaction,
+        String(savedTransaction._id),
+      );
+    }
 
     const statusMap: Record<string, string> = {
       transaction_payin_pending: 'payin_pending',
