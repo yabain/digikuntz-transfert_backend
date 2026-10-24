@@ -305,6 +305,9 @@ export class SubscriptionService {
       : {};
     const optionsList = await this.subscriptionModel
       .find({ ...keyword })
+      .populate('userId', 'name email')
+      .populate('receiverId', 'name email')
+      .populate('planId', 'title')
       .limit(resPerPage)
       .skip(skip);
 
