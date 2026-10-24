@@ -28,6 +28,7 @@ import {
 } from '@nestjs/swagger';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
+import { PaymentMethodService } from 'src/payment-method/payment-method.service';
 import { multerConfigForFundraising } from 'src/multer.config';
 import { CreateDonationDto } from './create-donation.dto';
 import { CreatePublicDonationDto } from './create-public-donation.dto';
@@ -43,6 +44,7 @@ export class FundraisingController {
   constructor(
     private readonly fundraisingService: FundraisingService,
     private readonly flutterwaveService: FlutterwaveService,
+    private readonly paymentMethodService: PaymentMethodService,
   ) {}
 
   @Post()
@@ -414,7 +416,13 @@ export class FundraisingController {
       String(req.user._id),
       body,
     );
-    return this.flutterwaveService.createPayin(transactionData, String(req.user._id));
+    // Frais = `taxesPayment` de la méthode choisie ; le taux est re-dérivé côté
+    // serveur, le corps client ne peut pas l'imposer.
+    const sanitized = await this.paymentMethodService.resolveTaxOverride(
+      { ...transactionData, paymentMethodCode: body.paymentMethodCode },
+      'payin',
+    );
+    return this.flutterwaveService.createPayin(sanitized, String(req.user._id));
   }
 
   @Post(':id/donate/public')
@@ -437,6 +445,11 @@ export class FundraisingController {
       fundraisingId,
       body,
     );
-    return this.flutterwaveService.createPayin(transactionData, undefined);
+    // Idem `donate` : taux serveur dérivé de la méthode choisie.
+    const sanitized = await this.paymentMethodService.resolveTaxOverride(
+      { ...transactionData, paymentMethodCode: body.paymentMethodCode },
+      'payin',
+    );
+    return this.flutterwaveService.createPayin(sanitized, undefined);
   }
 }

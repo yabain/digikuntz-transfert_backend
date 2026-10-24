@@ -29,7 +29,11 @@ export const MAX_DIRECT_CHARGE_AMOUNT = 1_000_000_000;
 export const MAX_EMAIL_LENGTH = 254;
 
 /** Which product surface initiated the charge; persisted for reconciliation. */
-export type DirectChargeFlow = 'direct_charge' | 'payment_request' | 'invoice';
+export type DirectChargeFlow =
+  | 'direct_charge'
+  | 'payment_request'
+  | 'invoice'
+  | 'transfer';
 
 export interface BuildChargeInput {
   txRef: string;

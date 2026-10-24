@@ -92,9 +92,15 @@ export class InitiateInvoicePaymentDto {
   @IsNotEmpty()
   payerName: string;
 
+  /**
+   * Coordonnée du payeur. Requise pour un débit mobile money (le numéro
+   * identifie l'opérateur et le compte à débiter), mais facultative pour le
+   * paiement par carte (checkout hébergé) où le payeur ne saisit ses
+   * coordonnées que sur la page du provider.
+   */
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  payerPhone: string;
+  payerPhone?: string;
 
   @IsOptional()
   @IsString()
@@ -117,6 +123,18 @@ export class InitiateInvoicePaymentDto {
   @IsOptional()
   @IsIn(['mobile_money', 'card'])
   paymentMethod?: 'mobile_money' | 'card';
+
+  /**
+   * Code de la méthode de paiement choisie (`MTN_MOMO_XAF`, `Card`, ...).
+   *
+   * Sert à dériver les frais : le paiement d'une facture utilise le
+   * `taxesPayment` de cette méthode (repli sur `invoiceTaxes` système si la
+   * méthode est absente). Le taux n'est jamais repris du corps : il est
+   * re-résolu côté serveur depuis ce code.
+   */
+  @IsOptional()
+  @IsString()
+  paymentMethodCode?: string;
 
   /**
    * Optional operator override (`MTN`, `ORANGEMONEY`, `AIRTEL`, ...).

@@ -1568,6 +1568,18 @@ export class TransactionService {
       }
     }
 
+    // Le bloc ci-dessus peut ré-résoudre `commissionPayer` depuis le profil de
+    // l'utilisateur (`commissionResolver`) et écraser le forçage effectué plus
+    // haut. Pour un transfert, les frais sont TOUJOURS payés par le client :
+    // on re-force ici, juste avant le calcul, sinon un utilisateur dont le
+    // profil dit « organisation » ne paierait ni taxes ni commission et le
+    // montant débité serait inférieur au récapitulatif.
+    if (
+      String(transactionData?.transactionType || '').toLowerCase() === 'transfer'
+    ) {
+      commissionPayer = 'customer';
+    }
+
     // Calculer les montants avec gestion de la commission
     let paymentDetails: any;
     if (noFees) {
@@ -1583,9 +1595,19 @@ export class TransactionService {
         commissionPayer: 'customer', // défaut
       };
     } else {
-      // Récupérer le taux de taxe système
+      // Taux de taxe : un override SERVEUR (dérivé de la méthode de paiement
+      // choisie) prime ; sinon on retombe sur le taux système global.
+      // `taxRateOverride` est strictement serveur : les endpoints à body client
+      // le suppriment avant d'appeler createTransaction (voir sanitizeTaxOverride).
       const systemData = await this.systemService.getSystemData();
-      const taxRate = Number(transactionData.invoiceTaxes) || systemData?.invoiceTaxes || 0;
+      const rawOverride = transactionData?.taxRateOverride;
+      const override =
+        rawOverride === undefined || rawOverride === null || rawOverride === ''
+          ? NaN
+          : Number(rawOverride);
+      const taxRate = Number.isFinite(override)
+        ? Math.max(0, override)
+        : Number(systemData?.invoiceTaxes) || 0;
 
       // Récupérer la commission du gateway si pas déjà fait
       if (!gatewayCommission && transactionData.gatewayId) {
@@ -1600,7 +1622,7 @@ export class TransactionService {
         Number(transactionData.estimation),
         gatewayCommission,
         commissionPayer,
-        undefined, // utilise le taux système
+        taxRate,
       );
 
       paymentDetails = {
@@ -1609,7 +1631,11 @@ export class TransactionService {
       };
     }
 
-    const { noFees: _noFees, ...persistedTransactionData } = transactionData;
+    const {
+      noFees: _noFees,
+      taxRateOverride: _taxRateOverride,
+      ...persistedTransactionData
+    } = transactionData;
     const payload = {
       ...persistedTransactionData,
       estimation: String(transactionData.estimation),

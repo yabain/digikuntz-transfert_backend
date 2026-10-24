@@ -753,6 +753,17 @@ export class FlutterwaveService {
         );
       }
 
+      // Trace d'exploitation : permet de comparer la passerelle réellement
+      // utilisée par un transfert et par une facture (le webhook Flutterwave
+      // est lié au compte marchand de ces credentials). Aucun secret loggé.
+      this.logger.log(
+        `createPayin: txRef=${txRef} type=${transactionData?.transactionType || 'n/a'} ` +
+          `currency=${savedTransaction.senderCurrency} ` +
+          `gatewayId=${transactionData?.gatewayId ?? 'auto'} ` +
+          `payerMethod=${transactionData?.payerPaymentMethodCode ?? 'none'} ` +
+          `channel=${transactionData?.payinChannel ?? 'auto'}`,
+      );
+
       const payinResult = await this.payinService.createPayin({
         amount,
         txRef,
@@ -762,6 +773,9 @@ export class FlutterwaveService {
         customerName: savedTransaction.senderName,
         customerPhone: savedTransaction.senderContact,
         redirectUrl: transactionData?.redirectUrl,
+        // Un transfert payé par carte restreint le checkout aux cartes. Le
+        // champ est ignoré par les autres flux (mobile money / choix libre).
+        channel: transactionData?.payinChannel,
         status: 'pending',
         userId,
       });
@@ -1244,7 +1258,7 @@ export class FlutterwaveService {
       receiverContact: data.phone,
       receiverCurrency: data.currency,
       status: TStatus.PAYINPENDING,
-      invoiceTaxes: data.invoiceTaxes,
+      taxRateOverride: data.taxRateOverride,
     };
 
     const savedTransaction =
@@ -1489,30 +1503,33 @@ export class FlutterwaveService {
     }
 
     const txRef = this.payinService.generateTxRef('txDirect');
-    const amount = Number(transactionData?.estimation);
+    const estimationAmount = Number(transactionData?.estimation);
     const currency = String(
       transactionData.senderCurrency ||
         transactionData.receiverCurrency ||
         'XAF',
     ).toUpperCase();
 
+    const buildCharge = (amountToCharge: number) =>
+      buildMobileMoneyCharge({
+        txRef,
+        amount: amountToCharge,
+        currency,
+        phone: charge.phone,
+        email: charge.email,
+        fullname: charge.name,
+        network: charge.network,
+        country: charge.country,
+        clientIp: charge.clientIp,
+        deviceFingerprint: charge.deviceFingerprint,
+        flow: charge.flow,
+        meta: charge.meta,
+      });
+
     // Build (and validate) BEFORE creating anything: a route that cannot be
     // attempted must not leave an orphan transaction + payin behind for the
     // caller's fallback to trip over. `buildMobileMoneyCharge` is pure.
-    const built = buildMobileMoneyCharge({
-      txRef,
-      amount,
-      currency,
-      phone: charge.phone,
-      email: charge.email,
-      fullname: charge.name,
-      network: charge.network,
-      country: charge.country,
-      clientIp: charge.clientIp,
-      deviceFingerprint: charge.deviceFingerprint,
-      flow: charge.flow,
-      meta: charge.meta,
-    });
+    const built = buildCharge(estimationAmount);
 
     // Précondition AVANT toute écriture : sans credentials pour cette devise, la
     // charge échouerait après la création de la transaction et du payin, laissant
@@ -1535,9 +1552,18 @@ export class FlutterwaveService {
       throw new NotFoundException('Error to save transaction details');
     }
 
+    // Le chemin hébergé débite `paymentWithTaxes` (base + taxes + commission
+    // gateway). Le chemin direct doit débiter EXACTEMENT le même total, sinon le
+    // payeur règle moins que le montant annoncé (et le payin enregistré ne
+    // correspond plus au débit réel). On reconstruit donc la charge avec le
+    // montant final calculé par `createTransaction`.
+    const chargeAmount = Number(savedTransaction.paymentWithTaxes);
+    const finalBuilt =
+      chargeAmount === estimationAmount ? built : buildCharge(chargeAmount);
+
     await this.payinService.createPendingPayin({
       txRef,
-      amount: Number(savedTransaction.paymentWithTaxes),
+      amount: chargeAmount,
       currency,
       customerEmail: charge.email || '',
       customerName: charge.name || 'Customer',
@@ -1552,9 +1578,9 @@ export class FlutterwaveService {
     let chargeResult: any;
     try {
       chargeResult = await this.flutterwaveApi.chargeMobileMoney(
-        built.chargeType,
-        built.body,
-        built.resolved.currency,
+        finalBuilt.chargeType,
+        finalBuilt.body,
+        finalBuilt.resolved.currency,
       );
     } catch (error: any) {
       await this.recordChargeFailure(
@@ -1707,7 +1733,7 @@ export class FlutterwaveService {
       );
     }
 
-    const customRate = Number(transactionData?.invoiceTaxes) || undefined;
+    const customRate = Number(transactionData?.taxRateOverride) || undefined;
     const taxesDetails = await this.transactionService.calculateTaxesAmount(
       amount,
       customRate,

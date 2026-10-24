@@ -45,6 +45,104 @@ async function capture(fn: () => Promise<unknown>): Promise<unknown> {
   throw new Error('Expected the call to reject');
 }
 
+/**
+ * Builds the service with the minimal collaborators `createDirectPayin` touches.
+ *
+ * The point of these tests is the AMOUNT: the hosted path charges
+ * `paymentWithTaxes` (base + fees + gateway commission). The direct path used to
+ * charge the bare `estimation`, so a payer choosing mobile money paid less than
+ * the recap showed. The charge body and the payin row must both use the total.
+ */
+function buildChargeService(overrides?: {
+  paymentWithTaxes?: string;
+  enabled?: boolean;
+}) {
+  const payable = {
+    createTransaction: jest.fn(async () => ({
+      _id: 'tx-1',
+      paymentWithTaxes: overrides?.paymentWithTaxes ?? '1050',
+    })),
+    updateTransactionFlwTxId: jest.fn(async () => undefined),
+  };
+  const payin = {
+    generateTxRef: jest.fn(() => 'txDirect-1'),
+    createPendingPayin: jest.fn(async () => undefined),
+    attachChargeResult: jest.fn(async () => true),
+  };
+  const api = {
+    hasCredentials: jest.fn(async () => true),
+    chargeMobileMoney: jest.fn(async () => ({
+      data: { id: 42, status: 'pending' },
+    })),
+  };
+  const config = {
+    get: jest.fn((key: string) =>
+      key === 'DIRECT_CHARGE_ENABLED'
+        ? overrides?.enabled === false
+          ? 'false'
+          : 'true'
+        : undefined,
+    ),
+  };
+
+  const args = new Array<unknown>(CONFIG_ARG_INDEX + 1).fill({});
+  args[1] = api;
+  args[4] = payin;
+  args[6] = payable;
+  args[17] = config;
+
+  return {
+    service: new FlutterwaveService(...(args as unknown as ServiceArgs)),
+    api,
+    payin,
+    payable,
+  };
+}
+
+describe('FlutterwaveService.createDirectPayin — montant débité', () => {
+  const charge = {
+    phone: '237691224472',
+    email: 'sender@example.com',
+    name: 'John Doe',
+    flow: 'transfer' as const,
+  };
+
+  it('débite paymentWithTaxes (frais inclus), pas la seule estimation', async () => {
+    const { service, api, payin } = buildChargeService({
+      paymentWithTaxes: '1050',
+    });
+
+    await service.createDirectPayin(
+      { estimation: 1000, senderCurrency: 'XAF', senderId: 'u1' },
+      charge,
+    );
+
+    expect(api.chargeMobileMoney).toHaveBeenCalledWith(
+      'mobile_money_franco',
+      expect.objectContaining({ amount: 1050, currency: 'XAF' }),
+      'XAF',
+    );
+    expect(payin.createPendingPayin).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 1050 }),
+    );
+  });
+
+  it('conserve le montant de base lorsque les frais sont nuls', async () => {
+    const { service, api } = buildChargeService({ paymentWithTaxes: '1000' });
+
+    await service.createDirectPayin(
+      { estimation: 1000, senderCurrency: 'XAF', senderId: 'u1' },
+      charge,
+    );
+
+    expect(api.chargeMobileMoney).toHaveBeenCalledWith(
+      'mobile_money_franco',
+      expect.objectContaining({ amount: 1000 }),
+      'XAF',
+    );
+  });
+});
+
 describe('FlutterwaveService — DIRECT_CHARGE_ENABLED gate', () => {
   describe('createDirectPayin (invoice + payment request)', () => {
     it('refuses the direct route as a PRE-CHARGE failure when the flag is off', async () => {

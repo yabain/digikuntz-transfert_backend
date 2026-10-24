@@ -262,7 +262,9 @@ describe('PayinService — direct charge primitives', () => {
 
       expect(model.find).toHaveBeenCalledWith({
         status: PayinStatus.PENDING,
-        'meta.flow': { $in: ['direct_charge', 'payment_request', 'invoice'] },
+        'meta.flow': {
+          $in: ['direct_charge', 'payment_request', 'invoice', 'transfer'],
+        },
       });
       expect(model.sort).toHaveBeenCalledWith({ createdAt: 1 });
       expect(model.limit).toHaveBeenCalledWith(25);

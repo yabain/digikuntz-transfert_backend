@@ -38,6 +38,22 @@ import { CryptService } from 'src/dev/crypt.service';
 import { PaymentRouterService } from 'src/payment/payment-router.service';
 import { TransactionService } from 'src/transaction/transaction.service';
 import { resolveClientIp } from 'src/common/client-ip.util';
+import { PayinRouteService } from './payin-route.service';
+import {
+  MOBILE_MONEY_NETWORKS,
+  MobileMoneyNetworkError,
+  normalizeNetworkToken,
+  resolveMobileMoneyNetwork,
+} from './mobile-money-network.util';
+
+/**
+ * Jetons de réseau réellement supportés par la charge directe. Sert à ne
+ * comparer que des valeurs connues : un `code` de méthode hors table (ex.
+ * `BANK`) ne doit pas être interprété comme un opérateur.
+ */
+const KNOWN_DIRECT_CHARGE_NETWORKS = new Set(
+  MOBILE_MONEY_NETWORKS.map((rule) => normalizeNetworkToken(rule.network)),
+);
 
 @ApiTags('flutterwave')
 @Controller('fw')
@@ -49,6 +65,7 @@ export class FlutterwaveController {
     @InjectModel(Gateway.name) private readonly gatewayModel: mongoose.Model<Gateway>,
     private readonly paymentRouter: PaymentRouterService,
     private readonly transactionService: TransactionService,
+    private readonly payinRoute: PayinRouteService,
   ) {}
 
   private async loadFwCredentials(opts?: { gatewayId?: string; countryWallet?: string; currency?: string }): Promise<void> {
@@ -167,6 +184,23 @@ export class FlutterwaveController {
     return this.fw.listTransactions({ page, status });
   }
 
+  /**
+   * Retire tout taux de taxe fourni par le client et le remplace, si une méthode
+   * de paiement est identifiée dans le body, par le taux serveur de cette méthode :
+   * `taxesPayment` pour un encaissement, `taxesTransfer` pour un transfert.
+   *
+   * Ces endpoints reçoivent un body non typé (`@Body() any`) répandu dans
+   * `transactionData` ; sans ce filtre, un client pourrait envoyer
+   * `taxRateOverride`/`invoiceTaxes` pour annuler ses propres frais. Le taux est
+   * donc TOUJOURS re-dérivé côté serveur depuis la méthode, jamais repris du body.
+   */
+  private async resolveTaxOverride(
+    body: any,
+    direction: 'payin' | 'payout',
+  ): Promise<any> {
+    return this.paymentMethodService.resolveTaxOverride(body, direction);
+  }
+
   @Post('payin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a payin session for a transaction' })
@@ -189,9 +223,212 @@ export class FlutterwaveController {
   @ApiResponse({ status: 401, description: 'Authentication required.' })
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
-  createPayin(@Body() transactionData: any, @Req() req) {
-    console.log('(fw controller) transactionData: ', transactionData);
-    return this.fw.createPayin(transactionData, req.user._id);
+  async createPayin(@Body() transactionData: any, @Req() req) {
+    const data = await this.resolveTaxOverride(transactionData, 'payin');
+
+    // Numéro saisi à l'étape 3 pour la charge mobile money. Il ne doit pas
+    // partir dans le document `Transaction` (PII inutile) : on l'extrait puis
+    // on le retire du corps avant tout appel à `createPayin`/`createDirectPayin`.
+    const payerPhone = String(data?.payerPhone || '')
+      .trim()
+      // Écriture internationale `00…` : le résolveur attend l'indicatif nu.
+      .replace(/^00/, '');
+    delete data.payerPhone;
+
+    // Un transfert peut choisir la méthode avec laquelle l'EXPÉDITEUR paie.
+    // Mobile money → charge directe (même aiguillage que la facture) ; carte →
+    // checkout hébergé restreint aux cartes. Sans méthode payeur (ancien client),
+    // on conserve le checkout hébergé historique.
+    const payerMethod = await this.resolveTransferPayerMethod(data);
+    if (!payerMethod) {
+      return this.fw.createPayin(data, req.user._id);
+    }
+
+    // Aligner la passerelle sur celle de la méthode : sinon le client pourrait
+    // imposer un autre compte marchand (credentials de webhook différentes) et
+    // une autre commission que celle affichée pour la méthode choisie.
+    const methodGatewayId =
+      (payerMethod as any)?.gatewayId?._id || (payerMethod as any)?.gatewayId;
+    if (methodGatewayId) {
+      data.gatewayId = String(methodGatewayId);
+    }
+
+    if (payerMethod.type === 'card') {
+      return this.fw.createPayin(
+        { ...data, payinChannel: 'card' },
+        req.user._id,
+      );
+    }
+
+    if (payerMethod.type === 'mobile') {
+      // Numéro saisi à l'étape 3 ; repli sur le numéro du compte pour les
+      // anciens clients. Il est validé contre l'opérateur de la méthode
+      // ci-dessous, y compris côté serveur.
+      const phone = payerPhone || String(req.user?.phone || '').trim();
+      if (!phone) {
+        // Pas de numéro : le payeur peut encore payer par carte en hébergé.
+        return this.fw.createPayin(data, req.user._id);
+      }
+
+      this.assertPayerPhoneSupportsMethod(phone, payerMethod, data);
+
+      return this.payinRoute.resolve(
+        data,
+        {
+          method: 'mobile_money',
+          phone,
+          email: data.senderEmail || req.user?.email,
+          name:
+            data.senderName ||
+            [req.user?.firstName, req.user?.lastName]
+              .filter(Boolean)
+              .join(' ')
+              .trim(),
+          // `findByCode` peuple `countryId` : la méthode mobile money est
+          // rattachée à un pays. Le résolveur attend l'ISO2 (`CM`, `SN`…), pas
+          // l'indicatif (`237`) : `Country.code` contient l'indicatif, `iso2`
+          // porte le code pays. Le numéro envoyé inclut l'indicatif, donc cet
+          // indice n'est qu'un secours.
+          country:
+            (payerMethod as any)?.countryId?.iso2 ||
+            (req.user as any)?.countryId?.iso2,
+          clientIp: resolveClientIp(req as unknown),
+        },
+        {
+          flow: 'transfer',
+          userId: req.user._id,
+          meta: { transactionType: 'transfer' },
+          fallbackEmail: data.senderEmail || req.user?.email,
+          label: 'Transfer',
+        },
+      );
+    }
+
+    return this.fw.createPayin(data, req.user._id);
+  }
+
+  /**
+   * Résout la méthode de paiement du payeur d'un transfert.
+   *
+   * Retourne `null` hors transfert ou lorsque le client n'en fournit pas, afin
+   * de conserver le checkout hébergé historique. Les contrôles de devise,
+   * d'activation et de bornes sont déjà faits par `resolveTaxOverride`, mais le
+   * `type` (`mobile`/`card`) n'y est pas exposé : on relit le document.
+   *
+   * @param {any} data - Corps de requête déjà assaini.
+   * @returns {Promise<any|null>} - Méthode payeur ou `null`.
+   */
+  private async resolveTransferPayerMethod(data: any): Promise<any | null> {
+    if (String(data?.transactionType || '').toLowerCase() !== 'transfer') {
+      return null;
+    }
+
+    const code = String(data?.payerPaymentMethodCode || '').trim().toUpperCase();
+    if (!code) return null;
+
+    const method = await this.paymentMethodService.findByCode(code);
+    if (!method) {
+      throw new NotFoundException(`Payment method '${code}' not found`);
+    }
+    if (!method.statusPayin) {
+      throw new BadRequestException(
+        `Payment method '${code}' is not available for payin`,
+      );
+    }
+
+    const currency = String(
+      data.senderCurrency || data.currency || '',
+    ).toUpperCase();
+    if (currency && String(method.currency).toUpperCase() !== currency) {
+      throw new BadRequestException(
+        `Currency mismatch: method '${code}' is for ${method.currency}, not ${currency}`,
+      );
+    }
+
+    return method;
+  }
+
+  /**
+   * Réseau attendu pour une méthode mobile money.
+   *
+   * Le `code` n'est pas toujours un jeton Flutterwave (`MOMO`, `OM`, ou un
+   * libellé plus long). On inspecte donc code + nom + provider, en testant MTN
+   * avant Orange (`MOMO` contient `OM`), puis on retombe sur les alias connus.
+   *
+   * @param {any} method - Méthode payeur.
+   * @returns {string|null} - Jeton de réseau connu, ou `null`.
+   */
+  private resolveMethodNetwork(method: any): string | null {
+    const haystack = [method?.code, method?.name, method?.provider]
+      .map((value) => String(value || '').toUpperCase())
+      .join(' ');
+
+    if (haystack.includes('MPESA') || haystack.includes('M-PESA')) {
+      return 'MPESA';
+    }
+    if (haystack.includes('MTN') || haystack.includes('MOMO')) {
+      return 'MTN';
+    }
+    if (haystack.includes('ORANGE')) {
+      return 'ORANGEMONEY';
+    }
+
+    const code = normalizeNetworkToken(method?.code);
+    return KNOWN_DIRECT_CHARGE_NETWORKS.has(code) ? code : null;
+  }
+
+  /**
+   * Vérifie que le numéro saisi appartient bien à l'opérateur de la méthode.
+   *
+   * La validation frontend est un premier filtre ; celle-ci est autoritaire.
+   * Un numéro dont le réseau est indéterminé n'est pas rejeté ici : `PayinRoute`
+   * décide du repli hébergé (utile pour les pays dont les préfixes ne sont pas
+   * encore renseignés). En revanche, un numéro clairement invalide ou rattaché
+   * à un autre opérateur est refusé avant toute écriture.
+   *
+   * @param {string} phone - Numéro saisi (national ou international).
+   * @param {any} method - Méthode payeur résolue.
+   * @param {any} data - Corps assaini (devise).
+   */
+  private assertPayerPhoneSupportsMethod(
+    phone: string,
+    method: any,
+    data: any,
+  ): void {
+    const expected = this.resolveMethodNetwork(method);
+    if (!expected) return;
+
+    try {
+      const resolved = resolveMobileMoneyNetwork({
+        phone,
+        country: method?.countryId?.iso2,
+        currency: data?.senderCurrency || data?.currency,
+      });
+
+      if (resolved.network !== expected) {
+        throw new BadRequestException(
+          `The payer phone number does not belong to the selected operator (${method?.name || expected}).`,
+        );
+      }
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+
+      if (error instanceof MobileMoneyNetworkError) {
+        if (
+          error.code === 'INVALID_PHONE' ||
+          error.code === 'UNSUPPORTED_CURRENCY' ||
+          error.code === 'UNSUPPORTED_COUNTRY'
+        ) {
+          throw new BadRequestException(error.message);
+        }
+
+        // NETWORK_NOT_RESOLVED / AMBIGUOUS_NUMBER : laisser PayinRoute décider
+        // (repli hébergé), pour ne pas casser les pays sans table de préfixes.
+        return;
+      }
+
+      throw error;
+    }
   }
 
   @Post('direct-charge')
@@ -249,7 +486,7 @@ export class FlutterwaveController {
           );
         }
       }
-      feeRate = Number(method.taxesTransfer) || undefined;
+      feeRate = Number(method.taxesPayment) || undefined;
     }
 
     // `method.code` (MOMO, ORANGEMONEY, ...) is NOT a Flutterwave network token,
@@ -263,7 +500,7 @@ export class FlutterwaveController {
     return this.fw.createDirectCharge(
       {
         ...data,
-        invoiceTaxes: feeRate,
+        taxRateOverride: feeRate,
         network,
         // L'IP vient de la REQUÊTE uniquement : elle était auparavant écrasable par
         // `data.clientIp`, donc l'attaquant choisissait le champ censé l'identifier.
@@ -297,7 +534,9 @@ export class FlutterwaveController {
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   createTransferFromBalance(@Body() transactionData: any, @Req() req) {
-    return this.fw.createTransferFromBalance(transactionData, req.user._id);
+    return this.resolveTaxOverride(transactionData, 'payout').then((data) =>
+      this.fw.createTransferFromBalance(data, req.user._id),
+    );
   }
 
   @Post('withdrawal')

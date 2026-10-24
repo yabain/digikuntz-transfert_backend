@@ -44,7 +44,7 @@ import { isPreChargeRejection } from './mobile-money-charge.builder';
 import { isHostedFallbackEnabled } from './direct-charge.config';
 
 /** Flux d'encaissement qui passent par cet aiguillage. */
-export type PayinFlow = 'invoice' | 'payment_request';
+export type PayinFlow = 'invoice' | 'payment_request' | 'transfer';
 
 /**
  * Résultat d'un encaissement, dans la forme commune des deux voies.
@@ -84,6 +84,8 @@ export interface PayinPayer {
   email?: string;
   name?: string;
   network?: string;
+  /** ISO2 du payeur, utilisé pour résoudre un numéro sans indicatif. */
+  country?: string;
   deviceFingerprint?: string;
   clientIp?: string;
 }
@@ -147,6 +149,7 @@ export class PayinRouteService {
       email: payer.email || context.fallbackEmail || '',
       name: payer.name,
       network: payer.network,
+      country: payer.country,
       clientIp: payer.clientIp,
       deviceFingerprint: payer.deviceFingerprint,
       flow: context.flow,

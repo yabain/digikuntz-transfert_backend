@@ -50,6 +50,9 @@ export const DIRECT_CHARGE_FLOWS = [
   'direct_charge',
   'payment_request',
   'invoice',
+  // Un transfert payé par mobile money emprunte la même voie directe que la
+  // facture : le cron doit donc lui appliquer la fenêtre courte de clôture.
+  'transfer',
 ] as const;
 
 /* ===== Types minimalistes FW (ce qui nous intéresse) ===== */

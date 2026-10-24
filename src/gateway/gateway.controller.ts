@@ -35,11 +35,12 @@ export class GatewayController {
 
   @Get()
   // SÉCURITÉ : `GatewayService.findAll()` renvoie les credentials DÉCHIFFRÉS
-  // (clé secrète + hash de webhook). Cet endpoint étant public, n'importe qui
-  // pouvait lire les identifiants de paiement live et forger des webhooks.
-  // L'accès est désormais authentifié, et les credentials ne sont renvoyés
-  // qu'à un administrateur — les pages utilisateur (envoi d'argent, demande de
-  // paiement) n'ont besoin que de la liste.
+  // (clé secrète + hash de webhook) et, pour les passerelles M-Pesa, le
+  // `balance` encaissé. L'accès est donc authentifié : seuls les appels
+  // authentifiés sont servis, et un non-administrateur ne reçoit qu'une
+  // projection publique (voir `scrubGateway`). Les pages de paiement publiques
+  // d'une facture lisent, elles, `/payment-methods` (liste de méthodes
+  // affichables), pas cet endpoint.
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'))
   async findAll(@Req() req: unknown): Promise<any> {
@@ -100,22 +101,36 @@ export class GatewayController {
   }
 
   /**
-   * Retire `credentials` d'un document passerelle et le remplace par un booléen.
+   * Projette un document passerelle vers sa vue publique (allow-list).
+   *
+   * On reconstruit explicitement les seuls champs affichables plutôt que de
+   * retirer `credentials` : une liste d'exclusion a déjà laissé fuir `balance`
+   * (encaisse M-Pesa) pour un appelant non administrateur. Toute donnée ajoutée
+   * au schéma est ainsi exclue par défaut.
    *
    * @param {unknown} gateway - Document passerelle brut.
-   * @returns {unknown} - Le document sans secrets.
+   * @returns {unknown} - La projection publique, sans secret ni trésorerie.
    */
   private static scrubGateway(gateway: unknown): unknown {
     if (gateway === null || typeof gateway !== 'object') return gateway;
 
-    const { credentials, ...rest } = gateway as { credentials?: unknown };
+    const source = gateway as Record<string, unknown>;
+    const credentials = source.credentials;
+    const hasCredentials =
+      credentials !== null &&
+      typeof credentials === 'object' &&
+      Object.keys(credentials).length > 0;
 
     return {
-      ...rest,
-      hasCredentials:
-        credentials !== null &&
-        typeof credentials === 'object' &&
-        Object.keys(credentials).length > 0,
+      _id: source._id,
+      name: source.name,
+      description: source.description,
+      imageUrl: source.imageUrl,
+      type: source.type,
+      currency: source.currency,
+      isActive: source.isActive,
+      providerCommission: source.providerCommission,
+      hasCredentials,
     };
   }
 

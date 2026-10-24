@@ -76,6 +76,18 @@ export class PaymentMethodController {
     return this.paymentMethodService.findAll(query);
   }
 
+  @Get('currency/:currency')
+  @ApiOperation({
+    summary: 'Get active payin methods for a currency (public)',
+  })
+  @ApiParam({ name: 'currency', example: 'XAF' })
+  @ApiResponse({ status: 200, description: 'Payment methods returned.' })
+  async findByCurrency(
+    @Param('currency') currency: string,
+  ): Promise<PaymentMethod[]> {
+    return this.paymentMethodService.findActivePayinByCurrency(currency);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get payment method by ID' })
   @ApiParam({ name: 'id', type: String })

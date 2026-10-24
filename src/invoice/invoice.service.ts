@@ -492,10 +492,12 @@ export class InvoiceService {
     invoiceId: string,
     payer: {
       payerName: string;
-      payerPhone: string;
+      payerPhone?: string;
       payerEmail?: string;
       redirectUrl?: string;
       paymentMethod?: 'mobile_money' | 'card';
+      /** Code de la méthode choisie → détermine le taux de frais (`taxesPayment`). */
+      paymentMethodCode?: string;
       network?: string;
       deviceFingerprint?: string;
       clientIp?: string;
@@ -548,6 +550,20 @@ export class InvoiceService {
       throw new ConflictException('This invoice is not payable.');
     }
 
+    const owner = await this.userService.getUserById(String(invoice.userId));
+    const currency = invoice.currency || owner?.countryId?.currency || 'XAF';
+
+    // Frais = `taxesPayment` de la méthode choisie (repli sur `invoiceTaxes`
+    // système). Le taux est dérivé côté SERVEUR depuis la méthode : il n'est
+    // jamais lu dans le corps de la requête.
+    //
+    // Résolu AVANT la revendication atomique : une méthode invalide (devise ou
+    // sens de paiement) doit échouer sans laisser la facture bloquée en `paying`.
+    const taxRateOverride = await this.resolvePaymentMethodTaxRate(
+      payer.paymentMethodCode,
+      currency,
+    );
+
     // Revendication ATOMIQUE avant toute charge.
     //
     // Deux requêtes parallèles passaient toutes deux le contrôle de statut
@@ -580,14 +596,13 @@ export class InvoiceService {
       );
     }
 
-    const owner = await this.userService.getUserById(String(invoice.userId));
-    const currency = invoice.currency || owner?.countryId?.currency || 'XAF';
-
     const transactionData = {
       transactionType: TransactionType.INVOICE,
       invoiceId: String(invoice._id),
       estimation: invoice.totalAmount,
       noFees: false,
+      // Taux serveur dérivé de la méthode choisie (undefined → taux système).
+      taxRateOverride,
       commissionPayer:
         invoice.commissionPayer ||
         (await this.commissionResolver.getCommissionPayer(
@@ -856,6 +871,43 @@ export class InvoiceService {
 
     const feesPercent = Number(system?.invoiceTaxes) || 0;
     return { minAmount, feesPercent };
+  }
+
+  /**
+   * Taux de frais (`taxesPayment`) de la méthode de paiement sélectionnée, si
+   * elle existe et encaisse bien dans cette devise. `undefined` → taux système.
+   *
+   * Lève une erreur si la méthode existe mais ne convient pas (devise, ou
+   * `statusPayin` désactivé) : mieux vaut refuser tôt que facturer un taux
+   * inattendu après avoir revendiqué la facture.
+   */
+  private async resolvePaymentMethodTaxRate(
+    paymentMethodCode: string | undefined,
+    currency: string,
+  ): Promise<number | undefined> {
+    const code = String(paymentMethodCode || '').trim();
+    if (!code) return undefined;
+
+    const method = await this.paymentMethodService.findByCode(
+      code.toUpperCase(),
+    );
+    if (!method) return undefined;
+
+    if (
+      String(method.currency).toUpperCase() !== String(currency).toUpperCase()
+    ) {
+      throw new BadRequestException(
+        `Payment method '${method.code}' is not available for ${currency}`,
+      );
+    }
+    if (!method.statusPayin) {
+      throw new BadRequestException(
+        `Payment method '${method.code}' is not available for payin`,
+      );
+    }
+
+    const rate = Number(method.taxesPayment);
+    return Number.isFinite(rate) && rate >= 0 ? rate : undefined;
   }
 
   async getPaymentMetaForUser(

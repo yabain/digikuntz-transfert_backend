@@ -596,7 +596,6 @@ export class DevService {
       }
     }
 
-    let feeRate: number | undefined;
     let network: string | undefined;
 
     if (data.paymentMethodCode) {
@@ -638,7 +637,9 @@ export class DevService {
           );
         }
       }
-      feeRate = Number(method.taxesTransfer) || undefined;
+      // Frais : le flux développeur facture le taux SYSTÈME (`invoiceTaxes`),
+      // pas le taux de la méthode. `method` ne sert ici qu'à valider la devise,
+      // le sens payin et les bornes ; on ne pose donc aucun override de taux.
       network = String(method.code).toUpperCase();
     } else {
       network = data.network ? String(data.network).toUpperCase() : undefined;
@@ -681,7 +682,6 @@ export class DevService {
       receiverContact: data.phone,
       receiverCurrency: data.currency,
       status: TStatus.PAYINPENDING,
-      invoiceTaxes: feeRate,
       commissionPayer: directCommissionPayer,
       ...(callbackUrl && { callbackUrl }),
       ...(webhookUrl && { callbackUrl: webhookUrl }),
@@ -785,7 +785,7 @@ export class DevService {
         currency: data.currency,
         transactionType: 'apiCall',
         paymentMethodCode: data.paymentMethodCode || null,
-        appliedFeeRate: feeRate || 0,
+        appliedFeeRate: Number(savedTransaction.invoiceTaxes) || 0,
         txRef,
         createdAt: savedTransaction.createdAt,
         updatedAt: savedTransaction.updatedAt,
