@@ -691,6 +691,19 @@ export class DevController {
     return this.devService.getUserBalance(userId);
   }
 
+  @Get('auto-approve')
+  @ApiOperation({ summary: 'Get auto-approve cron toggle state' })
+  async getAutoApprove(): Promise<any> {
+    return { enabled: this.devService.getAutoApproveState() };
+  }
+
+  @Put('auto-approve')
+  @ApiOperation({ summary: 'Toggle auto-approve cron (admin/API)' })
+  @ApiBody({ schema: { example: { enabled: true } } })
+  async setAutoApprove(@Body() body: { enabled: boolean }): Promise<any> {
+    return { enabled: this.devService.setAutoApproveState(body.enabled) };
+  }
+
     @Get('api-doc')
   @ApiOperation({ summary: 'Public structured API documentation (English, no auth)' })
   @ApiResponse({ status: 200, description: 'Structured JSON documentation.' })

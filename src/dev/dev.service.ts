@@ -461,10 +461,22 @@ export class DevService {
         raisonForTransfer: savedTransaction.raisonForTransfer,
         receiverCurrency: savedTransaction.receiverCurrency,
         transactionType: savedTransaction.transactionType,
+        isApiPayout: savedTransaction.isApiPayout,
         createdAt: savedTransaction.createdAt,
         updatedAt: savedTransaction.updatedAt,
       },
     };
+  }
+
+  private autoApproveEnabled = false;
+
+  getAutoApproveState(): boolean {
+    return this.autoApproveEnabled;
+  }
+
+  setAutoApproveState(enabled: boolean): boolean {
+    this.autoApproveEnabled = !!enabled;
+    return this.autoApproveEnabled;
   }
 
   async createPayinTransaction(transactionData: any, userId): Promise<any> {

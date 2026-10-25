@@ -119,6 +119,21 @@ export class PayoutService {
     );
   }
 
+  async bulkPay(transactionIds: string[]): Promise<any[]> {
+    const results: any[] = [];
+    for (const id of transactionIds) {
+      try {
+        // Reuse single payout logic; assume simple bulk initiation without extra provider data for now
+        const payloadPayout = { reference: id, transactionId: id };
+        const res = await this.createPayout(payloadPayout, {}, PayoutProvider.FLUTTERWAVE);
+        if (res) results.push(res);
+      } catch (e) {
+        // skip individual errors
+      }
+    }
+    return results;
+  }
+
   async createPayout(
     payloadPayout,
     providerData,

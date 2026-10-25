@@ -289,6 +289,21 @@ export class TransactionController {
     return this.transactionService.rejectPayoutTransaction(transactionId);
   }
 
+  @Put('bulk-reject')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Bulk reject payout transactions (admin only)' })
+  @ApiBody({ schema: { example: { transactionIds: ['id1', 'id2'] } } })
+  @ApiResponse({ status: 200, description: 'Bulk rejected.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async bulkRejectPayout(
+    @Body() body: { transactionIds: string[] },
+    @Req() req,
+  ): Promise<any> {
+    if (!req.user.isAdmin) throw new ForbiddenException('Unauthorised');
+    return this.transactionService.bulkRejectPayout(body.transactionIds || []);
+  }
+
   @Get('investigation-balance/:userId')
   @ApiBearerAuth()
   @ApiOperation({

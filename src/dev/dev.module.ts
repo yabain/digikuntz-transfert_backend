@@ -27,6 +27,6 @@ import { PaymentMethodModule } from 'src/payment-method/payment-method.module';
   ],
   providers: [DevService, CryptService],
   controllers: [DevController],
-  exports: [CryptService],
+  exports: [CryptService, DevService],
 })
 export class DevModule {}

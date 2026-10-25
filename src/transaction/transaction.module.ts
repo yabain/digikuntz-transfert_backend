@@ -13,6 +13,8 @@ import { PayoutService } from 'src/payout/payout.service';
 import { EmailSchema, Email } from 'src/email/email.schema';
 import { SmtpSchema, Smtp } from 'src/email/smtp/smtp.schema';
 import { TransactionCron } from './transaction.cron';
+import { AutoApprovePayoutCron } from './auto-approve.cron';
+import { DevModule } from 'src/dev/dev.module';
 import { BalanceService } from 'src/balance/balance.service';
 import { Balance, BalanceSchema } from 'src/balance/balance.schema';
 import {
@@ -67,6 +69,7 @@ import { GatewayModule } from 'src/gateway/gateway.module';
     SystemBalanceModule,
     DistributedLockModule,
     CommissionResolverModule,
+    forwardRef(() => DevModule),
     forwardRef(() => GatewayModule),
     MongooseModule.forFeature([
       { name: Transaction.name, schema: TransactionSchema },
@@ -92,6 +95,7 @@ import { GatewayModule } from 'src/gateway/gateway.module';
     PayinService,
     PayoutService,
     TransactionCron,
+    AutoApprovePayoutCron,
     BalanceService,
     UserService,
     ServicePaymentService,

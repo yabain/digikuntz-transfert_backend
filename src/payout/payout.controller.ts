@@ -49,6 +49,18 @@ export class PayoutController {
     return this.payoutService.createPayout(transactionId, req.user._id);
   }
 
+  @Post('bulk-pay')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Bulk accept payout transactions (admin only)' })
+  @ApiBody({ schema: { example: { transactionIds: ['id1', 'id2'] } } })
+  @ApiResponse({ status: 200, description: 'Bulk accepted.' })
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(ValidationPipe)
+  async bulkPayPayout(@Body() body: { transactionIds: string[] }, @Req() req) {
+    if (!req.user.isAdmin) throw new ForbiddenException('Unauthorised');
+    return this.payoutService.bulkPay(body.transactionIds || []);
+  }
+
   @Get('verify-payout/:id')
   @ApiOperation({ summary: 'Verify payout status by reference' })
   @ApiParam({ name: 'id', description: 'Payout reference' })

@@ -1299,6 +1299,25 @@ export class TransactionService {
     return this.transactionModel.findById(transactionId).lean().exec();
   }
 
+  async bulkRejectPayout(transactionIds: string[]): Promise<any[]> {
+    const results: any[] = [];
+    for (const id of transactionIds) {
+      try {
+        if (mongoose.Types.ObjectId.isValid(id)) {
+          const res = await this.transactionModel.findOneAndUpdate(
+            { _id: id, status: TStatus.PAYINSUCCESS, ...this.payoutTransactionMatch() },
+            { status: TStatus.PAYOUTREJECTED },
+            { new: true },
+          ).exec();
+          if (res) results.push(res);
+        }
+      } catch (e) {
+        // skip individual errors
+      }
+    }
+    return results;
+  }
+
   private async refundRejectedOutgoingPayoutIfNeeded(transaction: any): Promise<void> {
     // Retrait du solde système rejeté : recréditer le solde système.
     if (String(transaction?.transactionType || '') === 'systemWithdrawal') {
