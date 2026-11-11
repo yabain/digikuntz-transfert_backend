@@ -8,6 +8,13 @@ export class IdempotencyRecord extends Document {
 
   @Prop({ type: Object })
   response?: any;
+
+  /**
+   * `true` while the reservation owner is still running `fn()`. A reservation
+   * is removed if `fn()` throws, and completed (`false`) once `response` is stored.
+   */
+  @Prop({ type: Boolean })
+  inProgress?: boolean;
 }
 
 export const IdempotencyRecordSchema = SchemaFactory.createForClass(IdempotencyRecord);

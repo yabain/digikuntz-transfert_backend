@@ -216,14 +216,54 @@ export class PayoutService {
     return this.payoutModel.findOne({ reference }).lean().exec();
   }
 
+  /**
+   * Writes `update` on the payout unless it is already SUCCESSFUL or FAILED.
+   * When the guard blocks the write, the current document is returned (not null).
+   */
+  private async setNonTerminalStatus(
+    reference: string,
+    update: Record<string, unknown>,
+    returnNew = true,
+  ): Promise<{ applied: boolean; payout: any }> {
+    const applied = await this.payoutModel
+      .findOneAndUpdate(
+        {
+          reference,
+          status: { $nin: [PayoutStatus.SUCCESSFUL, PayoutStatus.FAILED] },
+        },
+        update,
+        { new: returnNew },
+      )
+      .exec();
+    if (applied) return { applied: true, payout: applied };
+
+    const current = await this.payoutModel.findOne({ reference }).exec();
+    if (current) {
+      this.logger.warn(
+        `Payout ${reference} already ${current.status}; status write skipped`,
+      );
+    }
+    return { applied: false, payout: current };
+  }
+
   private async updateLocalByRef(
     reference: string,
     update: Partial<Payout & { raw?: unknown }>,
     options: { lean?: boolean; new?: boolean } = {},
   ) {
-    const res = await this.payoutModel
-      .findOneAndUpdate({ reference }, update, { new: !!options.new })
-      .exec();
+    let res: any;
+    if (update.status === undefined) {
+      res = await this.payoutModel
+        .findOneAndUpdate({ reference }, update, { new: !!options.new })
+        .exec();
+    } else {
+      const { payout } = await this.setNonTerminalStatus(
+        reference,
+        update as Record<string, unknown>,
+        !!options.new,
+      );
+      res = payout;
+    }
     return options.lean ? res?.toObject?.() : res;
   }
 
@@ -253,18 +293,21 @@ export class PayoutService {
   }
 
   async updatePayoutStatus(reference: string, status: string) {
-    return this.payoutModel
-      .findOneAndUpdate({ reference }, { status }, { new: true })
-      .exec();
+    const { payout } = await this.setNonTerminalStatus(reference, { status });
+    return payout;
   }
 
   async forceFailStuckPayout(reference: string, transactionId: string) {
-    await this.payoutModel
-      .findOneAndUpdate({ reference }, { status: PayoutStatus.FAILED }, { new: true })
-      .exec();
+    const { applied, payout } = await this.setNonTerminalStatus(reference, {
+      status: PayoutStatus.FAILED,
+    });
+    // The payout is already SUCCESSFUL or FAILED: its own path owns the transaction
+    // status, so do not overwrite it with PAYOUTERROR.
+    if (!applied && payout) return payout;
     await this.transactionService
       .updateTransactionStatus(transactionId, TStatus.PAYOUTERROR)
       .catch(() => undefined);
+    return payout;
   }
 
   async updatePayout(data: any) {

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import { BadRequestException, ConflictException, HttpException, HttpStatus, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, ConflictException, HttpException, HttpStatus, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { randomBytes } from 'crypto';
 import { Dev } from './dev.schema';
@@ -440,10 +440,28 @@ export class DevService {
       ...(webhookUrl && { callbackUrl: webhookUrl }),
     };
 
-    await this.balanceService.debitBalance(userId, payoutAmount, user.countryId.currency);
+    // Ledger key = txRef: unique per attempt. A key derived from the request
+    // Idempotency-Key would collide with a debit left behind by a compensated
+    // attempt, and debitBalance rejects any currency mismatch with the user's own currency.
+    // The payoutCurrency is already validated against the user's currency in the
+    // compensation logic, so we use it directly here.
+    const currency = payoutCurrency;
+    await this.balanceService.debitBalance(userId, payoutAmount, currency, txRef);
 
-    const savedTransaction = await this.transactionService.createTransaction(transactionData);
-    if (!savedTransaction) throw new ConflictException('Error saving transaction');
+    let savedTransaction: any;
+    try {
+      savedTransaction = await this.transactionService.createTransaction(transactionData);
+      if (!savedTransaction) throw new ConflictException('Error saving transaction');
+    } catch (error) {
+      await this.refundUnsavedPayoutDebit({
+        userId,
+        amount: payoutAmount,
+        currency,
+        txRef,
+        transactionRef: transactionData.transactionRef,
+      });
+      throw error;
+    }
     void this.fwService.notifyAdminPayoutPending(savedTransaction).catch((error) => {
       console.error('API payout admin notification failed:', error?.message || error);
     });
@@ -472,6 +490,52 @@ export class DevService {
         updatedAt: savedTransaction.updatedAt,
       },
     };
+  }
+
+  /**
+   * Gives back a payout debit whose transaction was not saved. Skipped when a
+   * transaction with the same transactionRef exists (it was saved despite the
+   * error, so the debit stands). The refund has its own ledger key, so it never
+   * collides with the debit key. Never throws: the caller rethrows the original error.
+   */
+  private async refundUnsavedPayoutDebit(params: {
+    userId: string;
+    amount: number;
+    currency: string;
+    txRef: string;
+    transactionRef: string;
+  }): Promise<void> {
+    const { userId, amount, currency, txRef, transactionRef } = params;
+    try {
+      await this.transactionService.findByTransactionRef(transactionRef);
+      this.logger.error(
+        `API payout ${txRef}: transaction ${transactionRef} was saved despite the error; debit kept.`,
+      );
+      return;
+    } catch (error: any) {
+      if (!(error instanceof NotFoundException)) {
+        this.logger.error(
+          `API payout ${txRef}: could not check whether transaction ${transactionRef} was saved; debit NOT refunded, manual reconciliation required (${error?.message || error}).`,
+        );
+        return;
+      }
+    }
+
+    try {
+      await this.balanceService.creditBalance(
+        userId,
+        amount,
+        currency,
+        `api-payout-refund:${txRef}`,
+      );
+      this.logger.warn(
+        `API payout ${txRef}: transaction not saved; debit of ${amount} ${currency} refunded to user ${userId}.`,
+      );
+    } catch (error: any) {
+      this.logger.error(
+        `API payout ${txRef}: REFUND FAILED for ${amount} ${currency} to user ${userId}; manual reconciliation required (${error?.message || error}).`,
+      );
+    }
   }
 
   private autoApproveEnabled = false;

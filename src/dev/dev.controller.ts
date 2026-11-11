@@ -375,9 +375,10 @@ export class DevController {
     if (!userId) {
       throw new NotFoundException('userId is required');
     }
+    // Authenticate before the idempotency scope: the scope must be a verified userId.
+    const valid = await this.devService.authKey(userId, secretKey);
+    if (!valid) return 'invalid credentials';
     return this.idempotencyService.processKey(idempotencyKey, async () => {
-      const valid = await this.devService.authKey(userId, secretKey);
-      if (!valid) return 'invalid credentials';
       const userData = await this.userService.getUserById(userId);
       if (!userData) return 'user not found';
       const transactionData = {
@@ -405,7 +406,7 @@ export class DevController {
       }
 
       return this.devService.createPayinTransaction(transactionData, userId);
-    });
+    }, `${userId}:transaction`);
   }
 
   @Post('direct-charge')
@@ -469,9 +470,10 @@ export class DevController {
   ): Promise<any> {
     if (!secretKey) throw new NotFoundException('secretKey is required');
     if (!userId) throw new NotFoundException('userId is required');
+    // Authenticate before the idempotency scope: the scope must be a verified userId.
+    const valid = await this.devService.authKey(userId, secretKey);
+    if (!valid) return 'invalid credentials';
     return this.idempotencyService.processKey(idempotencyKey, async () => {
-      const valid = await this.devService.authKey(userId, secretKey);
-      if (!valid) return 'invalid credentials';
       const userData = await this.userService.getUserById(userId);
       if (!userData) return 'user not found';
 
@@ -482,7 +484,7 @@ export class DevController {
         },
         userId,
       );
-    });
+    }, `${userId}:direct-charge`, { preserveReservationOnFailure: true });
   }
 
   @Post('payout')
@@ -542,11 +544,15 @@ export class DevController {
   ): Promise<any> {
     if (!secretKey) throw new NotFoundException('secretKey is required');
     if (!userId) throw new NotFoundException('userId is required');
-    return this.idempotencyService.processKey(idempotencyKey, async () => {
-      const valid = await this.devService.authKey(userId, secretKey);
-      if (!valid) return 'invalid credentials';
-      return this.devService.createPayoutTransaction(data, userId);
-    });
+    // Authenticate before the idempotency scope: the scope must be a verified userId.
+    const valid = await this.devService.authKey(userId, secretKey);
+    if (!valid) return 'invalid credentials';
+    return this.idempotencyService.processKey(
+      idempotencyKey,
+      async () => this.devService.createPayoutTransaction(data, userId),
+      `${userId}:payout`,
+      { preserveReservationOnFailure: true },
+    );
   }
 
   @Get('api-transactions')
@@ -723,7 +729,7 @@ async getApiDoc(): Promise<any> {
         { id: 'webhook', title: 'Webhook', description: 'Configurable webhook URL.', payloadExample: { id: '664f1a2b3c4d5e6f7a8b9c0d', status: 'payin_success', data: { estimation: '5000', transactionRef: 'IN123#250101120000', invoiceTaxes: '250', paymentWithTaxes: '5250', raisonForTransfer: 'Paiement fournisseur', receiverCurrency: 'XAF', transactionType: 'apiCall', createdAt: '2026-01-01T12:00:00.000Z', updatedAt: '2026-01-01T12:00:00.000Z' } }, possibleStatuses: { payin: ['payin_pending', 'payin_success', 'payin_error', 'payin_closed'], payout: ['payout_pending', 'payout_success', 'payout_error', 'payout_closed', 'payout_rejected'] } },
         { id: 'history', title: 'History', endpoints: [{ method: 'GET', path: '/dev/api-transactions?page=1&limit=10&startDate=&endDate=&status=&type=', auth: 'Headers x-user-id + x-secret-key', description: 'List transactions.', request: { query: { page: 1, limit: 10 }, headers: { 'x-user-id': 'string', 'x-secret-key': 'string' } }, responseExample: { data: [{ _id: '664f1a2b3c4d5e6f7a8b9c0d', transactionType: 'apiCall', status: 'transaction_payin_success', estimation: '10000', transactionRef: 'IN123#250101120000', receiverCurrency: 'XAF', createdAt: '2026-01-01T12:00:00.000Z' }], pagination: { currentPage: 1, limit: 10, totalPages: 3, totalItems: 25, hasNextPage: true } } }, { method: 'GET', path: '/dev/transaction?transactionId=<id>', auth: 'Headers x-user-id + x-secret-key', description: 'By MongoDB _id.', responseExample: { id: '664f1a2b3c4d5e6f7a8b9c0d', status: 'payin_success', data: { estimation: '100', transactionRef: 'IN123#250101120000', invoiceTaxes: '5', paymentWithTaxes: '105', raisonForTransfer: 'Paiement fournisseur', receiverCurrency: 'XAF', transactionType: 'apiCall', createdAt: '2026-01-01T12:00:00.000Z', updatedAt: '2026-01-01T12:00:00.000Z' } } }, { method: 'GET', path: '/dev/transaction-by-ref?transactionRef=<ref>', auth: 'Headers x-user-id + x-secret-key', description: 'By stable ref.', responseExample: { id: '664f1a2b3c4d5e6f7a8b9c0d', status: 'payin_success', data: { estimation: '100', transactionRef: 'IN123#250101120000' } } }] },
       ],
-      notes: 'Public endpoint — no authentication required. All /dev/ operations require x-user-id and x-secret-key headers (retrieve via /dev/my-key with Bearer JWT). Direct-charge: if Flutterwave refuses the mobile-money charge immediately, POST /dev/direct-charge still returns 201 with status payin_pending, chargeStatus "failed" and a hosted checkout link (data.paymentLink / redirect_url, fallback.reason DIRECT_CHARGE_REFUSED). An ambiguous outcome (upstream 5xx or timeout) returns 502 with no link: the payin stays pending for reconciliation, so check GET /dev/transaction?transactionId=<id> before any retry.',
+      notes: 'Public endpoint — no authentication required. All /dev/ operations require x-user-id and x-secret-key headers (retrieve via /dev/my-key with Bearer JWT). Idempotency-Key (header, optional, string up to 255 chars) ensures POST /dev/transaction, /dev/direct-charge and /dev/payout execute at most once per user per route: a retry with the same Idempotency-Key returns the stored response. If a server-side failure occurs after a side effect (charge or debit), a retry returns 409 Request with this Idempotency-Key is still in progress (blocked until the 24h TTL expires). Direct-charge: if Flutterwave refuses the mobile-money charge immediately, POST /dev/direct-charge still returns 201 with status payin_pending, chargeStatus "failed" and a hosted checkout link (data.paymentLink / redirect_url, fallback.reason DIRECT_CHARGE_REFUSED). An ambiguous outcome (upstream 5xx or timeout) returns 502 with no link: the payin stays pending for reconciliation, so check GET /dev/transaction?transactionId=<id> before any retry.',
     };
   }
 
