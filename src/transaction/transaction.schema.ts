@@ -232,6 +232,25 @@ export class Transaction {
   @Prop()
   flwTxId?: string;
 
+  /**
+   * Canal d'encaissement EN COURS de la transaction :
+   * `direct` = charge mobile money directe ; `hosted` = checkout hébergé.
+   * Passe à `hosted` quand une charge directe est refusée et remplacée par le
+   * checkout (le statut `transaction_payin_pending` ne change pas : le lien reste
+   * payable).
+   */
+  @Prop({ enum: ['direct', 'hosted'] })
+  payinMode?: 'direct' | 'hosted';
+
+  /** Trace du repli : d'où l'on vient, pourquoi, et la tentative directe concernée. */
+  @Prop({ type: Object })
+  payinFallback?: {
+    from: string;
+    reason: string;
+    directTxRef: string;
+    at: Date;
+  };
+
   @Prop({ type: [{ from: String, to: String, timestamp: Date, triggeredBy: String }], default: [] })
   statusChanges?: Array<{ from: TStatus; to: TStatus; timestamp: Date; triggeredBy?: string }>;
 

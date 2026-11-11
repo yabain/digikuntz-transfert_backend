@@ -28,9 +28,9 @@ export class CreateGatewayDto {
   @IsString()
   imageUrl?: string;
 
-  @ApiProperty({ enum: ['flutterwave', 'paystack', 'mpesa'] })
+  @ApiProperty({ enum: ['flutterwave', 'paystack', 'mpesa', 'orange_cm', 'mtn_cm'] })
   @IsString()
-  @IsIn(['flutterwave', 'paystack', 'mpesa'])
+  @IsIn(['flutterwave', 'paystack', 'mpesa', 'orange_cm', 'mtn_cm'])
   type: string;
 
   @ApiProperty({ enum: [...GATEWAY_CURRENCIES] })

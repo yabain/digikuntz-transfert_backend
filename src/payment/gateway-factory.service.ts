@@ -3,10 +3,14 @@ import { GatewayLoaderService } from './gateway-loader.service';
 import { FlutterwaveService } from 'src/flutterwave/flutterwave.service';
 import { PaystackService } from 'src/paystack/paystack.service';
 import { MpesaService } from 'src/mpesa/mpesa.service';
+import { OrangeCmService } from 'src/orange-cm/orange-cm.service';
+import { MtnCmService } from 'src/mtn-cm/mtn-cm.service';
 import { PaymentGateway } from './interfaces/payment-gateway.interface';
 import { FlutterwaveProvider } from './providers/flutterwave.provider';
 import { PaystackProvider } from './providers/paystack.provider';
 import { MpesaProvider } from './providers/mpesa.provider';
+import { OrangeCmProvider } from './providers/orange-cm.provider';
+import { MtnCmProvider } from './providers/mtn-cm.provider';
 
 @Injectable()
 export class GatewayFactoryService {
@@ -17,6 +21,8 @@ export class GatewayFactoryService {
     private readonly flutterwaveService: FlutterwaveService,
     private readonly paystackService: PaystackService,
     private readonly mpesaService: MpesaService,
+    private readonly orangeCmService: OrangeCmService,
+    private readonly mtnCmService: MtnCmService,
   ) {}
 
   private readonly providerCache = new Map<string, PaymentGateway>();
@@ -59,6 +65,10 @@ export class GatewayFactoryService {
         return new PaystackProvider(this.paystackService);
       case 'mpesa':
         return new MpesaProvider(this.mpesaService);
+      case 'orange_cm':
+        return new OrangeCmProvider(this.orangeCmService);
+      case 'mtn_cm':
+        return new MtnCmProvider(this.mtnCmService);
       default:
         throw new NotFoundException(`Unsupported gateway type: "${type}"`);
     }

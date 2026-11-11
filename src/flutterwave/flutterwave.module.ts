@@ -52,6 +52,8 @@ import { MpesaModule } from 'src/mpesa/mpesa.module';
 import { PaymentMethodModule } from 'src/payment-method/payment-method.module';
 import { PaymentModule } from 'src/payment/payment.module';
 import { InvoiceModule } from 'src/invoice/invoice.module';
+import { OrangeCmModule } from 'src/orange-cm/orange-cm.module';
+import { MtnCmModule } from 'src/mtn-cm/mtn-cm.module';
 import { Gateway, GatewaySchema } from 'src/gateway/gateway.schema';
 import { SystemBalanceModule } from 'src/system-balance/system-balance.module';
 import { SystemBalanceService } from 'src/system-balance/system-balance.service';
@@ -73,6 +75,10 @@ import { CryptService } from 'src/dev/crypt.service';
     forwardRef(() => FundraisingModule),
     forwardRef(() => PaymentRequestModule),
     forwardRef(() => InvoiceModule),
+    // Services natifs Cameroun (Orange CM / MTN CM) : utilisés par
+    // `PayinRouteService` pour la voie native parallèle du pay-in.
+    OrangeCmModule,
+    MtnCmModule,
     SystemModule,
     SystemBalanceModule,
     AppCacheModule,

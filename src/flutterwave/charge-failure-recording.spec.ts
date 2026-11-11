@@ -8,8 +8,12 @@
  * only scans `pending` payins and the webhook ignores terminal ones, so the real
  * success could never be credited back to the invoice.
  *
- * These tests pin the rule: only a failure PROVEN to have happened before any
- * request left the process (a pre-charge rejection) may be written as terminal.
+ * Two categories are terminal, and only two:
+ *  - a PRE-CHARGE rejection (proven to happen before any request left here);
+ *  - an EXPLICIT refusal by Flutterwave (4xx / `failed` envelope), which proves
+ *    no charge was created and unlocks the hosted-checkout fallback.
+ *
+ * Everything else stays `pending` for upstream reconciliation.
  */
 import { BadRequestException, HttpException } from '@nestjs/common';
 import { FlutterwaveService } from './flutterwave.service';
@@ -25,26 +29,32 @@ const CONFIG_ARG_INDEX = 17;
 const CONSTRUCTOR_ARITY = 23;
 
 interface PayinServiceStub {
-  attachChargeResult: jest.Mock;
+  markChargeTerminal: jest.Mock;
 }
 
 /** Shape of the patch `recordChargeFailure` writes when it does finalise a payin. */
-interface AttachPatch {
+interface TerminalPatch {
   status?: string;
   error?: { code?: string; message?: string };
 }
 
 /**
- * Last patch handed to `attachChargeResult`.
+ * Last arguments handed to `markChargeTerminal`.
  *
  * `jest.Mock` is untyped (`any[][]`), so the call arguments are re-typed explicitly
  * here instead of being read as `any` — the repo lints `no-unsafe-*` as errors.
  */
-function lastPatch(stub: PayinServiceStub): AttachPatch {
-  const calls = stub.attachChargeResult.mock.calls as unknown as Array<
-    [string, string, AttachPatch]
+function lastCall(stub: PayinServiceStub): {
+  txRef: string;
+  transactionId: string;
+  status: string;
+  patch: TerminalPatch;
+} {
+  const calls = stub.markChargeTerminal.mock.calls as unknown as Array<
+    [string, string, string, TerminalPatch]
   >;
-  return calls[calls.length - 1][2];
+  const [txRef, transactionId, status, patch] = calls[calls.length - 1];
+  return { txRef, transactionId, status, patch };
 }
 
 /**
@@ -65,7 +75,7 @@ function buildService(
 }
 
 function stubPayinService(): PayinServiceStub {
-  return { attachChargeResult: jest.fn().mockResolvedValue({ txRef: 'x' }) };
+  return { markChargeTerminal: jest.fn().mockResolvedValue({ txRef: 'x' }) };
 }
 
 /** A rejection the builder itself produced, before any HTTP call. */
@@ -86,7 +96,7 @@ describe('FlutterwaveService.recordChargeFailure', () => {
       new Error('socket hang up'),
     );
 
-    expect(payinService.attachChargeResult).not.toHaveBeenCalled();
+    expect(payinService.markChargeTerminal).not.toHaveBeenCalled();
   });
 
   it('leaves the payin PENDING on a timeout as well', async () => {
@@ -98,23 +108,20 @@ describe('FlutterwaveService.recordChargeFailure', () => {
 
     await service.recordChargeFailure('txDirect-2', 'tx-2', timeout);
 
-    expect(payinService.attachChargeResult).not.toHaveBeenCalled();
+    expect(payinService.markChargeTerminal).not.toHaveBeenCalled();
   });
 
-  it('leaves the payin PENDING on an unlabelled upstream 4xx', async () => {
+  it('leaves the payin PENDING on a 5xx / gateway failure', async () => {
     const payinService = stubPayinService();
     const service = buildService(payinService);
 
-    // Flutterwave refusing the charge is *probably* harmless, but nothing in the
-    // error proves no money moved, and being slow is far cheaper than losing a
-    // payment. The cron resolves it against `verify_by_reference`.
     await service.recordChargeFailure(
       'txDirect-3',
       'tx-3',
-      new BadRequestException('charge declined'),
+      new HttpException({ message: 'upstream' }, 502),
     );
 
-    expect(payinService.attachChargeResult).not.toHaveBeenCalled();
+    expect(payinService.markChargeTerminal).not.toHaveBeenCalled();
   });
 
   it('writes the payin terminal FAILED for a proven pre-charge rejection', async () => {
@@ -127,16 +134,38 @@ describe('FlutterwaveService.recordChargeFailure', () => {
       preChargeRejection('NETWORK_NOT_RESOLVED'),
     );
 
-    expect(payinService.attachChargeResult).toHaveBeenCalledTimes(1);
-    expect(payinService.attachChargeResult).toHaveBeenCalledWith(
+    expect(payinService.markChargeTerminal).toHaveBeenCalledTimes(1);
+    expect(payinService.markChargeTerminal).toHaveBeenCalledWith(
       'txDirect-4',
       'tx-4',
+      PayinStatus.FAILED,
       expect.anything(),
     );
 
-    const patch = lastPatch(payinService);
-    expect(patch.status).toBe(PayinStatus.FAILED);
-    expect(patch.error?.code).toBe('NETWORK_NOT_RESOLVED');
+    const call = lastCall(payinService);
+    expect(call.status).toBe(PayinStatus.FAILED);
+    expect(call.patch.error?.code).toBe('NETWORK_NOT_RESOLVED');
+  });
+
+  it('writes the payin terminal FAILED for an explicit 4xx refusal', async () => {
+    // A 4xx is Flutterwave's business/validation answer: no charge exists, so the
+    // payin must not stay pending (the cron would poll it forever) and the caller
+    // may open the hosted checkout instead.
+    const payinService = stubPayinService();
+    const service = buildService(payinService);
+
+    await service.recordChargeFailure(
+      'txDirect-5',
+      'tx-5',
+      new BadRequestException('Account does not exist or Invalid Account'),
+    );
+
+    expect(payinService.markChargeTerminal).toHaveBeenCalledWith(
+      'txDirect-5',
+      'tx-5',
+      PayinStatus.FAILED,
+      expect.anything(),
+    );
   });
 
   it('records the owning transaction, never a bare txRef', async () => {
@@ -146,14 +175,15 @@ describe('FlutterwaveService.recordChargeFailure', () => {
     const service = buildService(payinService);
 
     await service.recordChargeFailure(
-      'txDirect-5',
-      'tx-5',
+      'txDirect-6',
+      'tx-6',
       preChargeRejection('INVALID_PHONE'),
     );
 
-    expect(payinService.attachChargeResult).toHaveBeenCalledWith(
-      'txDirect-5',
-      'tx-5',
+    expect(payinService.markChargeTerminal).toHaveBeenCalledWith(
+      'txDirect-6',
+      'tx-6',
+      PayinStatus.FAILED,
       expect.anything(),
     );
   });

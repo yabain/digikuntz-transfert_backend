@@ -11,6 +11,8 @@
  * charge from being replayed or a terminal payin from being resurrected.
  */
 import { UnauthorizedException } from '@nestjs/common';
+import { HttpService } from '@nestjs/axios';
+import { of } from 'rxjs';
 import { PayinService } from './payin.service';
 import {
   PayinProvider,
@@ -65,7 +67,16 @@ type PayinServiceArgs = ConstructorParameters<typeof PayinService>;
 
 function createService(model: ModelMock): PayinService {
   const config = { get: jest.fn().mockReturnValue(undefined) };
-  const args = [{}, config, {}, {}, model] as unknown as PayinServiceArgs;
+  // `HttpService.get` simulé : renvoie une enveloppe axios avec `data` de la
+  // forme Flutterwave `{ status, message, data: { status: 'successful' } }`,
+  // pour que la re-vérification `verify_by_reference` du webhook s'exécute.
+  const http = {
+    get: jest.fn().mockReturnValue(
+      of({ data: { status: 'success', message: 'ok', data: { status: 'successful' } } }),
+    ),
+    post: jest.fn().mockReturnValue(of({ data: {} })),
+  } as unknown as HttpService;
+  const args = [http, config, {}, {}, model] as unknown as PayinServiceArgs;
 
   return new PayinService(...args);
 }
@@ -268,6 +279,106 @@ describe('PayinService — direct charge primitives', () => {
       });
       expect(model.sort).toHaveBeenCalledWith({ createdAt: 1 });
       expect(model.limit).toHaveBeenCalledWith(25);
+    });
+  });
+});
+
+describe('PayinService — native CM primitives', () => {
+  let model: ModelMock;
+  let service: PayinService;
+
+  beforeEach(() => {
+    model = createModelMock();
+    service = createService(model);
+  });
+
+  describe('findPendingNativeCharges', () => {
+    it('ne cible que les payins natifs Cameroun (flow native_cm), les plus anciens d’abord', async () => {
+      model.exec.mockResolvedValue([]);
+
+      await service.findPendingNativeCharges(25);
+
+      expect(model.find).toHaveBeenCalledWith({
+        status: PayinStatus.PENDING,
+        'meta.flow': { $in: ['native_cm'] },
+      });
+      expect(model.sort).toHaveBeenCalledWith({ createdAt: 1 });
+      expect(model.limit).toHaveBeenCalledWith(25);
+    });
+
+    it('préserve le défaut de limite à 100', async () => {
+      model.exec.mockResolvedValue([]);
+
+      await service.findPendingNativeCharges();
+
+      expect(model.limit).toHaveBeenCalledWith(100);
+    });
+  });
+
+  describe('markNativeCmTerminal', () => {
+    it('écrit un statut terminal avec la garde status: PENDING (idempotence)', async () => {
+      model.exec.mockResolvedValue({ txRef: 'txNative-1' });
+
+      await service.markNativeCmTerminal('txNative-1', PayinStatus.SUCCESSFUL, {
+        raw: { status: 'SUCCESSFULL' },
+      });
+
+      expect(lastFilter(model)).toMatchObject({
+        txRef: 'txNative-1',
+        status: PayinStatus.PENDING,
+      });
+      expect(lastUpdate(model)).toEqual({
+        status: PayinStatus.SUCCESSFUL,
+        raw: { status: 'SUCCESSFULL' },
+      });
+    });
+
+    it('retourne null quand le payin n’est plus pending (déjà clôturé)', async () => {
+      model.exec.mockResolvedValue(null);
+
+      const result = await service.markNativeCmTerminal(
+        'txNative-2',
+        PayinStatus.FAILED,
+        { error: { message: 'refused' } },
+      );
+
+      expect(result).toBeNull();
+    });
+
+    it('persiste une erreur sans écraser un statut déjà terminal', async () => {
+      model.exec.mockResolvedValue({ txRef: 'txNative-3' });
+
+      await service.markNativeCmTerminal('txNative-3', PayinStatus.CANCELLED, {
+        error: { source: 'native_cm_cron', message: 'Closed after 30 minutes' },
+      });
+
+      expect(lastFilter(model).status).toBe(PayinStatus.PENDING);
+      expect(lastUpdate(model).status).toBe(PayinStatus.CANCELLED);
+      expect(lastUpdate(model).error).toMatchObject({
+        source: 'native_cm_cron',
+      });
+    });
+  });
+
+  describe('findPending (hébergé)', () => {
+    it('exclut les flows directs ET natifs pour ne jamais doubler le polling', async () => {
+      model.exec.mockResolvedValue([]);
+
+      await service.findPending(10);
+
+      expect(model.find).toHaveBeenCalledWith({
+        status: PayinStatus.PENDING,
+        'meta.flow': {
+          $nin: [
+            'direct_charge',
+            'payment_request',
+            'invoice',
+            'transfer',
+            'native_cm',
+          ],
+        },
+      });
+      expect(model.limit).toHaveBeenCalledWith(10);
     });
   });
 });

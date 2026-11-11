@@ -8,6 +8,8 @@ import { PaymentRouterService } from './payment-router.service';
 import { FlutterwaveModule } from '../flutterwave/flutterwave.module';
 import { PaystackModule } from '../paystack/paystack.module';
 import { MpesaModule } from '../mpesa/mpesa.module';
+import { OrangeCmModule } from '../orange-cm/orange-cm.module';
+import { MtnCmModule } from '../mtn-cm/mtn-cm.module';
 
 @Module({
   imports: [
@@ -16,6 +18,8 @@ import { MpesaModule } from '../mpesa/mpesa.module';
     forwardRef(() => FlutterwaveModule),
     forwardRef(() => PaystackModule),
     forwardRef(() => MpesaModule),
+    forwardRef(() => OrangeCmModule),
+    forwardRef(() => MtnCmModule),
   ],
   providers: [GatewayLoaderService, GatewayFactoryService, PaymentRouterService],
   exports: [GatewayLoaderService, GatewayFactoryService, PaymentRouterService],

@@ -5,6 +5,7 @@ import {
   MIN_DIRECT_CHARGE_AMOUNT,
   PRE_CHARGE_REJECTION_CODES,
   buildMobileMoneyCharge,
+  isDefinitiveChargeRejection,
   isPreChargeRejection,
   readChargeOutcome,
 } from './mobile-money-charge.builder';
@@ -53,7 +54,6 @@ describe('buildMobileMoneyCharge', () => {
         email: 'payer@example.com',
         fullname: 'John Doe',
         country: 'CM',
-        network: 'ORANGEMONEY',
         meta: {
           app: 'digikuntz-payments',
           flow: 'direct_charge',
@@ -61,6 +61,18 @@ describe('buildMobileMoneyCharge', () => {
         },
       });
       expect(built.resolved.country).toBe('CM');
+    });
+
+    it('omits `network` for ORANGEMONEY because Flutterwave rejects that token', () => {
+      // Comportement validé EN RÉEL (Cameroun) : envoyer `network:"ORANGEMONEY"`
+      // sur `mobile_money_franco` fait rejeter la charge (400 « Transaction
+      // Failed ») ; l'opérateur est déduit du numéro. MTN, lui, exige `network`.
+      const orange = buildMobileMoneyCharge({ ...VALID });
+      expect(orange.body).not.toHaveProperty('network');
+      expect(orange.resolved.network).toBe('ORANGEMONEY');
+
+      const mtn = buildMobileMoneyCharge({ ...VALID, phone: '237671234567' });
+      expect(mtn.body.network).toBe('MTN');
     });
 
     it('never sends authorization_code (V1 has no OTP step)', () => {
@@ -406,6 +418,57 @@ describe('buildMobileMoneyCharge', () => {
         ]),
       );
       expect(PRE_CHARGE_REJECTION_CODES).not.toContain('FW_UPSTREAM_5XX');
+    });
+  });
+
+  describe('isDefinitiveChargeRejection — the hosted-fallback safety gate', () => {
+    it('accepts an explicit 4xx refusal (invalid account, unsupported operator)', () => {
+      expect(
+        isDefinitiveChargeRejection(
+          new HttpException(
+            { status: 'error', message: 'Account does not exist or Invalid Account' },
+            400,
+          ),
+        ),
+      ).toBe(true);
+      expect(
+        isDefinitiveChargeRejection(
+          new HttpException({ message: 'Unprocessable Entity' }, 422),
+        ),
+      ).toBe(true);
+      expect(
+        isDefinitiveChargeRejection(new HttpException({ message: 'rate' }, 429)),
+      ).toBe(true);
+    });
+
+    it('rejects every ambiguous failure (5xx, 401 remapped, 408, network)', () => {
+      expect(
+        isDefinitiveChargeRejection(new HttpException({ message: 'upstream' }, 502)),
+      ).toBe(false);
+      expect(
+        isDefinitiveChargeRejection(new HttpException({ message: 'upstream' }, 500)),
+      ).toBe(false);
+      // 401 is remapped to 502 by sanitizeFlutterwaveError, but guard anyway.
+      expect(
+        isDefinitiveChargeRejection(new HttpException({ message: 'key' }, 401)),
+      ).toBe(false);
+      // A timeout means the request may have left the process.
+      expect(
+        isDefinitiveChargeRejection(new HttpException({ message: 'timeout' }, 408)),
+      ).toBe(false);
+      expect(isDefinitiveChargeRejection(new Error('socket hang up'))).toBe(false);
+      expect(isDefinitiveChargeRejection(undefined)).toBe(false);
+    });
+
+    it('does not confuse a pre-charge rejection with an upstream refusal', () => {
+      // Both are safe to fall back, but only the 4xx one proves a request was
+      // actually sent — the predicates must stay distinct for their callers.
+      const preCharge = new HttpException(
+        { message: 'disabled', code: 'DIRECT_CHARGE_DISABLED' },
+        400,
+      );
+      expect(isPreChargeRejection(preCharge)).toBe(true);
+      expect(isDefinitiveChargeRejection(preCharge)).toBe(true);
     });
   });
 });

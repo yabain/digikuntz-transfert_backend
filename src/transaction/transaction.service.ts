@@ -1435,6 +1435,33 @@ export class TransactionService {
     return transaction;
   }
 
+  /**
+   * Marque la transaction comme payée désormais par checkout hébergé après le
+   * repli d'une charge directe refusée. Ne touche ni au statut ni au montant :
+   * seul le canal et la trace du repli changent.
+   *
+   * @param {string} transactionId - Transaction concernée.
+   * @param {{from: string, reason: string, directTxRef: string}} fallback - Trace du repli.
+   * @returns {Promise<void>}
+   */
+  async markPayinModeHosted(
+    transactionId: string,
+    fallback: { from: string; reason: string; directTxRef: string },
+  ): Promise<void> {
+    if (!mongoose.Types.ObjectId.isValid(transactionId)) return;
+    await this.transactionModel
+      .updateOne(
+        { _id: transactionId },
+        {
+          $set: {
+            payinMode: 'hosted',
+            payinFallback: { ...fallback, at: new Date() },
+          },
+        },
+      )
+      .exec();
+  }
+
   async updateTransactionFlwTxId(
     transactionId: string,
     flwTxId: string,

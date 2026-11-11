@@ -75,6 +75,14 @@ export class CreatePayinDto {
   @IsOptional()
   @IsString()
   status: string;
+
+  /**
+   * Métadonnées internes du payin (ex. `flow: 'hosted_fallback'`). Jamais
+   * envoyées telles quelles au prestataire : elles servent à la réconciliation
+   * locale et au cron.
+   */
+  @IsOptional()
+  meta?: Record<string, any>;
 }
 
 export class VerifyPayinDto {

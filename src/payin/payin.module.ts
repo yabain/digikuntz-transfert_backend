@@ -50,6 +50,9 @@ import { MpesaModule } from 'src/mpesa/mpesa.module';
 import { PaymentModule } from 'src/payment/payment.module';
 import { SystemBalanceModule } from 'src/system-balance/system-balance.module';
 import { EmailModule } from 'src/email/email.module';
+import { OrangeCmModule } from 'src/orange-cm/orange-cm.module';
+import { MtnCmModule } from 'src/mtn-cm/mtn-cm.module';
+import { DevModule } from 'src/dev/dev.module';
 
 @Module({
   imports: [
@@ -71,6 +74,13 @@ import { EmailModule } from 'src/email/email.module';
     SystemBalanceModule,
     AppCacheModule,
     DistributedLockModule,
+    // Services natifs Cameroun (Orange CM / MTN CM) + déchiffrement des
+    // credentials pour le cron de réconciliation des payins natifs.
+    // forwardRef requis des DEUX côtés : DevModule importe déjà PayinModule
+    // en forwardRef, et ce cycle serait résolu en `undefined` sinon.
+    forwardRef(() => OrangeCmModule),
+    forwardRef(() => MtnCmModule),
+    forwardRef(() => DevModule),
     MongooseModule.forFeature([
       { name: Payin.name, schema: PayinSchema },
       { name: Payout.name, schema: PayoutSchema },

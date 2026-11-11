@@ -7,6 +7,7 @@ import {
   UnauthorizedException,
   HttpException,
   HttpStatus,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
@@ -54,6 +55,15 @@ export const DIRECT_CHARGE_FLOWS = [
   // facture : le cron doit donc lui appliquer la fenêtre courte de clôture.
   'transfer',
 ] as const;
+
+/**
+ * `meta.flow` value written by the native Cameroon path (orange_cm / mtn_cm).
+ *
+ * Kept as its own list so `findPending` (hosted) and the direct-charge cron can
+ * exclude these rows: a native payin has its own provider polling (payToken /
+ * xReferenceId) and must not be polled twice per cycle.
+ */
+export const NATIVE_CM_FLOWS = ['native_cm'] as const;
 
 /* ===== Types minimalistes FW (ce qui nous intéresse) ===== */
 type FWBaseResp<T = any> = {
@@ -423,6 +433,100 @@ export class PayinService {
       .exec();
   }
 
+  /**
+   * Pending payins started by the native Cameroon path
+   * (`meta.flow: 'native_cm'`, provider orange_cm / mtn_cm), oldest first.
+   *
+   * Lets the cron apply the short `NATIVE_CM_CLOSE_MINUTES` window and poll the
+   * provider through the correct native service (Orange via `meta.payToken`,
+   * MTN via `meta.xReferenceId`) without touching either the hosted
+   * `findPending` or the Flutterwave direct-charge windows.
+   *
+   * @param {number} [limit] - Maximum number of rows to inspect.
+   * @returns {Promise<PayinDocument[]>} - Pending native-CM payins.
+   */
+  async findPendingNativeCharges(limit = 100): Promise<PayinDocument[]> {
+    return this.payinModel
+      .find({
+        status: PayinStatus.PENDING,
+        'meta.flow': { $in: NATIVE_CM_FLOWS },
+      })
+      .sort({ createdAt: 1 })
+      .limit(limit)
+      .exec();
+  }
+
+  /**
+   * Writes a TERMINAL status on a native-CM payin, guarded by `status: PENDING`.
+   *
+   * The guard is what keeps the native reconciliation idempotent: a duplicate
+   * tick, a replayed provider response or a late notification can never
+   * resurrect a payin that a previous tick already closed — and a `successful`
+   * credit can only ever be claimed once.
+   *
+   * @param {string} txRef - Local payin reference.
+   * @param {PayinStatus} status - Terminal status (successful/failed/cancelled).
+   * @param {object} [patch] - Optional `error`/`raw` to persist alongside.
+   * @returns {Promise<PayinDocument|null>} - The updated payin, or null when the
+   *   row is no longer `pending` (already handled, or gone).
+   */
+  async markNativeCmTerminal(
+    txRef: string,
+    status: PayinStatus,
+    patch: { error?: any; raw?: any } = {},
+  ): Promise<PayinDocument | null> {
+    const update: UpdateQuery<Payin> = { status };
+    if (patch.error !== undefined) update.error = patch.error;
+    if (patch.raw !== undefined) update.raw = patch.raw;
+
+    return this.payinModel
+      .findOneAndUpdate(
+        { txRef, status: PayinStatus.PENDING },
+        update,
+        { new: true },
+      )
+      .exec();
+  }
+
+  /**
+   * Clôt une tentative de charge **directe** en échec, sans jamais écraser un
+   * état déjà terminal.
+   *
+   * Utilisé par le repli vers le checkout hébergé : quand Flutterwave refuse
+   * explicitement la charge directe, le payin ne doit pas rester `pending`
+   * (le cron le réconcilierait indéfiniment) et ne doit surtout pas pouvoir
+   * écraser un `successful` écrit par un webhook concurrent. Le filtre
+   * `status: PENDING` + `transactionId` garantit les deux.
+   *
+   * @param {string} txRef - Référence locale de la tentative directe.
+   * @param {string|mongoose.Types.ObjectId} transactionId - Transaction propriétaire.
+   * @param {PayinStatus} status - Statut terminal à écrire (jamais `pending`).
+   * @param {object} [patch] - `error`/`raw` à persister avec le statut.
+   * @returns {Promise<PayinDocument|null>} - Payin mis à jour, ou null si déjà terminal.
+   */
+  async markChargeTerminal(
+    txRef: string,
+    transactionId: string | mongoose.Types.ObjectId,
+    status: PayinStatus,
+    patch: { error?: any; raw?: any } = {},
+  ): Promise<PayinDocument | null> {
+    if (status === PayinStatus.PENDING) {
+      throw new Error('markChargeTerminal requires a terminal status');
+    }
+
+    const update: UpdateQuery<Payin> = { status };
+    if (patch.error !== undefined) update.error = patch.error;
+    if (patch.raw !== undefined) update.raw = patch.raw;
+
+    return this.payinModel
+      .findOneAndUpdate(
+        { txRef, transactionId, status: PayinStatus.PENDING },
+        update,
+        { new: true },
+      )
+      .exec();
+  }
+
   // Hosted Payment (V3) — Flutterwave only
   async createPayin(dto: CreatePayinDto) {
     const txRef = dto.txRef ?? this.generateTxRef('txPayin');
@@ -459,6 +563,9 @@ export class PayinService {
         customerName: dto.customerName,
         status: PayinStatus.PENDING,
         provider: PayinProvider.FLUTTERWAVE,
+        // Métadonnées internes (ex. repli depuis une charge directe refusée).
+        // Elles ne partent jamais vers Flutterwave.
+        ...(dto.meta ? { meta: dto.meta } : {}),
         raw: resData,
       });
 
@@ -1008,8 +1115,21 @@ export class PayinService {
     return this.payinModel.findOne({ txRef }).lean().exec();
   }
 
+  /**
+   * Payin « courant » d'une transaction. Une transaction peut porter plusieurs
+   * payins après un repli (tentative directe `failed` puis checkout hébergé) :
+   * on retient le plus RÉCENT, sans quoi le lien hébergé et le statut lus par
+   * l'API pouvaient provenir de la tentative refusée.
+   *
+   * @param {string} transactionId - Identifiant de la transaction.
+   * @returns {Promise<Payin|null>} - Le payin le plus récent, ou null.
+   */
   async getPayinByTransactionId(transactionId: string) {
-    return this.payinModel.findOne({ transactionId }).lean().exec();
+    return this.payinModel
+      .findOne({ transactionId })
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
   }
 
   async getPayinStatus(txRef: string) {
@@ -1028,9 +1148,11 @@ export class PayinService {
    *
    * Direct-charge flows are excluded on purpose: they are verified by their own
    * cron on a much shorter window, and including them here made each direct payin
-   * be polled twice per cycle (double upstream calls, double quota). A payin with
-   * no `meta.flow` — every hosted one — still matches, because `$nin` also
-   * matches documents where the path is missing.
+   * be polled twice per cycle (double upstream calls, double quota). Native-CM
+   * flows (`native_cm`) are excluded the same way: their provider status lives
+   * behind `payToken`/`xReferenceId` and is polled by `handleNativeCmCron`. A
+   * payin with no `meta.flow` — every hosted one — still matches, because `$nin`
+   * also matches documents where the path is missing.
    *
    * @param {number} [limit] - Maximum number of rows.
    * @returns {Promise<PayinDocument[]>} - Pending hosted payins.
@@ -1039,7 +1161,9 @@ export class PayinService {
     return this.payinModel
       .find({
         status: PayinStatus.PENDING,
-        'meta.flow': { $nin: DIRECT_CHARGE_FLOWS },
+        'meta.flow': {
+          $nin: [...DIRECT_CHARGE_FLOWS, ...NATIVE_CM_FLOWS],
+        },
       })
       .limit(limit)
       .exec();
@@ -1405,6 +1529,50 @@ export class PayinService {
       };
     }
 
+    // Trust but verify : le payload du webhook n'est JAMAIS la source de vérité.
+    // Avant toute mise à jour, on réinterroge Flutterwave (verify_by_reference)
+    // pour obtenir le statut réel de la transaction, comme le font le cron et la
+    // vérification manuelle. Le statut réel prime sur le payload. Si Flutterwave
+    // est injoignable, on rejette le webhook (rethrow) plutôt que d'écrire un
+    // statut non vérifié : Hookdeck retentera la livraison, et l'idempotence
+    // (`status $nin terminal`) évitera tout doublon de crédit si un rejeu
+    // arrivait entre-temps.
+    //
+    // On ne re-vérifie PAS les échecs : un webhook `failed` ne déclenche jamais
+    // de crédit, et exiger une confirmation en amont serait redondant (le cron
+    // finalisera de toute façon). On ne re-vérifie que les statuts actionnables
+    // (successful/cancelled) où une fausse confirmation coûterait le plus.
+    let verifiedStatus = mapped;
+    if (txRef && mapped !== PayinStatus.FAILED) {
+      try {
+        const remote = await this.fwGet<FWVerifyByRefData>(
+          `${this.fwBaseUrlV3}/transactions/verify_by_reference`,
+          { tx_ref: txRef },
+        );
+        // `fwGet` renvoie la réponse HTTP complète : `remote.data` est
+        // l'enveloppe { status, message, data: FWVerifyByRefData }.
+        const envelope = (remote?.data ?? {}) as Record<string, unknown>;
+        const remoteData = (envelope?.data ?? {}) as FWVerifyByRefData;
+        const remoteStatus = remoteData.status ?? String(envelope?.status ?? '');
+        const remoteMapped = this.mapWebhookStatus(remoteStatus);
+        if (remoteMapped) {
+          verifiedStatus = remoteMapped;
+          this.logger.log(
+            `verifyWebhook: remote status for ${txRef} = ${remoteStatus}`,
+          );
+        }
+      } catch (error: unknown) {
+        this.logger.warn(
+          `verifyWebhook: Flutterwave re-verification failed for ${txRef}: ${
+            (error as any)?.message ?? String(error)
+          }`,
+        );
+        throw new ServiceUnavailableException(
+          'Unable to verify transaction with Flutterwave before processing webhook',
+        );
+      }
+    }
+
     const or: Record<string, any>[] = [];
     if (flwTxId !== undefined && flwTxId !== null) or.push({ flwTxId });
     if (txRef) or.push({ txRef });
@@ -1413,10 +1581,10 @@ export class PayinService {
       return { status: 'ok', ignored: 'missing_identifiers' };
     }
 
-    const update: Record<string, any> = { status: mapped };
+    const update: Record<string, any> = { status: verifiedStatus };
     if (flwTxId !== undefined && flwTxId !== null) update.flwTxId = flwTxId;
 
-    if (mapped === PayinStatus.FAILED) {
+    if (verifiedStatus === PayinStatus.FAILED) {
       // Store WHY it failed, without echoing the whole upstream payload.
       update.error = {
         source: 'flutterwave-webhook',

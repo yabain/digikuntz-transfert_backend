@@ -16,6 +16,10 @@ import { TStatus } from 'src/transaction/transaction.schema';
 import { PayinStatus } from 'src/payin/payin.schema';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { isDirectChargeEnabled } from 'src/flutterwave/direct-charge.config';
+import {
+  MobileMoneyNetworkError,
+  resolveMobileMoneyNetwork,
+} from 'src/flutterwave/mobile-money-network.util';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
@@ -321,7 +325,9 @@ export class DevService {
       payIn = await this.payinService.getPayinByTransactionId(String(transaction._id));
       if (!payIn) return 'payin not found';
       if (transaction.status.includes('payin')) {
-        await this.fwService.verifyPayin(transaction.txRef);
+        // Vérifie le payin COURANT (son txRef). `transaction.txRef` n'existe pas
+        // sur une charge directe : l'appel renvoyait alors 404 « Payin not found ».
+        await this.fwService.verifyPayin(payIn.txRef || transaction.txRef);
         const refreshedPayin = await this.payinService.getPayinByTransactionId(String(transaction._id));
         if (refreshedPayin) payIn = refreshedPayin;
       } else if (transaction.status.includes('payout')) {
@@ -578,6 +584,16 @@ export class DevService {
   }
 
   async createDirectPayinTransaction(data: any, userId): Promise<any> {
+    // Normalise les conventions de nommage du payload. L'API documente
+    // `userPhone`/`userEmail`/`senderName`/`userCountry` (cf. doc `/dev/direct-charge`),
+    // mais la couche de débit lit `phone`/`email`/`name`/`country`. Sans cette
+    // normalisation, `customerEmail`/`phone` restaient vides → ValidationError
+    // Mongoose 500 avant tout débit Flutterwave, et aucun SMS n'était émis.
+    const pay = (v: any) => (v === undefined || v === null ? undefined : v);
+    data.phone = pay(data.phone ?? data.userPhone);
+    data.email = pay(data.email ?? data.userEmail);
+    data.name = pay(data.name ?? data.senderName);
+    data.country = pay(data.country ?? data.userCountry);
     // Le flux développeur pousse une VRAIE demande de débit : il doit donc être
     // fermé par le même levier que le reste. Sans ce contrôle,
     // `DIRECT_CHARGE_ENABLED=false` ne « tuait » pas réellement les débits
@@ -608,54 +624,17 @@ export class DevService {
       }
     }
 
-    let network: string | undefined;
-
-    if (data.paymentMethodCode) {
-      const code = String(data.paymentMethodCode).toUpperCase();
-      const method = await this.paymentMethodService.findByCode(code);
-      if (!method) {
-        throw new HttpException(
-          { message: `Payment method '${code}' not found`, code: 'METHOD_NOT_FOUND' },
-          HttpStatus.NOT_FOUND,
-        );
-      }
-      if (String(method.currency).toUpperCase() !== String(data.currency).toUpperCase()) {
-        throw new HttpException(
-          {
-            message: `Currency mismatch: method '${code}' is for ${method.currency}, not ${data.currency}`,
-            code: 'CURRENCY_MISMATCH',
-          },
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-      if (!method.statusPayin) {
-        throw new HttpException(
-          { message: `Payment method '${code}' is not available for payin`, code: 'METHOD_DISABLED' },
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-      const amount = Number(data.estimation);
-      if (Number.isFinite(amount)) {
-        if (method.minAmount > 0 && amount < method.minAmount) {
-          throw new HttpException(
-            { message: `Amount ${amount} is below minimum ${method.minAmount} for method '${code}'`, code: 'AMOUNT_BELOW_MIN' },
-            HttpStatus.BAD_REQUEST,
-          );
-        }
-        if (method.maxAmount > 0 && amount > method.maxAmount) {
-          throw new HttpException(
-            { message: `Amount ${amount} exceeds maximum ${method.maxAmount} for method '${code}'`, code: 'AMOUNT_EXCEEDS_MAX' },
-            HttpStatus.BAD_REQUEST,
-          );
-        }
-      }
-      // Frais : le flux développeur facture le taux SYSTÈME (`invoiceTaxes`),
-      // pas le taux de la méthode. `method` ne sert ici qu'à valider la devise,
-      // le sens payin et les bornes ; on ne pose donc aucun override de taux.
-      network = String(method.code).toUpperCase();
-    } else {
-      network = data.network ? String(data.network).toUpperCase() : undefined;
-    }
+    // Routage : sans `paymentMethodCode`, la devise du payload choisit la méthode
+    // active d'encaissement Flutterwave, dont l'opérateur correspond au numéro.
+    // Un `paymentMethodCode` explicite reste accepté et validé comme avant.
+    const method = data.paymentMethodCode
+      ? await this.findRequestedDirectPayinMethod(data.paymentMethodCode, data.currency)
+      : await this.resolveActiveDirectPayinMethod(data.currency, data.phone);
+    this.assertAmountWithinMethodLimits(method, Number(data.estimation));
+    // Frais : le flux développeur facture le taux SYSTÈME (`invoiceTaxes`),
+    // pas le taux de la méthode. `method` ne sert ici qu'à valider la devise,
+    // le sens payin et les bornes ; on ne pose donc aucun override de taux.
+    const network = String(method.code).toUpperCase();
 
     const callbackUrl = data.callbackUrl
       ? this.normalizeCallbackUrl(data.callbackUrl, 'callbackUrl')
@@ -694,6 +673,9 @@ export class DevService {
       receiverContact: data.phone,
       receiverCurrency: data.currency,
       status: TStatus.PAYINPENDING,
+      // Canal initial : charge directe. Passe à `hosted` si elle est refusée
+      // (voir `TransactionService.markPayinModeHosted`).
+      payinMode: 'direct',
       commissionPayer: directCommissionPayer,
       ...(callbackUrl && { callbackUrl }),
       ...(webhookUrl && { callbackUrl: webhookUrl }),
@@ -738,6 +720,25 @@ export class DevService {
         String(savedTransaction._id),
         error,
       );
+
+      // Refus explicite de Flutterwave : ouvrir immédiatement le checkout
+      // hébergé sur la même transaction et renvoyer son lien.
+      const fallback = await this.fwService.fallbackToHostedAfterDirectRefusal({
+        transactionData,
+        savedTransaction,
+        userId,
+        directTxRef: txRef,
+        error,
+        flow: 'direct_charge',
+        redirectUrl: callbackUrl,
+      });
+      if (fallback) {
+        return this.buildDirectFallbackResponse(savedTransaction, fallback, {
+          currency: data.currency,
+          paymentMethodCode: method.code,
+        });
+      }
+
       throw error;
     }
 
@@ -771,12 +772,26 @@ export class DevService {
       );
     }
 
-    const statusMap: Record<string, string> = {
-      transaction_payin_pending: 'payin_pending',
-      transaction_payin_success: 'payin_success',
-      transaction_payin_error: 'payin_error',
-      transaction_payin_closed: 'payin_closed',
-    };
+    if (
+      chargePayinStatus === PayinStatus.FAILED ||
+      chargePayinStatus === PayinStatus.CANCELLED
+    ) {
+      const fallback = await this.fwService.fallbackToHostedAfterDirectRefusal({
+        transactionData,
+        savedTransaction,
+        userId,
+        directTxRef: txRef,
+        chargeEnvelope: chargeResult,
+        flow: 'direct_charge',
+        redirectUrl: callbackUrl,
+      });
+      if (fallback) {
+        return this.buildDirectFallbackResponse(savedTransaction, fallback, {
+          currency: data.currency,
+          paymentMethodCode: method.code,
+        });
+      }
+    }
 
     void this.auditLog.record({
       actorId: userId,
@@ -786,6 +801,171 @@ export class DevService {
       metadata: { amount: depositAmount, currency: data.currency, txRef, network: network || null },
     });
 
+    return this.buildDevDirectResponse(savedTransaction, {
+      currency: data.currency,
+      paymentMethodCode: method.code,
+      txRef,
+    });
+  }
+
+  /**
+   * Méthode demandée explicitement par `paymentMethodCode` (comportement historique).
+   *
+   * @param {string} paymentMethodCode - Code de la méthode demandée.
+   * @param {string} currency - Devise du payload, doit correspondre à la méthode.
+   * @returns {Promise<any>} - La méthode validée (existante, même devise, active).
+   */
+  private async findRequestedDirectPayinMethod(
+    paymentMethodCode: string,
+    currency: string,
+  ): Promise<any> {
+    const code = String(paymentMethodCode).toUpperCase();
+    const method = await this.paymentMethodService.findByCode(code);
+    if (!method) {
+      throw new HttpException(
+        { message: `Payment method '${code}' not found`, code: 'METHOD_NOT_FOUND' },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    if (String(method.currency).toUpperCase() !== String(currency).toUpperCase()) {
+      throw new HttpException(
+        {
+          message: `Currency mismatch: method '${code}' is for ${method.currency}, not ${currency}`,
+          code: 'CURRENCY_MISMATCH',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (!method.statusPayin) {
+      throw new HttpException(
+        { message: `Payment method '${code}' is not available for payin`, code: 'METHOD_DISABLED' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return method;
+  }
+
+  /**
+   * Choisit la méthode d'encaissement à utiliser pour une devise.
+   *
+   * Candidats : méthodes ACTIVES en payin pour la devise, rattachées à une
+   * passerelle Flutterwave (la charge directe passe par Flutterwave). Parmi
+   * celles-ci, on retient celle dont le code correspond à l'opérateur du numéro
+   * (ex. 691224472 → ORANGEMONEY). Le numéro fait autorité, comme dans le
+   * constructeur de charge.
+   *
+   * @param {string} currency - Devise ISO du payload.
+   * @param {string} phone - Numéro du payeur.
+   * @returns {Promise<any>} - La méthode retenue.
+   * @throws {HttpException} 400 `NO_ACTIVE_PAYIN_METHOD` ou code du résolveur.
+   */
+  private async resolveActiveDirectPayinMethod(
+    currency: string,
+    phone: string,
+  ): Promise<any> {
+    const currencyCode = String(currency || '').trim().toUpperCase();
+    const candidates = (
+      await this.paymentMethodService.findActivePayinByCurrency(currencyCode)
+    ).filter((m: any) => m?.gatewayId?.type === 'flutterwave');
+
+    if (candidates.length === 0) {
+      throw new HttpException(
+        {
+          message: `No active payin method for currency ${currencyCode || '(empty)'}`,
+          code: 'NO_ACTIVE_PAYIN_METHOD',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    let operator: string;
+    try {
+      operator = resolveMobileMoneyNetwork({ phone, currency: currencyCode }).network;
+    } catch (error: unknown) {
+      if (error instanceof MobileMoneyNetworkError) {
+        throw new HttpException(
+          { message: error.message, code: error.code, details: error.details },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      throw error;
+    }
+
+    const method = candidates.find(
+      (m: any) => String(m.code).toUpperCase() === operator,
+    );
+    if (!method) {
+      throw new HttpException(
+        {
+          message: `No active payin method for ${currencyCode} matches operator ${operator}`,
+          code: 'NO_ACTIVE_PAYIN_METHOD',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return method;
+  }
+
+  /** Bornes min/max de la méthode (0 = pas de borne), identiques à l'existant. */
+  private assertAmountWithinMethodLimits(method: any, amount: number): void {
+    if (!Number.isFinite(amount)) return;
+    const code = String(method.code).toUpperCase();
+    if (method.minAmount > 0 && amount < method.minAmount) {
+      throw new HttpException(
+        { message: `Amount ${amount} is below minimum ${method.minAmount} for method '${code}'`, code: 'AMOUNT_BELOW_MIN' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (method.maxAmount > 0 && amount > method.maxAmount) {
+      throw new HttpException(
+        { message: `Amount ${amount} exceeds maximum ${method.maxAmount} for method '${code}'`, code: 'AMOUNT_EXCEEDS_MAX' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  /**
+   * Réponse d'ÉCHEC de la charge directe, avec le lien du checkout hébergé.
+   *
+   * La transaction reste `payin_pending` : le lien ouvert sur la même transaction
+   * peut encore être payé. `chargeStatus: 'failed'` indique que la charge directe
+   * a été refusée ; `paymentLink` / `redirect_url` portent l'URL à ouvrir.
+   */
+  private buildDirectFallbackResponse(
+    savedTransaction: any,
+    fallback: any,
+    extras: { currency: string; paymentMethodCode: string },
+  ): any {
+    return this.buildDevDirectResponse(savedTransaction, {
+      currency: extras.currency,
+      paymentMethodCode: extras.paymentMethodCode,
+      txRef: fallback.txRef,
+      paymentLink: fallback.redirect_url,
+      redirect_url: fallback.redirect_url,
+      chargeStatus: 'failed',
+      fallback: fallback.fallback,
+      directCharge: fallback.directCharge,
+    });
+  }
+
+  /**
+   * Réponse commune du flux développeur `/dev/direct-charge`.
+   *
+   * Conserve exactement la forme historique (`id`, `status`, `data`) et permet
+   * d'ajouter, en cas de repli, `paymentLink`/`redirect_url` + le détail du
+   * refus direct sans dupliquer la construction de la réponse.
+   */
+  private buildDevDirectResponse(
+    savedTransaction: any,
+    extras: Record<string, any> = {},
+  ): any {
+    const statusMap: Record<string, string> = {
+      transaction_payin_pending: 'payin_pending',
+      transaction_payin_success: 'payin_success',
+      transaction_payin_error: 'payin_error',
+      transaction_payin_closed: 'payin_closed',
+    };
+
     return {
       id: savedTransaction._id,
       status: statusMap[savedTransaction.status] ?? savedTransaction.status,
@@ -794,11 +974,9 @@ export class DevService {
         transactionRef: savedTransaction.transactionRef,
         invoiceTaxes: savedTransaction.taxesAmount,
         paymentWithTaxes: savedTransaction.paymentWithTaxes,
-        currency: data.currency,
         transactionType: 'apiCall',
-        paymentMethodCode: data.paymentMethodCode || null,
         appliedFeeRate: Number(savedTransaction.invoiceTaxes) || 0,
-        txRef,
+        ...extras,
         createdAt: savedTransaction.createdAt,
         updatedAt: savedTransaction.updatedAt,
       },

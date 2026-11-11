@@ -63,8 +63,12 @@ export function isDirectChargeEnabled(config: ConfigService): boolean {
 
 /**
  * Allows falling back to the hosted checkout when the direct path cannot be
- * used for reasons known *before* any Flutterwave charge is issued. It must
- * never permit a fallback once a charge call has been made.
+ * used for reasons known *before* any Flutterwave charge is issued, AND when
+ * Flutterwave explicitly refuses the charge (4xx / `failed` envelope).
+ *
+ * It must never permit a fallback on an ambiguous failure (5xx, timeout, socket
+ * reset): in that case a charge may already exist upstream and replaying it
+ * through another route would charge the payer twice.
  */
 export function isHostedFallbackEnabled(config: ConfigService): boolean {
   return parseBooleanFlag(

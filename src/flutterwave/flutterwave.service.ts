@@ -32,9 +32,13 @@ import { FlutterwaveApiService } from './flutterwave-api.service';
 import {
   DirectChargeFlow,
   buildMobileMoneyCharge,
+  isDefinitiveChargeRejection,
   isPreChargeRejection,
 } from './mobile-money-charge.builder';
-import { isDirectChargeEnabled } from './direct-charge.config';
+import {
+  isDirectChargeEnabled,
+  isHostedFallbackEnabled,
+} from './direct-charge.config';
 import { PayoutService } from 'src/payout/payout.service';
 import { PaystackService } from 'src/paystack/paystack.service';
 import { MpesaService } from 'src/mpesa/mpesa.service';
@@ -1305,6 +1309,24 @@ export class FlutterwaveService {
         String(savedTransaction._id),
         error,
       );
+
+      // Refus explicite : proposer immédiatement le checkout hébergé.
+      const fallback = await this.fallbackToHostedAfterDirectRefusal({
+        transactionData,
+        savedTransaction,
+        userId,
+        directTxRef: txRef,
+        error,
+        flow: 'direct_charge',
+        redirectUrl: data.callbackUrl || data.redirectUrl,
+      });
+      if (fallback) {
+        return this.buildDirectChargeFallbackResponse(
+          savedTransaction,
+          fallback,
+        );
+      }
+
       throw error;
     }
 
@@ -1335,6 +1357,27 @@ export class FlutterwaveService {
         savedTransaction,
         String(savedTransaction._id),
       );
+    }
+
+    if (
+      payinStatus === PayinStatus.FAILED ||
+      payinStatus === PayinStatus.CANCELLED
+    ) {
+      const fallback = await this.fallbackToHostedAfterDirectRefusal({
+        transactionData,
+        savedTransaction,
+        userId,
+        directTxRef: txRef,
+        chargeEnvelope: chargeResult,
+        flow: 'direct_charge',
+        redirectUrl: data.callbackUrl || data.redirectUrl,
+      });
+      if (fallback) {
+        return this.buildDirectChargeFallbackResponse(
+          savedTransaction,
+          fallback,
+        );
+      }
     }
 
     return {
@@ -1431,34 +1474,44 @@ export class FlutterwaveService {
     error: any,
   ): Promise<void> {
     const preCharge = isPreChargeRejection(error);
+    const definitive = isDefinitiveChargeRejection(error);
 
-    if (!preCharge) {
-      // `describeChargeError` renvoie `Record<string, any>` : on ne l'interpole pas
-      // tel quel (stringification d'objet) et on lit son message en le rétrécissant.
-      const described: { message?: unknown } = this.describeChargeError(error);
-      const reason =
-        typeof described.message === 'string'
-          ? described.message
-          : 'unknown error';
+    // `describeChargeError` renvoie `Record<string, any>` : on ne l'interpole pas
+    // tel quel (stringification d'objet) et on lit son message en le rétrécissant.
+    const described: { message?: unknown } = this.describeChargeError(error);
+    const reason =
+      typeof described.message === 'string'
+        ? described.message
+        : 'unknown error';
 
+    if (!preCharge && !definitive) {
+      // Ambigu : la charge a peut-être abouti, le payin reste `pending` pour la
+      // réconciliation amont.
       this.logger.warn(
         `Charge attempt ${txRef} failed ambiguously (${reason}); leaving the payin pending for upstream reconciliation`,
       );
       return;
     }
 
-    const attached = await this.payinService.attachChargeResult(
+    // `markChargeTerminal` est gardé par `status: PENDING` : un webhook qui
+    // aurait déjà écrit `successful` n'est jamais écrasé par ce chemin.
+    const attached = await this.payinService.markChargeTerminal(
       txRef,
       transactionId,
-      {
-        status: PayinStatus.FAILED,
-        error: this.describeChargeError(error),
-      },
+      PayinStatus.FAILED,
+      { error: described },
     );
 
     if (!attached) {
       this.logger.warn(
         `Charge failure not attached for txRef=${txRef} (payin missing or already final)`,
+      );
+      return;
+    }
+
+    if (definitive && !preCharge) {
+      this.logger.warn(
+        `Charge attempt ${txRef} refused by Flutterwave (${reason}); payin marked failed`,
       );
     }
   }
@@ -1588,6 +1641,22 @@ export class FlutterwaveService {
         String(savedTransaction._id),
         error,
       );
+
+      // Refus explicite de Flutterwave (4xx) : aucun débit n'existe, on ouvre
+      // immédiatement le checkout hébergé sur la MÊME transaction. Une erreur
+      // ambiguë (5xx/timeout) n'arrive jamais ici et est relancée telle quelle.
+      const fallback = await this.fallbackToHostedAfterDirectRefusal({
+        transactionData,
+        savedTransaction,
+        userId: transactionData.senderId
+          ? String(transactionData.senderId)
+          : undefined,
+        directTxRef: txRef,
+        error,
+        flow: charge.flow,
+      });
+      if (fallback) return fallback;
+
       throw error;
     }
 
@@ -1620,6 +1689,25 @@ export class FlutterwaveService {
       );
     }
 
+    // Refus synchrone porté par une enveloppe 200 (`data.status = failed`) :
+    // même repli que pour un 4xx, puisque la charge n'a pas abouti.
+    if (
+      payinStatus === PayinStatus.FAILED ||
+      payinStatus === PayinStatus.CANCELLED
+    ) {
+      const fallback = await this.fallbackToHostedAfterDirectRefusal({
+        transactionData,
+        savedTransaction,
+        userId: transactionData.senderId
+          ? String(transactionData.senderId)
+          : undefined,
+        directTxRef: txRef,
+        chargeEnvelope: chargeResult,
+        flow: charge.flow,
+      });
+      if (fallback) return fallback;
+    }
+
     return {
       status: 'pending',
       transactionId: String(savedTransaction._id),
@@ -1630,6 +1718,238 @@ export class FlutterwaveService {
       network: built.resolved.network,
       chargeStatus: payinStatus,
       redirect_url: chargeResult?.meta?.authorization?.redirect_url || '',
+    };
+  }
+
+  /**
+   * Crée un checkout hébergé Flutterwave pour une transaction DÉJÀ persistée.
+   *
+   * Utilisé par les replis : la transaction de la tentative directe (ou native)
+   * est réutilisée telle quelle, donc le payeur ne se retrouve jamais avec deux
+   * transactions pour le même paiement, et la facture / la demande de paiement
+   * continue de pointer sur la même ligne.
+   *
+   * Les credentials sont TOUJOURS résolus par devise (jamais par `gatewayId`) :
+   * la transaction peut appartenir à une passerelle native (`orange_cm` /
+   * `mtn_cm`) qui ne porte aucune clé Flutterwave.
+   *
+   * @param {object} params - Transaction existante + contexte du flux.
+   * @returns {Promise<any>} - Résultat de `PayinService.createPayin` (contient `redirect_url`).
+   */
+  async createHostedPayinForTransaction(params: {
+    transaction: any;
+    userId?: any;
+    currency?: string;
+    redirectUrl?: string;
+    channel?: string;
+    meta?: Record<string, any>;
+  }): Promise<any> {
+    const transaction = params.transaction;
+    const currency = String(
+      params.currency || transaction?.senderCurrency || 'XAF',
+    ).toUpperCase();
+
+    // `loadDbCredentials` alimente le `fwSecret` partagé utilisé par
+    // `PayinService` (qui appelle directement `POST /v3/payments`).
+    await this.loadDbCredentials(currency);
+
+    const amount = Number(transaction?.paymentWithTaxes);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new HttpException(
+        {
+          message: 'Invalid amount for the hosted checkout fallback',
+          code: 'INVALID_AMOUNT',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const txRef = this.payinService.generateTxRef('txPayin');
+
+    return this.payinService.createPayin({
+      amount,
+      txRef,
+      transactionId: transaction._id,
+      currency,
+      customerEmail: transaction.senderEmail,
+      customerName: transaction.senderName,
+      customerPhone: transaction.senderContact,
+      redirectUrl: params.redirectUrl,
+      channel: params.channel,
+      status: 'pending',
+      userId: params.userId,
+      meta: params.meta,
+    } as CreatePayinDto);
+  }
+
+  /**
+   * Repli vers le checkout hébergé après un **refus explicite** de la charge
+   * directe (4xx Flutterwave ou enveloppe `data.status = failed`).
+   *
+   * Pourquoi c'est sûr : un refus explicite prouve qu'aucune charge n'a été
+   * créée. À l'inverse, un 5xx / timeout / coupure réseau reste ambigu et ne
+   * passe JAMAIS par ici — la charge a peut-être abouti, et ouvrir une seconde
+   * voie ferait payer deux fois.
+   *
+   * La tentative directe est d'abord clôturée (`FAILED`) puis un checkout
+   * hébergé est ouvert sur la MÊME transaction. Le résultat renvoyé contient
+   * `redirect_url` ET le détail du refus direct (`directCharge`), comme demandé
+   * par les clients qui veulent afficher l'erreur tout en proposant le lien.
+   *
+   * @param {object} params - Contexte de la tentative directe.
+   * @returns {Promise<any|null>} - Résultat hébergé enrichi, ou `null` quand le
+   *   repli ne s'applique pas (erreur ambiguë, flag coupé, hébergé indisponible).
+   */
+  async fallbackToHostedAfterDirectRefusal(params: {
+    transactionData: any;
+    savedTransaction: any;
+    userId?: any;
+    directTxRef: string;
+    error?: unknown;
+    chargeEnvelope?: any;
+    flow: string;
+    redirectUrl?: string;
+  }): Promise<any | null> {
+    if (!isHostedFallbackEnabled(this.config)) return null;
+
+    const refused =
+      (params.error !== undefined && isDefinitiveChargeRejection(params.error)) ||
+      this.isFailedChargeEnvelope(params.chargeEnvelope);
+    if (!refused) return null;
+
+    const transactionId = params.savedTransaction?._id;
+    if (!transactionId) return null;
+
+    const description = this.describeChargeError(
+      params.error ?? params.chargeEnvelope ?? { message: 'Direct charge refused' },
+    );
+
+    // Clôt AVANT d'ouvrir l'autre voie : un payin direct laissé `pending` serait
+    // réconcilié par le cron alors que le refus est déjà prouvé.
+    try {
+      await this.payinService.markChargeTerminal(
+        params.directTxRef,
+        transactionId,
+        PayinStatus.FAILED,
+        { error: description, raw: params.chargeEnvelope },
+      );
+    } catch (error: any) {
+      // Best-effort : ne jamais bloquer le repli pour un défaut d'écriture.
+      this.logger.warn(
+        `Could not close refused direct payin ${params.directTxRef}: ${error?.message ?? 'unknown error'}`,
+      );
+    }
+
+    try {
+      const hosted = await this.createHostedPayinForTransaction({
+        transaction: params.savedTransaction,
+        userId: params.userId,
+        currency:
+          params.transactionData?.senderCurrency ||
+          params.transactionData?.currency ||
+          params.savedTransaction?.senderCurrency,
+        redirectUrl: params.redirectUrl ?? params.transactionData?.redirectUrl,
+        meta: {
+          flow: 'hosted_fallback',
+          directFlow: params.flow,
+          directTxRef: params.directTxRef,
+        },
+      });
+
+      // La transaction n'est plus encaissée en direct : on le consigne sur elle.
+      // Best-effort : le lien hébergé existe déjà, un défaut d'écriture ne doit
+      // pas masquer la réponse.
+      try {
+        await this.transactionService.markPayinModeHosted(
+          String(transactionId),
+          {
+            from: 'direct',
+            reason: 'DIRECT_CHARGE_REFUSED',
+            directTxRef: params.directTxRef,
+          },
+        );
+      } catch (error: any) {
+        this.logger.warn(
+          `Could not record hosted fallback on transaction ${String(transactionId)}: ${error?.message ?? 'unknown error'}`,
+        );
+      }
+
+      this.logger.warn(
+        `Direct charge ${params.directTxRef} refused (${String(description.message)}) — hosted checkout ${hosted?.txRef} created instead`,
+      );
+
+      return {
+        ...hosted,
+        status: 'pending',
+        chargeStatus: 'fallback_hosted',
+        fallback: {
+          from: 'direct',
+          reason: 'DIRECT_CHARGE_REFUSED',
+          message:
+            'The direct mobile money charge was refused; a hosted checkout link was created instead.',
+          directTxRef: params.directTxRef,
+        },
+        directCharge: description,
+      };
+    } catch (error: any) {
+      this.logger.error(
+        `Hosted fallback after direct refusal failed for ${params.directTxRef}: ${error?.message ?? 'unknown error'}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Vrai quand l'enveloppe de charge porte un statut `failed`/`cancelled`.
+   *
+   * Flutterwave peut répondre HTTP 200 avec `data.status = failed` (refus
+   * opérateur) : ce n'est pas une exception, mais c'est tout aussi définitif
+   * qu'un 4xx et donc éligible au repli hébergé.
+   */
+  private isFailedChargeEnvelope(envelope: any): boolean {
+    if (!envelope || typeof envelope !== 'object') return false;
+
+    const chargeStatus = String(
+      envelope?.data?.status ?? envelope?.status ?? '',
+    )
+      .trim()
+      .toLowerCase();
+
+    return (
+      chargeStatus === 'failed' ||
+      chargeStatus === 'error' ||
+      chargeStatus === 'cancelled' ||
+      chargeStatus === 'canceled'
+    );
+  }
+
+  /**
+   * Réponse de `/fw/direct-charge` quand la charge directe a été refusée et
+   * qu'un checkout hébergé a été ouvert à la place.
+   *
+   * Conserve les champs historiques (`status`, `transactionId`, `txRef`,
+   * `paymentWithTaxes`) et ajoute `redirect_url`/`paymentLink` ainsi que le
+   * détail du refus (`directCharge`) : le client peut afficher l'erreur ET
+   * proposer le lien sans second appel.
+   */
+  private buildDirectChargeFallbackResponse(
+    savedTransaction: any,
+    fallback: any,
+  ): any {
+    return {
+      status: 'payin_pending',
+      transactionId: savedTransaction._id,
+      txRef: fallback.txRef,
+      estimation: savedTransaction.estimation,
+      invoiceTaxes: savedTransaction.invoiceTaxes,
+      taxesAmount: savedTransaction.taxesAmount,
+      paymentWithTaxes: savedTransaction.paymentWithTaxes,
+      chargeStatus: 'fallback_hosted',
+      redirect_url: fallback.redirect_url,
+      paymentLink: fallback.redirect_url,
+      fallback: fallback.fallback,
+      directCharge: fallback.directCharge,
+      chargeResponse: fallback.directCharge,
     };
   }
 
@@ -1896,6 +2216,22 @@ export class FlutterwaveService {
     }
   }
 
+  /**
+   * Vrai si ce payin est celui qui pilote l'état de sa transaction, c.-à-d. le
+   * plus récent (`getPayinByTransactionId`). Une transaction peut porter une
+   * tentative directe `failed` suivie d'un checkout hébergé : la première ne
+   * doit plus rien écrire sur la transaction.
+   *
+   * @param {any} payin - Payin à tester.
+   * @returns {Promise<boolean>} - `true` si le payin est le courant (ou s'il n'y a pas de référence).
+   */
+  private async isCurrentPayinOfTransaction(payin: any): Promise<boolean> {
+    const current: any = await this.payinService.getPayinByTransactionId(
+      String(payin.transactionId),
+    );
+    return !current || String(current.txRef) === String(payin.txRef);
+  }
+
   async verifyAndClosePayin(txRef: string, flwTxId?: string) {
     const payin: any = await this.payinService.verifyPayin(
       txRef,
@@ -1910,6 +2246,22 @@ export class FlutterwaveService {
     );
     if (!transaction) {
       throw new NotFoundException('Transaction not found');
+    }
+
+    // Un payin REMPLACÉ (tentative directe refusée puis repli hébergé) ne doit
+    // jamais faire basculer la transaction. Seul un succès reste traité, car
+    // l'argent reçu doit toujours être crédité.
+    if (
+      payin.status !== 'successful' &&
+      !(await this.isCurrentPayinOfTransaction(payin))
+    ) {
+      this.logger.warn(
+        `verifyAndClosePayin: ${txRef} is superseded on transaction ${String(payin.transactionId)}; transaction state left unchanged`,
+      );
+      return {
+        message: 'Superseded payin: transaction left unchanged',
+        status: payin.status,
+      };
     }
 
     if (

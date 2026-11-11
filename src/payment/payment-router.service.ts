@@ -1,7 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { GatewayFactoryService } from './gateway-factory.service';
 
-export type PaymentProvider = 'flutterwave' | 'paystack' | 'mpesa';
+export type PaymentProvider =
+  | 'flutterwave'
+  | 'paystack'
+  | 'mpesa'
+  | 'orange_cm'
+  | 'mtn_cm';
 
 @Injectable()
 export class PaymentRouterService {

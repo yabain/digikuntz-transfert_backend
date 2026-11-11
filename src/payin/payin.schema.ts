@@ -31,6 +31,8 @@ export enum PayinProvider {
   FLUTTERWAVE = 'flutterwave',
   PAYSTACK = 'paystack',
   MPESA = 'mpesa',
+  ORANGE_CM = 'orange_cm',
+  MTN_CM = 'mtn_cm',
 }
 
 @Schema({

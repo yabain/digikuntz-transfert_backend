@@ -41,6 +41,8 @@ import { PaymentMethodModule } from './payment-method/payment-method.module';
 import { TrackingModule } from './tracking/tracking.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
 import { GatewayModule } from './gateway/gateway.module';
+import { OrangeCmModule } from './orange-cm/orange-cm.module';
+import { MtnCmModule } from './mtn-cm/mtn-cm.module';
 import { DistributedLockModule } from './distributed-lock/distributed-lock.module';
 import { LoggerModule } from './common/logger';
 import { TraceModule } from './common/trace';
@@ -109,6 +111,8 @@ import { SystemBalanceModule } from './system-balance/system-balance.module';
     PayinModule,
     PayoutModule,
     FlutterwaveModule,
+    OrangeCmModule,
+    MtnCmModule,
     SmtpModule,
     WhatsappModule,
     UserSettingsModule,

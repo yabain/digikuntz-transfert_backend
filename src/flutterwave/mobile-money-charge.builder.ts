@@ -83,6 +83,17 @@ export const PRE_CHARGE_REJECTION_CODES = [
   // use the hosted checkout — this is what makes `DIRECT_CHARGE_ENABLED=false` a
   // real rollback lever.
   'DIRECT_CHARGE_DISABLED',
+  // Chemin natif Cameroun (orange_cm/mtn_cm) : le numéro du payeur ne
+  // correspond pas à l'opérateur de la passerelle choisie (ex. numéro MTN sur
+  // une passerelle orange_cm). La vérification est faite AVANT tout appel
+  // natif, donc le repli hébergé est aussi sûr que pour un autre rejet
+  // pré-charge.
+  'NATIVE_OPERATOR_MISMATCH',
+  // Le débit natif n'a pas pu DÉMARRER (token OAuth ou `mp/init` Orange en
+  // échec) : aucun `/pay` n'a été envoyé, donc rien n'est en vol et le repli
+  // hébergé est sûr. Une fois `/pay` (Orange) ou `requesttopay` (MTN) émis,
+  // l'erreur reste ambiguë et n'utilise jamais ce code.
+  'NATIVE_PRE_CHARGE_FAILED',
 ] as const;
 
 /**
@@ -104,6 +115,42 @@ export function isPreChargeRejection(error: unknown): boolean {
     typeof code === 'string' &&
     (PRE_CHARGE_REJECTION_CODES as readonly string[]).includes(code)
   );
+}
+
+/**
+ * Statuts HTTP d'un refus **explicite** de Flutterwave qui prouvent qu'aucune
+ * charge n'a été créée.
+ *
+ * Un 4xx est une réponse métier/validation de l'API (`invalid account`,
+ * opérateur non supporté, montant refusé…). Un 5xx, un timeout ou une coupure
+ * réseau sont AMBIGUS : la charge a peut-être été acceptée en amont pendant que
+ * la réponse se perdait, donc ils ne doivent jamais autoriser un repli.
+ *
+ * 401 est exclu car `sanitizeFlutterwaveError` le remappe déjà en 502 (pour ne
+ * pas déclencher la déconnexion du frontend), et 408/425 sont ambigus par
+ * nature (la requête a pu partir).
+ */
+const DEFINITIVE_REFUSAL_EXCLUDED_STATUSES = new Set([401, 408, 425]);
+
+/**
+ * Vrai quand Flutterwave a **explicitement refusé** la charge, avant tout
+ * mouvement d'argent.
+ *
+ * Sert uniquement à autoriser un repli vers le checkout hébergé : contrairement
+ * à `isPreChargeRejection`, l'appel HTTP a bien eu lieu, mais la réponse prouve
+ * qu'aucun débit n'a été créé. Toute erreur non identifiable comme un refus
+ * explicite reste donc ambiguë et doit être relancée.
+ *
+ * @param {unknown} error - Erreur levée par l'appel de charge.
+ * @returns {boolean} - `true` uniquement pour un refus 4xx non ambigu.
+ */
+export function isDefinitiveChargeRejection(error: unknown): boolean {
+  if (!(error instanceof HttpException)) return false;
+
+  const status = error.getStatus();
+  if (!Number.isInteger(status) || status < 400 || status >= 500) return false;
+
+  return !DEFINITIVE_REFUSAL_EXCLUDED_STATUSES.has(status);
 }
 
 /**
@@ -247,7 +294,6 @@ export function buildMobileMoneyCharge(input: BuildChargeInput): BuiltCharge {
     email,
     fullname: String(input.fullname ?? '').trim() || 'Customer',
     country: resolved.country,
-    network: resolved.network,
     meta: {
       app: 'digikuntz-payments',
       flow: input.flow,
@@ -257,6 +303,15 @@ export function buildMobileMoneyCharge(input: BuildChargeInput): BuiltCharge {
       ...(input.meta ?? {}),
     },
   };
+
+  // Flutterwave francophone (`mobile_money_franco`) est sensible à `network` :
+  // MTN exige le jeton, mais Orange Money (Cameroun notamment) rejette la charge
+  // (400 « Transaction Failed ») DÈS que `network: "ORANGEMONEY"` est fourni —
+  // le numéro suffit à deduire l'opérateur. On omet donc `network` pour Orange,
+  // on le conserve pour les autres réseaux.
+  if (resolved.network !== 'ORANGEMONEY') {
+    body.network = resolved.network;
+  }
 
   // Optional fraud-scoring fields: omitted entirely when unknown, which
   // Flutterwave accepts.

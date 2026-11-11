@@ -292,6 +292,10 @@ export class FlutterwaveController {
           country:
             (payerMethod as any)?.countryId?.iso2 ||
             (req.user as any)?.countryId?.iso2,
+          // Passerelle cible de la méthode résolue : quand elle pointe vers
+          // une passerelle native Cameroun (orange_cm/mtn_cm), l'aiguillage
+          // bascule sur la voie native (si le flag est actif).
+          gatewayType: (payerMethod as any)?.gatewayId?.type,
           clientIp: resolveClientIp(req as unknown),
         },
         {
@@ -452,6 +456,14 @@ export class FlutterwaveController {
   @UseGuards(AuthGuard('jwt'))
   @UsePipes(ValidationPipe)
   async createDirectCharge(@Body() data: any, @Req() req) {
+    // Accepte les conventions de nommage `userPhone`/`userEmail`/`senderName`
+    // (documentées pour `/dev/direct-charge`) en plus de `phone`/`email`/`name`.
+    const pay = (v: any) => (v === undefined || v === null ? undefined : v);
+    data.phone = pay(data.phone ?? data.userPhone);
+    data.email = pay(data.email ?? data.userEmail);
+    data.name = pay(data.name ?? data.senderName);
+    data.country = pay(data.country ?? data.userCountry);
+
     let feeRate: number | undefined;
 
     if (data.paymentMethodCode) {

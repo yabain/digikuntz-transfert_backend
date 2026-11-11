@@ -1,7 +1,12 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
-export type GatewayType = 'flutterwave' | 'paystack' | 'mpesa';
+export type GatewayType =
+  | 'flutterwave'
+  | 'paystack'
+  | 'mpesa'
+  | 'orange_cm'
+  | 'mtn_cm';
 
 /**
  * Devises qu'une passerelle peut encaisser.
@@ -45,7 +50,10 @@ export class Gateway extends Document {
   @Prop({ default: '' })
   imageUrl: string;
 
-  @Prop({ required: true, enum: ['flutterwave', 'paystack', 'mpesa'] })
+  @Prop({
+    required: true,
+    enum: ['flutterwave', 'paystack', 'mpesa', 'orange_cm', 'mtn_cm'],
+  })
   type: GatewayType;
 
   @Prop({ required: true, enum: [...GATEWAY_CURRENCIES] })

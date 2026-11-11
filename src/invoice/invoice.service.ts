@@ -559,10 +559,16 @@ export class InvoiceService {
     //
     // Résolu AVANT la revendication atomique : une méthode invalide (devise ou
     // sens de paiement) doit échouer sans laisser la facture bloquée en `paying`.
-    const taxRateOverride = await this.resolvePaymentMethodTaxRate(
+    // La méthode est aussi réutilisée pour renseigner `gatewayType` : quand elle
+    // pointe vers une passerelle native Cameroun, l'aiguillage bascule sur la
+    // voie native Orange/MTN (si le flag est actif).
+    const payinMethod = await this.resolvePaymentMethodForPayin(
       payer.paymentMethodCode,
       currency,
     );
+    const taxRateOverride = payinMethod
+      ? this.paymentMethodRate(payinMethod)
+      : undefined;
 
     // Revendication ATOMIQUE avant toute charge.
     //
@@ -636,6 +642,10 @@ export class InvoiceService {
           email: payer.payerEmail,
           name: payer.payerName,
           network: payer.network,
+          // Passerelle cible de la méthode choisie : quand elle pointe vers une
+          // passerelle native Cameroun (orange_cm/mtn_cm), l'aiguillage bascule
+          // sur la voie native Orange/MTN (si le flag est actif).
+          gatewayType: this.nativeGatewayTypeOf(payinMethod),
           deviceFingerprint: payer.deviceFingerprint,
           clientIp: payer.clientIp,
         },
@@ -881,17 +891,17 @@ export class InvoiceService {
    * `statusPayin` désactivé) : mieux vaut refuser tôt que facturer un taux
    * inattendu après avoir revendiqué la facture.
    */
-  private async resolvePaymentMethodTaxRate(
+  private async resolvePaymentMethodForPayin(
     paymentMethodCode: string | undefined,
     currency: string,
-  ): Promise<number | undefined> {
+  ): Promise<any | null> {
     const code = String(paymentMethodCode || '').trim();
-    if (!code) return undefined;
+    if (!code) return null;
 
     const method = await this.paymentMethodService.findByCode(
       code.toUpperCase(),
     );
-    if (!method) return undefined;
+    if (!method) return null;
 
     if (
       String(method.currency).toUpperCase() !== String(currency).toUpperCase()
@@ -906,8 +916,19 @@ export class InvoiceService {
       );
     }
 
-    const rate = Number(method.taxesPayment);
+    return method;
+  }
+
+  /** Taux de frais serveur d'une méthode (`taxesPayment`), ou `undefined`. */
+  private paymentMethodRate(method: any): number | undefined {
+    const rate = Number(method?.taxesPayment);
     return Number.isFinite(rate) && rate >= 0 ? rate : undefined;
+  }
+
+  /** Type de passerelle native d'une méthode, ou `undefined`. */
+  private nativeGatewayTypeOf(method: any): 'orange_cm' | 'mtn_cm' | undefined {
+    const type = method?.gatewayId?.type;
+    return type === 'orange_cm' || type === 'mtn_cm' ? type : undefined;
   }
 
   async getPaymentMetaForUser(
