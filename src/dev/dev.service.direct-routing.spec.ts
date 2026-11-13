@@ -100,6 +100,7 @@ function buildHarness() {
       userId: 'user-1',
       status: true,
       webhookUrl: '',
+      fallbackUrl: '',
       secretKey: 'enc-sk',
       publicKey: 'enc-pk',
     }),
@@ -135,6 +136,7 @@ function buildHarness() {
     payinService,
     fwService,
     paymentMethodService,
+    devModel,
   };
 }
 
@@ -430,6 +432,83 @@ describe('DevService.createDirectPayinTransaction — routage de méthode', () =
       expect(error).toBeInstanceOf(HttpException);
       expect(error.getResponse()).toMatchObject({ message: 'Transaction Failed' });
       expect(harness.fwService.recordChargeFailure).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('fallbackUrl par défaut du développeur (organisation)', () => {
+    const DEV_FALLBACK = 'https://client.example.com/payment-return';
+    const REQUEST_CALLBACK = 'https://client.example.com/request-callback';
+
+    beforeEach(() => {
+      harness.paymentMethodService.findActivePayinByCurrency.mockResolvedValue([ORANGE_METHOD]);
+    });
+
+    it('utilise le fallbackUrl du dev comme redirectUrl du repli hébergé quand la requête n’en fournit pas', async () => {
+      harness.devModel.findOne.mockResolvedValue({
+        id: 'dev-1',
+        userId: 'user-1',
+        status: true,
+        webhookUrl: '',
+        fallbackUrl: DEV_FALLBACK,
+        secretKey: 'enc-sk',
+        publicKey: 'enc-pk',
+      });
+      harness.fwService.directMobileMoneyCharge.mockRejectedValue(
+        new HttpException({ message: 'Transaction Failed' }, HttpStatus.BAD_REQUEST),
+      );
+      harness.fwService.fallbackToHostedAfterDirectRefusal.mockResolvedValue({
+        txRef: 'hosted-tx-1',
+        redirect_url: 'https://checkout.flutterwave.test/pay/hosted-abc',
+        status: 'pending',
+        chargeStatus: 'fallback_hosted',
+        fallback: { from: 'direct', reason: 'DIRECT_CHARGE_REFUSED', directTxRef: 'txDirect-1' },
+        directCharge: { message: 'Transaction Failed' },
+      });
+
+      const result = await harness.service.createDirectPayinTransaction(payload(), 'user-1');
+
+      expect(harness.fwService.fallbackToHostedAfterDirectRefusal).toHaveBeenCalledWith(
+        expect.objectContaining({ redirectUrl: DEV_FALLBACK }),
+      );
+      expect(result.data.paymentLink).toBe('https://checkout.flutterwave.test/pay/hosted-abc');
+    });
+
+    it('priorise le callbackUrl de la requête sur le fallbackUrl du dev', async () => {
+      harness.devModel.findOne.mockResolvedValue({
+        id: 'dev-1',
+        userId: 'user-1',
+        status: true,
+        webhookUrl: '',
+        fallbackUrl: DEV_FALLBACK,
+        secretKey: 'enc-sk',
+        publicKey: 'enc-pk',
+      });
+
+      await harness.service.createDirectPayinTransaction(
+        payload({ callbackUrl: REQUEST_CALLBACK }),
+        'user-1',
+      );
+
+      expect(harness.fwService.directMobileMoneyCharge).toHaveBeenCalledTimes(1);
+      expect(harness.transactionService.createTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({ callbackUrl: REQUEST_CALLBACK }),
+      );
+    });
+
+    it('sans fallbackUrl du dev ni callbackUrl de la requête, aucun redirectUrl n’est envoyé', async () => {
+      harness.fwService.directMobileMoneyCharge.mockRejectedValue(
+        new HttpException({ message: 'Transaction Failed' }, HttpStatus.BAD_REQUEST),
+      );
+      harness.fwService.fallbackToHostedAfterDirectRefusal.mockResolvedValue(null);
+
+      const error = await captureError(
+        harness.service.createDirectPayinTransaction(payload(), 'user-1'),
+      );
+
+      expect(harness.fwService.fallbackToHostedAfterDirectRefusal).toHaveBeenCalledWith(
+        expect.not.objectContaining({ redirectUrl: expect.anything() }),
+      );
+      expect(error).toBeInstanceOf(HttpException);
     });
   });
 });

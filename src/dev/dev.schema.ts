@@ -22,6 +22,9 @@ export class Dev extends Document {
   webhookUrl: string;
 
   @Prop()
+  fallbackUrl: string;
+
+  @Prop()
   status: boolean;
 
 }

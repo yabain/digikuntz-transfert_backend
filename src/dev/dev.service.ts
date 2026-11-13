@@ -52,6 +52,7 @@ export class DevService {
       userId: res.userId.toString(),
       status: res.status,
       webhookUrl: res.webhookUrl || '',
+      fallbackUrl: res.fallbackUrl || '',
       secretKey: this.cryptService.decryptWithPassphrase(res.secretKey),
       publicKey: this.cryptService.decryptWithPassphrase(res.publicKey)
     };
@@ -70,6 +71,7 @@ export class DevService {
       userId: userId,
       status: res.status,
       webhookUrl: res.webhookUrl || '',
+      fallbackUrl: res.fallbackUrl || '',
       secretKey: this.cryptService.decryptWithPassphrase(res.secretKey),
       publicKey: this.cryptService.decryptWithPassphrase(res.publicKey)
     };
@@ -86,6 +88,7 @@ export class DevService {
         userId: res.userId.toString(),
         status: res.status,
         webhookUrl: res.webhookUrl || '',
+        fallbackUrl: res.fallbackUrl || '',
         secretKey: this.cryptService.decryptWithPassphrase(res.secretKey),
         publicKey: this.cryptService.decryptWithPassphrase(res.publicKey)
       };
@@ -105,6 +108,7 @@ export class DevService {
         status: dev.status,
         userId: dev.userId,
         webhookUrl: dev.webhookUrl || '',
+        fallbackUrl: dev.fallbackUrl || '',
         secretKey: this.cryptService.decryptWithPassphrase(dev.secretKey),
         publicKey: this.cryptService.decryptWithPassphrase(dev.publicKey)
       };
@@ -132,6 +136,7 @@ export class DevService {
         status: res.status,
         userId: res.userId,
         webhookUrl: res.webhookUrl || '',
+        fallbackUrl: res.fallbackUrl || '',
         secretKey: sKey,
         publicKey: pKey
       }
@@ -164,6 +169,7 @@ export class DevService {
           status: res.status,
           userId: res.userId,
           webhookUrl: res.webhookUrl || '',
+          fallbackUrl: res.fallbackUrl || '',
           secretKey: sKey,
           publicKey: pKey
         }
@@ -217,6 +223,7 @@ export class DevService {
         userId: res.userId.toString(),
         status: res.status,
         webhookUrl: res.webhookUrl || '',
+        fallbackUrl: res.fallbackUrl || '',
         secretKey: this.cryptService.decryptWithPassphrase(res.secretKey),
         publicKey: this.cryptService.decryptWithPassphrase(res.publicKey)
       };
@@ -260,6 +267,47 @@ export class DevService {
         userId: res.userId.toString(),
         status: res.status,
         webhookUrl: res.webhookUrl || '',
+        fallbackUrl: res.fallbackUrl || '',
+        secretKey: this.cryptService.decryptWithPassphrase(res.secretKey),
+        publicKey: this.cryptService.decryptWithPassphrase(res.publicKey),
+      };
+    }
+    catch (error: any) {
+      throw new ConflictException(error);
+    }
+  }
+
+  async updateFallbackUrl(userId: string, fallbackUrl?: string): Promise<any> {
+    const verifUser = await this.verifyUserConditions(userId);
+    if (!verifUser) return false;
+    const devData = await this.getDevDataByUserId(userId);
+    if (!devData) return 'no developer found with this id';
+    if (devData.userId.toString() !== userId.toString()) return 'unauthorized';
+
+    const normalizedFallbackUrl = fallbackUrl
+      ? this.normalizeCallbackUrl(fallbackUrl, 'fallbackUrl')
+      : '';
+
+    try {
+      const res = await this.devModel.findByIdAndUpdate(
+        devData.id,
+        { fallbackUrl: normalizedFallbackUrl },
+        { new: true },
+      );
+      if (!res) return 'error updating data';
+      void this.auditLog.record({
+        actorId: userId,
+        action: 'fallback_url_updated',
+        resourceType: 'dev',
+        resourceId: devData.id,
+        metadata: { fallbackUrl: normalizedFallbackUrl },
+      });
+      return {
+        id: res.id,
+        userId: res.userId.toString(),
+        status: res.status,
+        webhookUrl: res.webhookUrl || '',
+        fallbackUrl: res.fallbackUrl || '',
         secretKey: this.cryptService.decryptWithPassphrase(res.secretKey),
         publicKey: this.cryptService.decryptWithPassphrase(res.publicKey),
       };
@@ -571,17 +619,25 @@ export class DevService {
       }
     }
 
-    const flutterwaveCallbackUrl = this.normalizeCallbackUrl(
-      transactionData?.callbackUrl,
-      'callbackUrl',
-    );
+    // Récupérer devData pour obtenir le fallbackUrl optionnel
+    const devData = await this.getDevDataByUserId(userId);
+
+    // Utiliser le callbackUrl de la requête si fourni, sinon le fallbackUrl du dev si défini
+    const requestCallbackUrl = transactionData?.callbackUrl
+      ? this.normalizeCallbackUrl(transactionData.callbackUrl, 'callbackUrl')
+      : undefined;
+    const fallbackUrl = devData?.fallbackUrl
+      ? this.safeNormalizeCallbackUrl(devData.fallbackUrl, 'fallbackUrl')
+      : undefined;
+    const flutterwaveCallbackUrl = requestCallbackUrl ?? fallbackUrl;
+
     if (flutterwaveCallbackUrl) {
       transactionData.redirectUrl = flutterwaveCallbackUrl;
     } else {
       delete transactionData.redirectUrl;
     }
 
-    const devData = await this.getDevDataByUserId(userId);
+    // Configurer le callbackUrl de la transaction pour le webhook (webhookUrl du dev)
     const webhookUrl = devData?.webhookUrl
       ? this.normalizeCallbackUrl(devData.webhookUrl, 'webhookUrl')
       : undefined;
@@ -700,7 +756,7 @@ export class DevService {
     // le sens payin et les bornes ; on ne pose donc aucun override de taux.
     const network = String(method.code).toUpperCase();
 
-    const callbackUrl = data.callbackUrl
+    let callbackUrl: string | undefined = data.callbackUrl
       ? this.normalizeCallbackUrl(data.callbackUrl, 'callbackUrl')
       : undefined;
 
@@ -708,6 +764,14 @@ export class DevService {
     const webhookUrl = devData?.webhookUrl
       ? this.normalizeCallbackUrl(devData.webhookUrl, 'webhookUrl')
       : undefined;
+
+    // Si pas de callbackUrl dans la requête, utiliser le fallbackUrl du dev
+    if (!callbackUrl && devData?.fallbackUrl) {
+      const fallbackCallbackUrl = this.safeNormalizeCallbackUrl(devData.fallbackUrl, 'fallbackUrl');
+      if (fallbackCallbackUrl) {
+        callbackUrl = fallbackCallbackUrl;
+      }
+    }
 
     const txRef = this.payinService.generateTxRef('txDirect');
 
